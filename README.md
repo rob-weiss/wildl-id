@@ -5,7 +5,7 @@ As a conservationist, hunter, and software developer I've been curious about the
 ## Ideas
 
 - Use existing photos of wildlife cameras of ones own hunting grounds to:
-  - extract information such as the folowing using optical character recognition (OCR), e.g. Keras OCR or pytessarect:
+  - extract information such as the following using optical character recognition (OCR), e.g. Keras OCR or pytessarect:
     - Location
     - Temperature
     - Date and time
