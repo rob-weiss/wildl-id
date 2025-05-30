@@ -29,16 +29,17 @@ for image_file in image_files:
         img_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
     prompt = (
-        "Determine the class of object in this image.\n"
+        "Determine the class of creature in this image.\n"
         "The photo was taken by a wildlife camera in Germany.\n"
-        "Common animals include roe deer, wild boar, dove, badger, fox, hare, and crow.\n"
+        "Common animals include roe deer, wild boar, dove, badger, marten, dog, fox, hare, and crow.\n"
         "Either there is an animal, a human, or no creature in the image.\n"
         "If multiple animals are visible, echo the one that appears most often.\n"
         "If there is an animal, please specify the species.\n"
         "If there is no creature, just return the class 'nothing'.\n"
         "If there is a creature but you don't know what kind of creature, choose class 'unknown'.\n"
-        "Return in JSON format just the class with key 'class' and the bounding box of the creature with key 'box' but nothing else.\n"
-        "Return the bounding box in the YOLO format."
+        "Return in JSON format just the class with key 'class' but nothing else.\n"
+        # and the bounding box of the creature with key 'box'
+        # "Return the bounding box in the YOLO format."
     )
     response = client.chat(
         model=model,
