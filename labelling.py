@@ -137,7 +137,7 @@ def process_images():
 
         results.append({"image_file": image_file, "class": img_class, "box": box})
 
-        # show_image_with_class(image_path, image_file, img_class)
+        show_image_with_class(image_path, image_file, img_class)
         print(f"Processed {image_file}: class={img_class}, box={box}")
 
 
@@ -145,4 +145,4 @@ process_images()
 
 # Save results to parquet
 df = pd.DataFrame(results)
-df.to_parquet("labelling_results.parquet", index=False)
+df.to_parquet(f"labelling_results_{model}.parquet", index=False)
