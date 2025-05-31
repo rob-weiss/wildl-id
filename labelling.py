@@ -38,6 +38,14 @@ prompt = (
 results = []
 
 
+def show_image_with_class(image_path, image_file, img_class):
+    img = mpimg.imread(str(image_path))
+    plt.imshow(img)
+    plt.axis("off")
+    plt.title(f"{image_file} \n class: {img_class}")
+    plt.show()
+
+
 # Move the for loop code into a function to collect results
 def process_images():
     image_files = [
@@ -56,9 +64,6 @@ def process_images():
             model=model,
             messages=[{"role": "user", "content": prompt, "images": [img_base64]}],
         )
-
-        img = mpimg.imread(str(image_path))
-        plt.imshow(img)
 
         img_class = None
         box = None
@@ -85,11 +90,10 @@ def process_images():
         except Exception as e:
             print(f"Could not parse bounding box: {e}")
 
-        plt.axis("off")
-        plt.title(f"{image_file} \n class: {img_class}")
-        plt.show()
-
         results.append({"image_file": image_file, "class": img_class, "box": box})
+
+        # show_image_with_class(image_path, image_file, img_class)
+        print(f"Processed {image_file}: class={img_class}, box={box}")
 
 
 process_images()
@@ -97,4 +101,3 @@ process_images()
 # Save results to parquet
 df = pd.DataFrame(results)
 df.to_parquet("labelling_results.parquet", index=False)
-# %%
