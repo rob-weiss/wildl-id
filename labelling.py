@@ -29,6 +29,7 @@ from pathlib import Path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import pandas as pd
+import pytesseract
 from matplotlib.patches import Rectangle
 from ollama import Client
 from tqdm import tqdm
@@ -138,7 +139,13 @@ def process_images():
         results.append({"image_file": image_file, "class": img_class, "box": box})
 
         show_image_with_class(image_path, image_file, img_class)
-        print(f"Processed {image_file}: class={img_class}, box={box}")
+
+        ocr_text = pytesseract.image_to_string(str(image_path), lang="eng+deu")
+        print(f"OCR annotation for {image_file}: {ocr_text.strip()}")
+
+        print(
+            f"Processed {image_file}: class={img_class}, box={box}\n OCR annotation for {image_file}: {ocr_text.strip()}"
+        )
 
 
 process_images()
@@ -146,3 +153,5 @@ process_images()
 # Save results to parquet
 df = pd.DataFrame(results)
 df.to_parquet(f"labelling_results_{model}.parquet", index=False)
+
+# %%
