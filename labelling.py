@@ -33,14 +33,25 @@ import pytesseract
 from matplotlib.patches import Rectangle
 from ollama import Client
 from tqdm import tqdm
+import os
 
-model = "gemma3:4b"
+# Set proxy environment variables
+os.environ["no_proxy"] = "localhost,127.0.0.1,127.*,::1,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*,10.*,de.bosch.com,apac.bosch.com,emea.bosch.com,us.bosch.com,inside.bosch.cloud,rb-artifactory.bosch.com,sourcecode01.de.bosch.com,sourcecode06.dev.bosch.com,sourcecode.socialcoding.bosch.com,rb-tracker.bosch.com,mirror-osd.de.bosch.com"
+os.environ["NO_PROXY"] = "localhost,127.0.0.1,127.*,::1,172.16.*,172.17.*,172.18.*,172.19.*,172.20.*,172.21.*,172.22.*,172.23.*,172.24.*,172.25.*,172.26.*,172.27.*,172.28.*,172.29.*,172.30.*,172.31.*,192.168.*,10.*,de.bosch.com,apac.bosch.com,emea.bosch.com,us.bosch.com,inside.bosch.cloud,rb-artifactory.bosch.com,sourcecode01.de.bosch.com,sourcecode06.dev.bosch.com,sourcecode.socialcoding.bosch.com,rb-tracker.bosch.com,mirror-osd.de.bosch.com"
+
+# Echo proxy environment variables
+print("Proxy Environment Variables:")
+for var in ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY']:
+    print(f"{var}: {os.environ.get(var, 'Not set')}")
+print("\n")
+
+model = "gemma3:27b"
 
 client = Client(
     host="http://localhost:11434",
 )
 
-client.pull(model=model)
+# client.pull(model=model)
 client.list()
 client.show(model=model)
 image_dir = Path("/home/wri2lr/repos/home/mnt/images")
