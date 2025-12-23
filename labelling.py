@@ -97,7 +97,9 @@ results = []
 start_time = time.time()
 
 
-def show_image_with_class(image_path, image_file, img_class, save_path=None):
+def show_image_with_class(
+    image_path, image_file, img_class, json_data=None, save_path=None
+):
     """Display an image with its predicted class as the title.
 
     Parameters
@@ -108,13 +110,31 @@ def show_image_with_class(image_path, image_file, img_class, save_path=None):
         The name of the image file.
     img_class : str
         The predicted class of the image.
+    json_data : dict, optional
+        The complete JSON response data to display.
     save_path : Path or str, optional
         The path to save the labelled image.
     """
     img = mpimg.imread(str(image_path))
-    plt.imshow(img)
-    plt.axis("off")
-    plt.title(f"{image_file} \n class: {img_class}")
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.imshow(img)
+    ax.axis("off")
+    ax.set_title(f"{image_file} \n class: {img_class}")
+
+    # Add JSON data as text underneath the image
+    if json_data:
+        json_text = json.dumps(json_data, indent=2)
+        fig.text(
+            0.5,
+            0.02,
+            json_text,
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            family="monospace",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        )
+
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
         plt.close()  # Close the figure without displaying
@@ -196,7 +216,11 @@ def process_images():
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
         show_image_with_class(
-            image_path, image_file, img_class, save_path=label_save_path
+            image_path,
+            image_file,
+            img_class,
+            json_data=result,
+            save_path=label_save_path,
         )
 
         ocr_text = pytesseract.image_to_string(str(image_path), lang="eng+deu")
