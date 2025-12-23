@@ -81,6 +81,7 @@ prompt = (
     "Return in JSON format just the class with key 'class'.\n"
     "Optionally, if you can identify the location of the creature in the image, also return the bounding box in YOLO format with key 'box'.\n"
     "YOLO format is [x_center, y_center, width, height] with all values normalized between 0 and 1.\n"
+    "If there are multiple creatures, return the bounding box of the most prominent one.\n"
     "Also return whether it's bright or dark in the image with key 'lighting' and value either 'bright' or 'dark'.\n"
     "There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
     "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
@@ -180,7 +181,17 @@ def process_images():
         except json.JSONDecodeError as e:
             print(f"Could not parse bounding box: {e}")
 
-        results.append({"image_file": image_file, "class": img_class, "box": box})
+        results.append(
+            {
+                "image_file": image_file,
+                "class": img_class,
+                "box": box,
+                "lighting": result.get("lighting"),
+                "timestamp": result.get("timestamp"),
+                "temperature_celsius": result.get("temperature_celsius"),
+                "location_id": result.get("location_id"),
+            }
+        )
 
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
