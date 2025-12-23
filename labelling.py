@@ -76,7 +76,7 @@ prompt = (
     "Either there is one or multiple animals of the above species, a human, or no creature in the image.\n"
     "If multiple animals are visible, echo the one that appears most often.\n"
     "If there is an animal, please specify the species.\n"
-    "If there is no creature, just return the class 'nothing'.\n"
+    "If there is no creature, return the class 'none'.\n"
     "If there is a creature but you don't know what kind of creature, choose class 'unknown'.\n"
     "Return in JSON format just the class with key 'class'.\n"
     "Optionally, if you can identify the location of the creature in the image, also return the bounding box in YOLO format with key 'box'.\n"
