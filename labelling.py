@@ -72,15 +72,21 @@ image_dir = Path(os.environ["HOME"] + "/mnt/wildlife/subset")
 prompt = (
     "Determine the class of creature in this image.\n"
     "The photo was taken by a wildlife camera in Germany.\n"
-    "Common animals include roe deer, wild boar, dove, badger, marten, dog, fox, hare, and crow.\n"
-    "Either there is an animal, a human, or no creature in the image.\n"
+    "Common animals include roe deer, wild boar, dove, badger, marten, dog, fox, hare, squirrel, jay, owl, and crow.\n"
+    "Either there is one or multiple animals of the above species, a human, or no creature in the image.\n"
     "If multiple animals are visible, echo the one that appears most often.\n"
     "If there is an animal, please specify the species.\n"
     "If there is no creature, just return the class 'nothing'.\n"
     "If there is a creature but you don't know what kind of creature, choose class 'unknown'.\n"
-    "Return in JSON format just the class with key 'class' but nothing else.\n"
-    # and the bounding box of the creature with key 'box'
-    # "Return the bounding box in the YOLO format."
+    "Return in JSON format just the class with key 'class'.\n"
+    "Optionally, if you can identify the location of the creature in the image, also return the bounding box in YOLO format with key 'box'.\n"
+    "YOLO format is [x_center, y_center, width, height] with all values normalized between 0 and 1.\n"
+    "Also return whether it's bright or dark in the image with key 'lighting' and value either 'bright' or 'dark'.\n"
+    "There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
+    "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
+    "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
+    "There is a location ID somewhere in the middle of the gray bar. Add it as an additional key 'location_id' if you can read it from the gray bar using OCR.\n"
+    "The locations are Sandweg, Kirsche, Suhlenkamera, and Amphikanzel. Some images have no location ID. Return 'unknown' in that case.\n"
 )
 
 # Collect results in a list
