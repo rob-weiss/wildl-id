@@ -65,7 +65,7 @@ client = Client(
 # client.pull(model=model)
 client.list()
 client.show(model=model)
-image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
+image_dir = Path(os.environ["HOME"] + "/mnt/wildlife/subset")
 
 
 prompt = (
