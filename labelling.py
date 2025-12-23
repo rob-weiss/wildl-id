@@ -83,6 +83,7 @@ prompt = (
     "YOLO format is [x_center, y_center, width, height] with all values normalized between 0 and 1.\n"
     "If there are multiple creatures, return the bounding box of the most prominent one.\n"
     "Also return whether it's bright or dark in the image with key 'lighting' and value either 'bright' or 'dark'.\n"
+    "If it is a black and white image, label it as dark.\n"
     "There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
     "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
     "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
