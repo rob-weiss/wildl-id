@@ -121,6 +121,19 @@ def show_image_with_class(
     ax.axis("off")
     ax.set_title(f"{image_file} \n class: {img_class}")
 
+    # Draw bounding box if present in json_data
+    if json_data and "box" in json_data:
+        box = json_data["box"]
+        if box is not None and isinstance(box, list) and len(box) == 4:
+            x_center, y_center, width, height = box
+            img_h, img_w = img.shape[:2]
+            x = (x_center - width / 2) * img_w
+            y = (y_center - height / 2) * img_h
+            w = width * img_w
+            h = height * img_h
+            rect = Rectangle((x, y), w, h, linewidth=2, edgecolor="r", facecolor="none")
+            ax.add_patch(rect)
+
     # Add JSON data as text underneath the image
     if json_data:
         json_text = json.dumps(json_data, indent=2)
@@ -187,17 +200,6 @@ def process_images():
                 img_class = result.get("class")
                 # YOLO format: [class, x_center, y_center, width, height] (all normalized 0-1)
                 box = result.get("box")
-                if box is not None and isinstance(box, list) and len(box) == 4:
-                    x_center, y_center, width, height = box
-                    img_h, img_w = image.shape[:2]
-                    x = (x_center - width / 2) * img_w
-                    y = (y_center - height / 2) * img_h
-                    w = width * img_w
-                    h = height * img_h
-                    rect = Rectangle(
-                        (x, y), w, h, linewidth=2, edgecolor="r", facecolor="none"
-                    )
-                    plt.gca().add_patch(rect)
         except json.JSONDecodeError as e:
             print(f"Could not parse bounding box: {e}")
 
