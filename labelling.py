@@ -25,6 +25,7 @@ Usage:
 import base64
 import json
 import os
+import time
 from pathlib import Path
 
 import matplotlib.image as mpimg
@@ -84,6 +85,9 @@ prompt = (
 
 # Collect results in a list
 results = []
+
+# Start timing
+start_time = time.time()
 
 
 def show_image_with_class(image_path, image_file, img_class, save_path=None):
@@ -192,5 +196,12 @@ process_images()
 script_dir = Path(__file__).parent
 df = pd.DataFrame(results)
 df.to_parquet(script_dir / f"labelling_results_{model}.parquet", index=False)
+
+# Print total execution time
+end_time = time.time()
+total_time = end_time - start_time
+print(
+    f"\nTotal execution time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)"
+)
 
 # %%
