@@ -57,7 +57,7 @@ for var in [
     print(f"{var}: {os.environ.get(var, 'Not set')}")
 print("\n")
 
-model = "qwen3-vl:30b-a3b-instruct-bf16"
+model = "qwen3-vl:235b-a22b"
 
 client = Client(
     host="http://localhost:11434",
