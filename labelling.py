@@ -86,7 +86,7 @@ prompt = (
 results = []
 
 
-def show_image_with_class(image_path, image_file, img_class):
+def show_image_with_class(image_path, image_file, img_class, save_path=None):
     """Display an image with its predicted class as the title.
 
     Parameters
@@ -97,11 +97,15 @@ def show_image_with_class(image_path, image_file, img_class):
         The name of the image file.
     img_class : str
         The predicted class of the image.
+    save_path : Path or str, optional
+        The path to save the labelled image.
     """
     img = mpimg.imread(str(image_path))
     plt.imshow(img)
     plt.axis("off")
     plt.title(f"{image_file} \n class: {img_class}")
+    if save_path:
+        plt.savefig(save_path, bbox_inches='tight', dpi=150)
     plt.show()
 
 
@@ -114,6 +118,10 @@ def process_images():
     None
         The function appends results to the global 'results' list and prints progress.
     """
+    # Create labels directory
+    labels_dir = image_dir / "labels"
+    labels_dir.mkdir(exist_ok=True)
+    
     image_files = [
         f.name
         for f in image_dir.iterdir()
@@ -162,7 +170,9 @@ def process_images():
 
         results.append({"image_file": image_file, "class": img_class, "box": box})
 
-        show_image_with_class(image_path, image_file, img_class)
+        # Save labelled image to labels directory
+        label_save_path = labels_dir / f"labelled_{image_file}"
+        show_image_with_class(image_path, image_file, img_class, save_path=label_save_path)
 
         ocr_text = pytesseract.image_to_string(str(image_path), lang="eng+deu")
         print(f"OCR annotation for {image_file}: {ocr_text.strip()}")
