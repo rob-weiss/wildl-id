@@ -200,8 +200,12 @@ df.to_parquet(script_dir / f"labelling_results_{model}.parquet", index=False)
 # Print total execution time
 end_time = time.time()
 total_time = end_time - start_time
+num_images = len(results)
+avg_time_per_image = total_time / num_images if num_images > 0 else 0
 print(
     f"\nTotal execution time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)"
 )
+print(f"Average time per image: {avg_time_per_image:.2f} seconds")
+print(f"Total images processed: {num_images}")
 
 # %%
