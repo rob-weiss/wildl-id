@@ -106,7 +106,9 @@ def show_image_with_class(image_path, image_file, img_class, save_path=None):
     plt.title(f"{image_file} \n class: {img_class}")
     if save_path:
         plt.savefig(save_path, bbox_inches='tight', dpi=150)
-    plt.show()
+        plt.close()  # Close the figure without displaying
+    else:
+        plt.show()
 
 
 def process_images():
