@@ -105,7 +105,7 @@ def show_image_with_class(image_path, image_file, img_class, save_path=None):
     plt.axis("off")
     plt.title(f"{image_file} \n class: {img_class}")
     if save_path:
-        plt.savefig(save_path, bbox_inches='tight', dpi=150)
+        plt.savefig(save_path, bbox_inches="tight", dpi=150)
         plt.close()  # Close the figure without displaying
     else:
         plt.show()
@@ -121,9 +121,9 @@ def process_images():
         The function appends results to the global 'results' list and prints progress.
     """
     # Create labels directory
-    labels_dir = image_dir / "labels"
+    labels_dir = image_dir / f"labels_{model}"
     labels_dir.mkdir(exist_ok=True)
-    
+
     image_files = [
         f.name
         for f in image_dir.iterdir()
@@ -174,7 +174,9 @@ def process_images():
 
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
-        show_image_with_class(image_path, image_file, img_class, save_path=label_save_path)
+        show_image_with_class(
+            image_path, image_file, img_class, save_path=label_save_path
+        )
 
         ocr_text = pytesseract.image_to_string(str(image_path), lang="eng+deu")
         print(f"OCR annotation for {image_file}: {ocr_text.strip()}")
@@ -187,7 +189,8 @@ def process_images():
 process_images()
 
 # Save results to parquet
+script_dir = Path(__file__).parent
 df = pd.DataFrame(results)
-df.to_parquet(f"labelling_results_{model}.parquet", index=False)
+df.to_parquet(script_dir / f"labelling_results_{model}.parquet", index=False)
 
 # %%
