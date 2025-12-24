@@ -66,13 +66,13 @@ client = Client(
 # client.pull(model=model)
 client.list()
 client.show(model=model)
-image_dir = Path(os.environ["HOME"] + "/mnt/wildlife/subset")
+image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
 
 
 prompt = (
     "Determine the class of creature in this image.\n"
     "The photo was taken by a wildlife camera in Germany.\n"
-    "Common animals include roe deer, wild boar, dove, badger, marten, dog, fox, hare, squirrel, jay, owl, and crow.\n"
+    "Common animals include roe deer, wild boar, pigeon, badger, marten, dog, fox, hare, squirrel, jay, owl, and crow.\n"
     "Either there is one or multiple animals of the above species, a human, or no creature in the image.\n"
     "If multiple animals are visible, echo the one that appears most often.\n"
     "If there is an animal, please specify the species.\n"
