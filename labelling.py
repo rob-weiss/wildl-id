@@ -31,7 +31,6 @@ from pathlib import Path
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import pandas as pd
-import pytesseract
 from matplotlib.patches import Rectangle
 from ollama import Client
 from tqdm import tqdm
@@ -63,7 +62,6 @@ client = Client(
     host="http://localhost:11434",
 )
 
-# client.pull(model=model)
 client.list()
 client.show(model=model)
 image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
@@ -225,14 +223,6 @@ def process_images():
             json_data=result,
             save_path=label_save_path,
         )
-
-        ocr_text = pytesseract.image_to_string(str(image_path), lang="eng+deu")
-        print(f"OCR annotation for {image_file}: {ocr_text.strip()}")
-
-        print(
-            f"Processed {image_file}: class={img_class}, box={box}\n OCR annotation for {image_file}: {ocr_text.strip()}"
-        )
-
 
 process_images()
 
