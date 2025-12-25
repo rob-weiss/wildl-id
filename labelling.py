@@ -187,8 +187,9 @@ def process_images():
     )
 
     for image_file in tqdm(image_files, desc="Processing images"):
-        # Skip if already in CSV
-        if image_file in processed_images:
+        # Skip only if BOTH CSV entry AND labelled image exist
+        label_save_path = labels_dir / f"labelled_{image_file}"
+        if image_file in processed_images and label_save_path.exists():
             continue
 
         image_path = image_dir / image_file
@@ -232,11 +233,13 @@ def process_images():
         )
 
         # Save to CSV after each image (fast incremental write)
-        df = pd.DataFrame([results[-1]])  # Only the last result
-        csv_path = labels_dir / f"labelling_results_{model}.csv"
-        # Check if CSV exists and has content to determine if we need header
-        write_header = not csv_path.exists() or csv_path.stat().st_size == 0
-        df.to_csv(csv_path, mode="a", header=write_header, index=False)
+        # Only append if not already in processed_images to avoid duplicates
+        if image_file not in processed_images:
+            df = pd.DataFrame([results[-1]])  # Only the last result
+            csv_path = labels_dir / f"labelling_results_{model}.csv"
+            # Check if CSV exists and has content to determine if we need header
+            write_header = not csv_path.exists() or csv_path.stat().st_size == 0
+            df.to_csv(csv_path, mode="a", header=write_header, index=False)
 
         # Convert to parquet every 100 images
         if len(results) % 100 == 0:
