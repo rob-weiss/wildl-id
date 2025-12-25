@@ -207,6 +207,7 @@ def process_images():
         response = client.chat(
             model=model,
             messages=[{"role": "user", "content": prompt, "images": [img_base64]}],
+            options={"seed": 42, "temperature": 0},
         )
 
         img_class = None
