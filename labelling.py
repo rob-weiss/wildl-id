@@ -230,8 +230,6 @@ def process_images():
         with image_path.open("rb") as img_file:
             image_bytes = img_file.read()
             img_base64 = base64.b64encode(image_bytes).decode("utf-8")
-        # Load the image array for shape and visualization
-        image = mpimg.imread(str(image_path))
 
         response = client.chat(
             model=model,
