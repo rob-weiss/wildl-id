@@ -224,12 +224,13 @@ def process_images():
             save_path=label_save_path,
         )
 
+
 process_images()
 
-# Save results to parquet
-script_dir = Path(__file__).parent
+# Save results to parquet in labels directory
+labels_dir = image_dir / f"labels_{model}"
 df = pd.DataFrame(results)
-df.to_parquet(script_dir / f"labelling_results_{model}.parquet", index=False)
+df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
 
 # Print total execution time
 end_time = time.time()
