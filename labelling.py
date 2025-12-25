@@ -165,6 +165,10 @@ def process_images():
     labels_dir = image_dir / f"labels_{model}"
     labels_dir.mkdir(exist_ok=True)
 
+    # Create images subdirectory for labelled images
+    images_output_dir = labels_dir / "images"
+    images_output_dir.mkdir(exist_ok=True)
+
     # Get all subfolders in image_dir
     subfolders = [
         d
@@ -205,7 +209,9 @@ def process_images():
         img_info
         for img_info in image_info_list
         if (img_info["location_id"], img_info["name"]) not in processed_images
-        or not (labels_dir / f"{img_info['location_id']}_{img_info['name']}").exists()
+        or not (
+            images_output_dir / f"{img_info['location_id']}_{img_info['name']}"
+        ).exists()
     ]
     print(
         f"Found {len(image_info_list)} total images in {len(subfolders)} subfolders, "
@@ -218,7 +224,7 @@ def process_images():
         image_path = img_info["path"]
 
         # Skip only if BOTH CSV entry AND labelled image exist
-        label_save_path = labels_dir / f"{location_id}_{image_file}"
+        label_save_path = images_output_dir / f"{location_id}_{image_file}"
         if (location_id, image_file) in processed_images and label_save_path.exists():
             continue
         with image_path.open("rb") as img_file:
