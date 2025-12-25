@@ -214,9 +214,10 @@ def process_images():
             }
         )
 
-        # Save results to parquet after each image
-        df = pd.DataFrame(results)
-        df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
+        # Save to CSV after each image (fast incremental write)
+        df = pd.DataFrame([results[-1]])  # Only the last result
+        csv_path = labels_dir / f"labelling_results_{model}.csv"
+        df.to_csv(csv_path, mode="a", header=not csv_path.exists(), index=False)
 
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
@@ -230,6 +231,14 @@ def process_images():
 
 
 process_images()
+
+# Convert CSV to parquet for efficient storage
+labels_dir = image_dir / f"labels_{model}"
+csv_path = labels_dir / f"labelling_results_{model}.csv"
+if csv_path.exists():
+    df = pd.read_csv(csv_path)
+    df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
+    print(f"Converted results to parquet: {len(df)} images processed")
 
 # Print total execution time
 end_time = time.time()
