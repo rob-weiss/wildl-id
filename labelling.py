@@ -173,10 +173,22 @@ def process_images():
         if f.is_file() and f.name.lower().endswith((".jpg", ".jpeg", ".png"))
     ]
     image_files.sort()
+
+    # Load existing CSV to check which images are already in the dataset
+    csv_path = labels_dir / f"labelling_results_{model}.csv"
+    processed_images = set()
+    if csv_path.exists():
+        existing_df = pd.read_csv(csv_path)
+        processed_images = set(existing_df["image_file"].values)
+
+    images_to_process = [img for img in image_files if img not in processed_images]
+    print(
+        f"Found {len(image_files)} total images, {len(processed_images)} already in CSV, {len(images_to_process)} to process\n"
+    )
+
     for image_file in tqdm(image_files, desc="Processing images"):
-        # Skip if already processed
-        label_save_path = labels_dir / f"labelled_{image_file}"
-        if label_save_path.exists():
+        # Skip if already in CSV
+        if image_file in processed_images:
             continue
 
         image_path = image_dir / image_file
@@ -222,7 +234,9 @@ def process_images():
         # Save to CSV after each image (fast incremental write)
         df = pd.DataFrame([results[-1]])  # Only the last result
         csv_path = labels_dir / f"labelling_results_{model}.csv"
-        df.to_csv(csv_path, mode="a", header=not csv_path.exists(), index=False)
+        # Check if CSV exists and has content to determine if we need header
+        write_header = not csv_path.exists() or csv_path.stat().st_size == 0
+        df.to_csv(csv_path, mode="a", header=write_header, index=False)
 
         # Convert to parquet every 100 images
         if len(results) % 100 == 0:
@@ -249,7 +263,7 @@ csv_path = labels_dir / f"labelling_results_{model}.csv"
 if csv_path.exists():
     df = pd.read_csv(csv_path)
     df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
-    print(f"Converted results to parquet: {len(df)} images processed")
+    print(f"Converted results to parquet: {len(df)} total images in dataset")
 
 # Print total execution time
 end_time = time.time()
@@ -260,6 +274,6 @@ print(
     f"\nTotal execution time: {total_time:.2f} seconds ({total_time / 60:.2f} minutes)"
 )
 print(f"Average time per image: {avg_time_per_image:.2f} seconds")
-print(f"Total images processed: {num_images}")
+print(f"Images processed this run: {num_images}")
 
 # %%
