@@ -153,49 +153,74 @@ def show_image_with_class(
 
 
 def process_images():
-    """Processes images in the specified directory, sends them to the LLM for classification,
-    parses the responses, and collects the results.
+    """Processes images from subfolders in the specified directory, sends them to the LLM for classification,
+    parses the responses, and collects the results. Uses subfolder name as location_id.
 
     Returns:
     -------
     None
         The function appends results to the global 'results' list and prints progress.
     """
-    # Create labels directory
+    # Create labels directory in image_dir (not in subfolders)
     labels_dir = image_dir / f"labels_{model}"
     labels_dir.mkdir(exist_ok=True)
 
-    image_files = [
-        f.name
-        for f in image_dir.iterdir()
-        if f.is_file() and f.name.lower().endswith((".jpg", ".jpeg", ".png"))
+    # Get all subfolders in image_dir
+    subfolders = [
+        d
+        for d in image_dir.iterdir()
+        if d.is_dir() and not d.name.startswith("labels_")
     ]
-    image_files.sort()
+
+    # Collect all images from subfolders with their location_id (subfolder name)
+    image_info_list = []
+    for subfolder in subfolders:
+        location_id = subfolder.name
+        for image_file in subfolder.iterdir():
+            if image_file.is_file() and image_file.name.lower().endswith(
+                (".jpg", ".jpeg", ".png")
+            ):
+                image_info_list.append(
+                    {
+                        "path": image_file,
+                        "name": image_file.name,
+                        "location_id": location_id,
+                    }
+                )
+
+    image_info_list.sort(key=lambda x: (x["location_id"], x["name"]))
 
     # Load existing CSV to check which images are already in the dataset
     csv_path = labels_dir / f"labelling_results_{model}.csv"
     processed_images = set()
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path)
-        processed_images = set(existing_df["image_file"].values)
+        # Create unique key from location_id and image_file
+        processed_images = set(
+            zip(existing_df["location_id"], existing_df["image_file"])
+        )
 
-    # Count images that need processing (missing CSV entry OR missing labelled image)
+    # Count images that need processing
     images_to_process = [
-        img
-        for img in image_files
-        if img not in processed_images or not (labels_dir / f"labelled_{img}").exists()
+        img_info
+        for img_info in image_info_list
+        if (img_info["location_id"], img_info["name"]) not in processed_images
+        or not (labels_dir / f"{img_info['location_id']}_{img_info['name']}").exists()
     ]
     print(
-        f"Found {len(image_files)} total images, {len(processed_images)} in CSV, {len(images_to_process)} to process\n"
+        f"Found {len(image_info_list)} total images in {len(subfolders)} subfolders, "
+        f"{len(processed_images)} already processed, {len(images_to_process)} to process\n"
     )
 
-    for image_file in tqdm(image_files, desc="Processing images"):
-        # Skip only if BOTH CSV entry AND labelled image exist
-        label_save_path = labels_dir / f"labelled_{image_file}"
-        if image_file in processed_images and label_save_path.exists():
-            continue
+    for img_info in tqdm(image_info_list, desc="Processing images"):
+        location_id = img_info["location_id"]
+        image_file = img_info["name"]
+        image_path = img_info["path"]
 
-        image_path = image_dir / image_file
+        # Skip only if BOTH CSV entry AND labelled image exist
+        label_save_path = labels_dir / f"{location_id}_{image_file}"
+        if (location_id, image_file) in processed_images and label_save_path.exists():
+            continue
         with image_path.open("rb") as img_file:
             image_bytes = img_file.read()
             img_base64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -226,19 +251,19 @@ def process_images():
 
         results.append(
             {
+                "location_id": location_id,
                 "image_file": image_file,
                 "class": img_class,
                 "box": box,
                 "lighting": result.get("lighting"),
                 "timestamp": result.get("timestamp"),
                 "temperature_celsius": result.get("temperature_celsius"),
-                "location_id": result.get("location_id"),
             }
         )
 
         # Save to CSV after each image (fast incremental write)
         # Only append if not already in processed_images to avoid duplicates
-        if image_file not in processed_images:
+        if (location_id, image_file) not in processed_images:
             df = pd.DataFrame([results[-1]])  # Only the last result
             csv_path = labels_dir / f"labelling_results_{model}.csv"
             # Check if CSV exists and has content to determine if we need header
