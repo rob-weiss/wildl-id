@@ -219,6 +219,13 @@ def process_images():
         csv_path = labels_dir / f"labelling_results_{model}.csv"
         df.to_csv(csv_path, mode="a", header=not csv_path.exists(), index=False)
 
+        # Convert to parquet every 100 images
+        if len(results) % 100 == 0:
+            df_all = pd.read_csv(csv_path)
+            df_all.to_parquet(
+                labels_dir / f"labelling_results_{model}.parquet", index=False
+            )
+
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
         show_image_with_class(
