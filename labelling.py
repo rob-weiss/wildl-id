@@ -174,6 +174,11 @@ def process_images():
     ]
     image_files.sort()
     for image_file in tqdm(image_files, desc="Processing images"):
+        # Skip if already processed
+        label_save_path = labels_dir / f"labelled_{image_file}"
+        if label_save_path.exists():
+            continue
+
         image_path = image_dir / image_file
         with image_path.open("rb") as img_file:
             image_bytes = img_file.read()
@@ -227,7 +232,6 @@ def process_images():
             )
 
         # Save labelled image to labels directory
-        label_save_path = labels_dir / f"labelled_{image_file}"
         show_image_with_class(
             image_path,
             image_file,
