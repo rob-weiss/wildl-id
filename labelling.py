@@ -64,7 +64,7 @@ client = Client(
 
 client.list()
 client.show(model=model)
-image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
+image_dir = Path(os.environ["HOME"] + "/mnt/wildlife/subset")
 
 
 prompt = (
@@ -214,6 +214,10 @@ def process_images():
             }
         )
 
+        # Save results to parquet after each image
+        df = pd.DataFrame(results)
+        df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
+
         # Save labelled image to labels directory
         label_save_path = labels_dir / f"labelled_{image_file}"
         show_image_with_class(
@@ -226,11 +230,6 @@ def process_images():
 
 
 process_images()
-
-# Save results to parquet in labels directory
-labels_dir = image_dir / f"labels_{model}"
-df = pd.DataFrame(results)
-df.to_parquet(labels_dir / f"labelling_results_{model}.parquet", index=False)
 
 # Print total execution time
 end_time = time.time()
