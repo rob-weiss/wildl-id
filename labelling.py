@@ -85,8 +85,6 @@ prompt = (
     "There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
     "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
     "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
-    "There is a location ID somewhere in the middle of the gray bar. Add it as an additional key 'location_id' if you can read it from the gray bar using OCR.\n"
-    "The locations are Sandweg, Kirsche, Suhlenkamera, and Amphikanzel. Some images have no location ID. Return 'unknown' in that case.\n"
 )
 
 # Collect results in a list
