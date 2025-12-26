@@ -56,6 +56,12 @@ parser.add_argument(
     default=None,
     help="Day of year (1-365), default: current day",
 )
+parser.add_argument(
+    "--datetime",
+    type=str,
+    default=None,
+    help="Datetime for prediction in ISO format (YYYY-MM-DD HH:MM), e.g., '2025-12-27 01:00'",
+)
 args = parser.parse_args()
 
 
@@ -140,13 +146,18 @@ def predict_activity(model, scaler, hour, day_of_year, temperature):
     return prediction
 
 
-def get_current_temperature():
-    """Fetch current temperature from Open-Meteo API (no API key required).
+def get_temperature_at_datetime(target_datetime=None):
+    """Fetch temperature from Open-Meteo API (no API key required).
+
+    Parameters
+    ----------
+    target_datetime : datetime or None
+        Target datetime for forecast. If None, fetches current temperature.
 
     Returns
     -------
     float or None
-        Current temperature in Celsius, or None if fetch fails
+        Temperature in Celsius at target time, or None if fetch fails
     """
     try:
         # Open-Meteo API - free, no API key required
@@ -154,18 +165,42 @@ def get_current_temperature():
         params = {
             "latitude": LATITUDE,
             "longitude": LONGITUDE,
-            "current": "temperature_2m",
             "temperature_unit": "celsius",
         }
 
-        response = requests.get(url, params=params, timeout=5)
-        response.raise_for_status()
-        data = response.json()
+        if target_datetime is None:
+            # Get current temperature
+            params["current"] = "temperature_2m"
+            response = requests.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            temperature = data.get("current", {}).get("temperature_2m")
+        else:
+            # Get forecast temperature
+            params["hourly"] = "temperature_2m"
+            params["forecast_days"] = "7"
+            response = requests.get(url, params=params, timeout=5)
+            response.raise_for_status()
+            data = response.json()
 
-        temperature = data.get("current", {}).get("temperature_2m")
+            # Find the matching hour in forecast
+            hourly = data.get("hourly", {})
+            times = hourly.get("time", [])
+            temps = hourly.get("temperature_2m", [])
+
+            # Format target datetime to match API format (YYYY-MM-DDTHH:00)
+            target_str = target_datetime.strftime("%Y-%m-%dT%H:00")
+
+            if target_str in times:
+                idx = times.index(target_str)
+                temperature = temps[idx]
+            else:
+                print(f"⚠ Forecast not available for {target_str}")
+                return None
+
         return temperature
     except Exception as e:
-        print(f"⚠ Could not fetch current temperature: {e}")
+        print(f"⚠ Could not fetch temperature: {e}")
         return None
 
 
@@ -200,26 +235,52 @@ def main():
     print("WILDLIFE ACTIVITY PREDICTION")
     print("=" * 70)
 
-    # Get current time information
-    now = datetime.now()
-    hour = args.hour if args.hour is not None else now.hour
-    day_of_year = args.day if args.day is not None else now.timetuple().tm_yday
+    # Parse datetime if provided
+    if args.datetime:
+        try:
+            target_datetime = datetime.strptime(args.datetime, "%Y-%m-%d %H:%M")
+            is_forecast = target_datetime > datetime.now()
+        except ValueError:
+            print("⚠ Invalid datetime format. Use: YYYY-MM-DD HH:MM")
+            return
+    else:
+        target_datetime = datetime.now()
+        is_forecast = False
 
-    # Get temperature - fetch current if not specified
+    # Get time information
+    hour = args.hour if args.hour is not None else target_datetime.hour
+    day_of_year = (
+        args.day if args.day is not None else target_datetime.timetuple().tm_yday
+    )
+
+    # Get temperature - fetch from API if not specified
     if args.temperature is None:
-        print("\nFetching current temperature...")
-        temperature = get_current_temperature()
+        if is_forecast:
+            print(
+                f"\nFetching temperature forecast for {target_datetime.strftime('%Y-%m-%d %H:%M')}..."
+            )
+            temperature = get_temperature_at_datetime(target_datetime)
+        else:
+            print("\nFetching current temperature...")
+            temperature = get_temperature_at_datetime()
+
         if temperature is None:
             print("Using default temperature: 10°C")
             temperature = 10.0
         else:
-            print(f"✓ Current temperature: {temperature}°C")
+            forecast_label = "forecast" if is_forecast else "current"
+            print(f"✓ Temperature {forecast_label}: {temperature}°C")
     else:
         temperature = args.temperature
 
     # Display input conditions
     print("\nPrediction Conditions:")
-    print(f"  Date/Time: {now.strftime('%Y-%m-%d %H:%M:%S')}")
+    if is_forecast:
+        print(
+            f"  Date/Time: {target_datetime.strftime('%Y-%m-%d %H:%M:%S')} (forecast)"
+        )
+    else:
+        print(f"  Date/Time: {target_datetime.strftime('%Y-%m-%d %H:%M:%S')} (current)")
     print(f"  Hour: {hour:02d}:00")
     print(f"  Day of Year: {day_of_year}")
     print(f"  Temperature: {temperature}°C")
