@@ -185,9 +185,7 @@ def create_expanded_dataset(species_data, species_name):
     # Combine with original data
     combined_data = pd.concat(
         [
-            species_data[
-                ["hour", "temperature", "day_of_year", "activity_normalized"]
-            ],
+            species_data[["hour", "temperature", "day_of_year", "activity_normalized"]],
             synthetic_df,
         ],
         ignore_index=True,
@@ -415,9 +413,7 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
 
-            X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
-            )
+            X = np.array([[temp, hour_sin, hour_cos, day_sin, day_cos]])
             X_scaled = scaler.transform(X)
             activity_grid[i, j] = model.predict(X_scaled, verbose=0)[0, 0]
 
@@ -443,9 +439,7 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
 
-            X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
-            )
+            X = np.array([[temp, hour_sin, hour_cos, day_sin, day_cos]])
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
 
@@ -471,9 +465,7 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
 
-            X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
-            )
+            X = np.array([[temp, hour_sin, hour_cos, day_sin, day_cos]])
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
 
@@ -497,9 +489,7 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
 
-            X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
-            )
+            X = np.array([[temp, hour_sin, hour_cos, day_sin, day_cos]])
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
 
