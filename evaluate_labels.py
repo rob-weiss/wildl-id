@@ -371,12 +371,32 @@ location_species = pd.crosstab(df["location_id"], df["class"])
 top_locations = location_counts.head(10).index
 location_species_top = location_species.loc[top_locations]
 
+# Group species that make up the last 10% into "other"
+species_totals = location_species_top.sum(axis=0).sort_values(ascending=False)
+total_sightings = species_totals.sum()
+cumulative_pct = (species_totals.cumsum() / total_sightings) * 100
+threshold_idx = (cumulative_pct >= 90).idxmax()
+threshold_position = species_totals.index.get_loc(threshold_idx)
+
+# Split into main species and "other"
+main_species_cols = species_totals.iloc[: threshold_position + 1].index
+other_species_cols = species_totals.iloc[threshold_position + 1 :].index
+
+# Create new dataframe with "other" category
+if len(other_species_cols) > 0:
+    location_species_grouped = location_species_top[main_species_cols].copy()
+    location_species_grouped["other"] = location_species_top[other_species_cols].sum(
+        axis=1
+    )
+else:
+    location_species_grouped = location_species_top[main_species_cols].copy()
+
 # Plot species distribution per location (stacked bar)
-location_species_top.plot(
+location_species_grouped.plot(
     kind="bar",
     stacked=True,
     ax=ax,
-    color=sns.color_palette("husl", len(location_species_top.columns)),
+    color=sns.color_palette("husl", len(location_species_grouped.columns)),
 )
 ax.set_title("Species Distribution by Location", fontsize=14, fontweight="bold")
 ax.set_xlabel("Location ID", fontsize=12)
