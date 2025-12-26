@@ -969,25 +969,37 @@ if len(df_valid) > 0:
         # ========== PLOT 4: Daily activity pattern over the year with sunset line ==========
         fig, axes = plt.subplots(2, 1, figsize=(16, 12))
 
+        # Calculate date range for past 12 months
+        from datetime import datetime, timedelta
+
+        today = datetime.now().date()
+        twelve_months_ago = today - timedelta(days=365)
+
         for idx, species in enumerate(target_species):
             species_data = df_target[df_target["class"] == species]
+            if len(species_data) == 0:
+                continue
+
+            # Filter to last 12 months
+            species_data = species_data[
+                species_data["date"] >= twelve_months_ago
+            ].copy()
             if len(species_data) == 0:
                 continue
 
             ax = axes[idx]
 
             # Extract hour and minute as decimal hour for x-axis
-            species_data_copy = species_data.copy()
-            species_data_copy["hour_decimal"] = (
-                species_data_copy["timestamp"].dt.hour
-                + species_data_copy["timestamp"].dt.minute / 60
+            species_data["hour_decimal"] = (
+                species_data["timestamp"].dt.hour
+                + species_data["timestamp"].dt.minute / 60
             )
 
             # Scatter plot: x=hour of day, y=date
             scatter = ax.scatter(
-                species_data_copy["hour_decimal"],
-                species_data_copy["date"],
-                c=species_data_copy["hours_from_sunset"],
+                species_data["hour_decimal"],
+                species_data["date"],
+                c=species_data["hours_from_sunset"],
                 cmap="RdYlBu_r",
                 alpha=0.6,
                 s=30,
@@ -997,18 +1009,22 @@ if len(df_valid) > 0:
                 vmax=3,
             )
 
-            # Calculate sunset times for each date and plot as a line
-            unique_dates = sorted(species_data_copy["date"].unique())
+            # Calculate sunset and sunrise times for each date and plot as lines
+            unique_dates = sorted(species_data["date"].unique())
             sunset_hours = []
+            sunrise_hours = []
             valid_dates = []
 
             for date in unique_dates:
-                sunset_time = species_data_copy[species_data_copy["date"] == date][
-                    "sunset"
-                ].iloc[0]
-                if pd.notna(sunset_time):
+                date_data = species_data[species_data["date"] == date]
+                sunset_time = date_data["sunset"].iloc[0]
+                sunrise_time = date_data["sunrise"].iloc[0]
+
+                if pd.notna(sunset_time) and pd.notna(sunrise_time):
                     sunset_hour = sunset_time.hour + sunset_time.minute / 60
+                    sunrise_hour = sunrise_time.hour + sunrise_time.minute / 60
                     sunset_hours.append(sunset_hour)
+                    sunrise_hours.append(sunrise_hour)
                     valid_dates.append(date)
 
             if len(valid_dates) > 0:
@@ -1021,9 +1037,18 @@ if len(df_valid) > 0:
                     alpha=0.9,
                     zorder=10,
                 )
+                ax.plot(
+                    sunrise_hours,
+                    valid_dates,
+                    color="gold",
+                    linewidth=3,
+                    label="Sunrise Time",
+                    alpha=0.9,
+                    zorder=10,
+                )
 
             ax.set_title(
-                f"{species.capitalize()} Activity Throughout Year and Day (n={len(species_data)})",
+                f"{species.capitalize()} Activity Throughout Year and Day (Last 12 Months, n={len(species_data)})",
                 fontsize=14,
                 fontweight="bold",
             )
@@ -1032,6 +1057,7 @@ if len(df_valid) > 0:
             ax.set_xlim(0, 24)
             ax.set_xticks(range(0, 25, 2))
             ax.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
+            ax.set_ylim(twelve_months_ago, today)
             ax.grid(True, alpha=0.3)
             ax.legend(loc="upper right")
             ax.invert_yaxis()  # Most recent dates at top
