@@ -1057,7 +1057,7 @@ if len(df_valid) > 0:
             ax.set_xlim(0, 24)
             ax.set_xticks(range(0, 25, 2))
             ax.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
-            ax.set_ylim(twelve_months_ago, today)
+            # Let y-axis auto-scale based on actual data available
             ax.grid(True, alpha=0.3)
             ax.legend(loc="upper right")
             ax.invert_yaxis()  # Most recent dates at top
