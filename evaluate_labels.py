@@ -363,27 +363,7 @@ location_counts = df["location_id"].value_counts()
 print("\nDetections by location:")
 print(location_counts)
 
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 10))
-
-# Detections per location
-location_counts.plot(
-    kind="bar", ax=ax1, color=sns.color_palette("Set3", len(location_counts))
-)
-ax1.set_title("Total Detections by Location", fontsize=14, fontweight="bold")
-ax1.set_xlabel("Location ID", fontsize=12)
-ax1.set_ylabel("Number of Detections", fontsize=12)
-ax1.tick_params(axis="x", rotation=45)
-ax1.grid(axis="y", alpha=0.3)
-
-for i, v in enumerate(location_counts.values):
-    ax1.text(
-        i,
-        v + max(location_counts.values) * 0.01,
-        str(v),
-        ha="center",
-        va="bottom",
-        fontweight="bold",
-    )
+fig, ax = plt.subplots(figsize=(14, 8))
 
 # Species diversity by location
 location_species = pd.crosstab(df["location_id"], df["class"])
@@ -391,19 +371,32 @@ location_species = pd.crosstab(df["location_id"], df["class"])
 top_locations = location_counts.head(10).index
 location_species_top = location_species.loc[top_locations]
 
-# Plot species distribution per location
+# Plot species distribution per location (stacked bar)
 location_species_top.plot(
     kind="bar",
     stacked=True,
-    ax=ax2,
+    ax=ax,
     color=sns.color_palette("husl", len(location_species_top.columns)),
 )
-ax2.set_title("Species Distribution by Location", fontsize=14, fontweight="bold")
-ax2.set_xlabel("Location ID", fontsize=12)
-ax2.set_ylabel("Number of Detections", fontsize=12)
-ax2.tick_params(axis="x", rotation=45)
-ax2.legend(title="Species", bbox_to_anchor=(1.05, 1), loc="upper left")
-ax2.grid(axis="y", alpha=0.3)
+ax.set_title("Species Distribution by Location", fontsize=14, fontweight="bold")
+ax.set_xlabel("Location ID", fontsize=12)
+ax.set_ylabel("Number of Detections", fontsize=12)
+ax.tick_params(axis="x", rotation=45)
+ax.legend(title="Species", bbox_to_anchor=(1.05, 1), loc="upper left")
+ax.grid(axis="y", alpha=0.3)
+
+# Add total count labels on top of each bar
+for i, location in enumerate(top_locations):
+    total = location_counts[location]
+    ax.text(
+        i,
+        total + max(location_counts[top_locations]) * 0.01,
+        str(total),
+        ha="center",
+        va="bottom",
+        fontweight="bold",
+        fontsize=10,
+    )
 
 plt.tight_layout()
 plt.savefig(output_dir / "06_location_comparison.png", dpi=300, bbox_inches="tight")
