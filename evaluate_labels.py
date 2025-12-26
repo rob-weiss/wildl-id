@@ -699,17 +699,22 @@ if len(df_valid) > 0:
             print(f"Found {len(df_target)} sightings of roe deer and wild boar")
 
             # ========== PLOT 1: Activity relative to sunset throughout the year ==========
-            fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+            fig = plt.figure(figsize=(18, 10))
+            gs = fig.add_gridspec(2, 2, width_ratios=[4, 1], hspace=0.3, wspace=0.1)
 
             for idx, species in enumerate(target_species):
                 species_data = df_target[df_target["class"] == species]
                 if len(species_data) == 0:
                     continue
 
-                ax = axes[idx]
+                # Main scatter plot
+                ax_main = fig.add_subplot(gs[idx, 0])
+
+                # Distribution plot on the right
+                ax_dist = fig.add_subplot(gs[idx, 1], sharey=ax_main)
 
                 # Scatter plot: x=date, y=hours from sunset
-                scatter = ax.scatter(
+                scatter = ax_main.scatter(
                     species_data["date"],
                     species_data["hours_from_sunset"],
                     c=species_data["hours_from_sunset"],
@@ -721,7 +726,7 @@ if len(df_valid) > 0:
                 )
 
                 # Add horizontal line at sunset (0 hours)
-                ax.axhline(
+                ax_main.axhline(
                     y=0,
                     color="orange",
                     linestyle="--",
@@ -731,29 +736,47 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 1.5 hours before sunset
-                ax.axhspan(
+                ax_main.axhspan(
                     -1.5, 0, alpha=0.2, color="orange", label="1.5 hours before Sunset"
                 )
                 # Shade 0.5 hours after sunset
-                ax.axhspan(
+                ax_main.axhspan(
                     0, 0.5, alpha=0.3, color="orange", label="0.5 hours after Sunset"
                 )
 
-                ax.set_title(
+                ax_main.set_title(
                     f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
                     fontsize=14,
                     fontweight="bold",
                 )
-                ax.set_xlabel("Date", fontsize=12)
-                ax.set_ylabel("Hours from Sunset", fontsize=12)
-                ax.set_ylim(-3, 3)
-                ax.set_yticks(range(-3, 4))
-                ax.grid(True, alpha=0.3)
-                ax.legend(loc="upper right")
+                ax_main.set_xlabel("Date", fontsize=12)
+                ax_main.set_ylabel("Hours from Sunset", fontsize=12)
+                ax_main.set_ylim(-3, 3)
+                ax_main.set_yticks(range(-3, 4))
+                ax_main.grid(True, alpha=0.3)
+                ax_main.legend(loc="upper right")
 
                 # Add colorbar
-                cbar = plt.colorbar(scatter, ax=ax)
+                cbar = plt.colorbar(scatter, ax=ax_main)
                 cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
+
+                # Distribution on the right
+                ax_dist.hist(
+                    species_data["hours_from_sunset"],
+                    bins=30,
+                    orientation="horizontal",
+                    color="steelblue",
+                    alpha=0.7,
+                    edgecolor="black",
+                )
+                ax_dist.axhline(
+                    y=0, color="orange", linestyle="--", linewidth=2, alpha=0.7
+                )
+                ax_dist.axhspan(-1.5, 0, alpha=0.2, color="orange")
+                ax_dist.axhspan(0, 0.5, alpha=0.3, color="orange")
+                ax_dist.set_xlabel("Count", fontsize=10)
+                ax_dist.tick_params(labelleft=False)
+                ax_dist.grid(True, alpha=0.3, axis="x")
 
                 # Count sightings before sunset
                 before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
@@ -768,11 +791,11 @@ if len(df_valid) > 0:
                 hot_zone_pct = 100 * hot_zone / len(species_data)
 
                 # Add text annotation
-                ax.text(
+                ax_main.text(
                     0.02,
                     0.98,
                     f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}\nHot zone (-1.5h to +0.5h): {hot_zone} ({hot_zone_pct:.1f}%)",
-                    transform=ax.transAxes,
+                    transform=ax_main.transAxes,
                     verticalalignment="top",
                     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
                     fontsize=10,
@@ -787,17 +810,22 @@ if len(df_valid) > 0:
         plt.close()
 
         # ========== PLOT 11b: Activity relative to sunrise throughout the year ==========
-        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+        fig = plt.figure(figsize=(18, 10))
+        gs = fig.add_gridspec(2, 2, width_ratios=[4, 1], hspace=0.3, wspace=0.1)
 
         for idx, species in enumerate(target_species):
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
 
-            ax = axes[idx]
+            # Main scatter plot
+            ax_main = fig.add_subplot(gs[idx, 0])
+
+            # Distribution plot on the right
+            ax_dist = fig.add_subplot(gs[idx, 1], sharey=ax_main)
 
             # Scatter plot: x=date, y=hours from sunrise
-            scatter = ax.scatter(
+            scatter = ax_main.scatter(
                 species_data["date"],
                 species_data["hours_from_sunrise"],
                 c=species_data["hours_from_sunrise"],
@@ -809,7 +837,7 @@ if len(df_valid) > 0:
             )
 
             # Add horizontal line at sunrise (0 hours)
-            ax.axhline(
+            ax_main.axhline(
                 y=0,
                 color="gold",
                 linestyle="--",
@@ -819,27 +847,45 @@ if len(df_valid) > 0:
             )
 
             # Shade 0.5 hours before sunrise
-            ax.axhspan(
+            ax_main.axhspan(
                 -0.5, 0, alpha=0.3, color="gold", label="0.5 hours before Sunrise"
             )
             # Shade 1.5 hours after sunrise
-            ax.axhspan(0, 1.5, alpha=0.2, color="gold", label="1.5 hours after Sunrise")
+            ax_main.axhspan(
+                0, 1.5, alpha=0.2, color="gold", label="1.5 hours after Sunrise"
+            )
 
-            ax.set_title(
+            ax_main.set_title(
                 f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
                 fontsize=14,
                 fontweight="bold",
             )
-            ax.set_xlabel("Date", fontsize=12)
-            ax.set_ylabel("Hours from Sunrise", fontsize=12)
-            ax.set_ylim(-3, 3)
-            ax.set_yticks(range(-3, 4))
-            ax.grid(True, alpha=0.3)
-            ax.legend(loc="upper right")
+            ax_main.set_xlabel("Date", fontsize=12)
+            ax_main.set_ylabel("Hours from Sunrise", fontsize=12)
+            ax_main.set_ylim(-3, 3)
+            ax_main.set_yticks(range(-3, 4))
+            ax_main.grid(True, alpha=0.3)
+            ax_main.legend(loc="upper right")
 
             # Add colorbar
-            cbar = plt.colorbar(scatter, ax=ax)
+            cbar = plt.colorbar(scatter, ax=ax_main)
             cbar.set_label("Hours from Sunrise", rotation=270, labelpad=20)
+
+            # Distribution on the right
+            ax_dist.hist(
+                species_data["hours_from_sunrise"],
+                bins=30,
+                orientation="horizontal",
+                color="steelblue",
+                alpha=0.7,
+                edgecolor="black",
+            )
+            ax_dist.axhline(y=0, color="gold", linestyle="--", linewidth=2, alpha=0.7)
+            ax_dist.axhspan(-0.5, 0, alpha=0.3, color="gold")
+            ax_dist.axhspan(0, 1.5, alpha=0.2, color="gold")
+            ax_dist.set_xlabel("Count", fontsize=10)
+            ax_dist.tick_params(labelleft=False)
+            ax_dist.grid(True, alpha=0.3, axis="x")
 
             # Count sightings before sunrise
             before_sunrise = (species_data["minutes_from_sunrise"] < 0).sum()
@@ -854,11 +900,11 @@ if len(df_valid) > 0:
             hot_zone_pct = 100 * hot_zone / len(species_data)
 
             # Add text annotation
-            ax.text(
+            ax_main.text(
                 0.02,
                 0.98,
                 f"Before sunrise: {before_sunrise} ({pct_before:.1f}%)\nAfter sunrise: {after_sunrise}\nHot zone (-0.5h to +1.5h): {hot_zone} ({hot_zone_pct:.1f}%)",
-                transform=ax.transAxes,
+                transform=ax_main.transAxes,
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
                 fontsize=10,
@@ -1084,13 +1130,16 @@ if len(df_valid) > 0:
         plt.close()
 
         # ========== PLOT 4: Daily activity pattern over the year with sunset line ==========
-        fig, axes = plt.subplots(2, 1, figsize=(16, 12))
-
-        # Calculate date range for past 12 months
+        # Use gridspec to add marginal distributions
         from datetime import datetime, timedelta
+
+        from matplotlib.gridspec import GridSpec
 
         today = datetime.now().date()
         twelve_months_ago = today - timedelta(days=365)
+
+        # Create a figure for each species with distributions
+        fig_list = []
 
         for idx, species in enumerate(target_species):
             species_data = df_target[df_target["class"] == species]
@@ -1104,7 +1153,29 @@ if len(df_valid) > 0:
             if len(species_data) == 0:
                 continue
 
-            ax = axes[idx]
+            # Create figure for this species
+            fig = plt.figure(figsize=(18, 10))
+            gs = GridSpec(
+                2,
+                3,
+                figure=fig,
+                width_ratios=[4, 1, 0.2],
+                height_ratios=[1, 4],
+                hspace=0.05,
+                wspace=0.05,
+            )
+
+            # Top histogram (hour distribution)
+            ax_top = fig.add_subplot(gs[0, 0])
+
+            # Main scatter plot
+            ax_main = fig.add_subplot(gs[1, 0], sharex=ax_top)
+
+            # Right histogram (date distribution)
+            ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
+
+            # Colorbar position
+            ax_cbar = fig.add_subplot(gs[1, 2])
 
             # Extract hour and minute as decimal hour for x-axis
             species_data["hour_decimal"] = (
@@ -1113,7 +1184,7 @@ if len(df_valid) > 0:
             )
 
             # Scatter plot: x=hour of day, y=date
-            scatter = ax.scatter(
+            scatter = ax_main.scatter(
                 species_data["hour_decimal"],
                 species_data["date"],
                 c=species_data["hours_from_sunset"],
@@ -1152,7 +1223,7 @@ if len(df_valid) > 0:
                 sunset_plus_0_5 = [h + 0.5 for h in sunset_hours]
 
                 # Shade 0.5 hours before sunrise
-                ax.fill_betweenx(
+                ax_main.fill_betweenx(
                     valid_dates,
                     sunrise_minus_0_5,
                     sunrise_hours,
@@ -1163,7 +1234,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 1.5 hours after sunrise
-                ax.fill_betweenx(
+                ax_main.fill_betweenx(
                     valid_dates,
                     sunrise_hours,
                     sunrise_plus_1_5,
@@ -1174,7 +1245,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 1.5 hours before sunset
-                ax.fill_betweenx(
+                ax_main.fill_betweenx(
                     valid_dates,
                     sunset_minus_1_5,
                     sunset_hours,
@@ -1185,7 +1256,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 0.5 hours after sunset
-                ax.fill_betweenx(
+                ax_main.fill_betweenx(
                     valid_dates,
                     sunset_hours,
                     sunset_plus_0_5,
@@ -1195,7 +1266,7 @@ if len(df_valid) > 0:
                     zorder=5,
                 )
 
-                ax.plot(
+                ax_main.plot(
                     sunset_hours,
                     valid_dates,
                     color="orange",
@@ -1204,7 +1275,7 @@ if len(df_valid) > 0:
                     alpha=0.9,
                     zorder=10,
                 )
-                ax.plot(
+                ax_main.plot(
                     sunrise_hours,
                     valid_dates,
                     color="gold",
@@ -1214,24 +1285,54 @@ if len(df_valid) > 0:
                     zorder=10,
                 )
 
-            ax.set_title(
+            # Top distribution (hour of day)
+            ax_top.hist(
+                species_data["hour_decimal"],
+                bins=48,
+                color="steelblue",
+                alpha=0.7,
+                edgecolor="black",
+            )
+            ax_top.set_ylabel("Count", fontsize=10)
+            ax_top.tick_params(labelbottom=False)
+            ax_top.grid(True, alpha=0.3, axis="y")
+            ax_top.set_xlim(0, 24)
+            ax_top.set_title(
                 f"{species.capitalize()} Activity Throughout Year and Day (Last 12 Months, n={len(species_data)})",
                 fontsize=14,
                 fontweight="bold",
             )
-            ax.set_xlabel("Hour of Day", fontsize=12)
-            ax.set_ylabel("Date", fontsize=12)
-            ax.set_xlim(0, 24)
-            ax.set_xticks(range(0, 25, 2))
-            ax.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
-            # Let y-axis auto-scale based on actual data available
-            ax.grid(True, alpha=0.3)
-            ax.legend(loc="upper right")
-            ax.invert_yaxis()  # Most recent dates at top
+
+            # Right distribution (date)
+            date_bins = pd.date_range(start=twelve_months_ago, end=today, freq="W")
+            ax_right.hist(
+                pd.to_datetime(species_data["date"]).astype("int64") / 10**9 / 86400,
+                bins=52,
+                orientation="horizontal",
+                color="steelblue",
+                alpha=0.7,
+                edgecolor="black",
+            )
+            ax_right.set_xlabel("Count", fontsize=10)
+            ax_right.tick_params(labelleft=False)
+            ax_right.grid(True, alpha=0.3, axis="x")
+
+            # Main plot settings
+            ax_main.set_xlabel("Hour of Day", fontsize=12)
+            ax_main.set_ylabel("Date", fontsize=12)
+            ax_main.set_xlim(0, 24)
+            ax_main.set_xticks(range(0, 25, 2))
+            ax_main.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
+            ax_main.grid(True, alpha=0.3)
+            ax_main.legend(loc="upper right", fontsize=8)
+            ax_main.invert_yaxis()  # Most recent dates at top
+
+            # Right plot invert y-axis
+            ax_right.invert_yaxis()
 
             # Add colorbar
-            cbar = plt.colorbar(scatter, ax=ax)
-            cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
+            cbar = plt.colorbar(scatter, cax=ax_cbar)
+            cbar.set_label("Hours from Sunset", rotation=270, labelpad=20, fontsize=10)
 
             # Count sightings in hot zones
             sunset_hot_zone = (
@@ -1247,25 +1348,256 @@ if len(df_valid) > 0:
             sunrise_hot_zone_pct = 100 * sunrise_hot_zone / len(species_data)
 
             # Add text annotation
-            ax.text(
+            ax_main.text(
                 0.02,
                 0.98,
                 f"Sunset hot zone (-1.5h to +0.5h): {sunset_hot_zone} ({sunset_hot_zone_pct:.1f}%)\nSunrise hot zone (-0.5h to +1.5h): {sunrise_hot_zone} ({sunrise_hot_zone_pct:.1f}%)",
-                transform=ax.transAxes,
+                transform=ax_main.transAxes,
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
-                fontsize=10,
+                fontsize=9,
                 fontweight="bold",
             )
 
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "14_daily_yearly_activity_pattern.png",
-            dpi=300,
-            bbox_inches="tight",
-        )
-        print("✓ Saved: 14_daily_yearly_activity_pattern.png")
-        plt.close()
+            fig_list.append((species, fig))
+
+        # Save all figures
+        if len(fig_list) == 2:
+            # Combine both species into one figure
+            combined_fig = plt.figure(figsize=(20, 18))
+            combined_gs = GridSpec(
+                4,
+                3,
+                figure=combined_fig,
+                width_ratios=[4, 1, 0.2],
+                height_ratios=[1, 4, 1, 4],
+                hspace=0.1,
+                wspace=0.05,
+            )
+
+            for idx, (species, _) in enumerate(fig_list):
+                species_data = df_target[df_target["class"] == species]
+                species_data = species_data[
+                    species_data["date"] >= twelve_months_ago
+                ].copy()
+
+                row_start = idx * 2
+                # Top histogram (hour distribution)
+                ax_top = combined_fig.add_subplot(combined_gs[row_start, 0])
+                # Main scatter plot
+                ax_main = combined_fig.add_subplot(
+                    combined_gs[row_start + 1, 0], sharex=ax_top
+                )
+                # Right histogram (date distribution)
+                ax_right = combined_fig.add_subplot(
+                    combined_gs[row_start + 1, 1], sharey=ax_main
+                )
+                # Colorbar position
+                ax_cbar = combined_fig.add_subplot(combined_gs[row_start + 1, 2])
+
+                # Extract hour and minute as decimal hour for x-axis
+                species_data["hour_decimal"] = (
+                    species_data["timestamp"].dt.hour
+                    + species_data["timestamp"].dt.minute / 60
+                )
+
+                # Scatter plot: x=hour of day, y=date
+                scatter = ax_main.scatter(
+                    species_data["hour_decimal"],
+                    species_data["date"],
+                    c=species_data["hours_from_sunset"],
+                    cmap="RdYlBu_r",
+                    alpha=0.6,
+                    s=30,
+                    edgecolors="black",
+                    linewidth=0.3,
+                    vmin=-3,
+                    vmax=3,
+                )
+
+                # Calculate sunset and sunrise times for each date and plot as lines
+                unique_dates = sorted(species_data["date"].unique())
+                sunset_hours = []
+                sunrise_hours = []
+                valid_dates = []
+
+                for date in unique_dates:
+                    date_data = species_data[species_data["date"] == date]
+                    sunset_time = date_data["sunset"].iloc[0]
+                    sunrise_time = date_data["sunrise"].iloc[0]
+
+                    if pd.notna(sunset_time) and pd.notna(sunrise_time):
+                        sunset_hour = sunset_time.hour + sunset_time.minute / 60
+                        sunrise_hour = sunrise_time.hour + sunrise_time.minute / 60
+                        sunset_hours.append(sunset_hour)
+                        sunrise_hours.append(sunrise_hour)
+                        valid_dates.append(date)
+
+                if len(valid_dates) > 0:
+                    # Create shaded areas for twilight periods
+                    sunrise_minus_0_5 = [h - 0.5 for h in sunrise_hours]
+                    sunrise_plus_1_5 = [h + 1.5 for h in sunrise_hours]
+                    sunset_minus_1_5 = [h - 1.5 for h in sunset_hours]
+                    sunset_plus_0_5 = [h + 0.5 for h in sunset_hours]
+
+                    # Shade 0.5 hours before sunrise
+                    ax_main.fill_betweenx(
+                        valid_dates,
+                        sunrise_minus_0_5,
+                        sunrise_hours,
+                        alpha=0.3,
+                        color="gold",
+                        label="0.5h before Sunrise",
+                        zorder=5,
+                    )
+                    # Shade 1.5 hours after sunrise
+                    ax_main.fill_betweenx(
+                        valid_dates,
+                        sunrise_hours,
+                        sunrise_plus_1_5,
+                        alpha=0.2,
+                        color="gold",
+                        label="1.5h after Sunrise",
+                        zorder=5,
+                    )
+                    # Shade 1.5 hours before sunset
+                    ax_main.fill_betweenx(
+                        valid_dates,
+                        sunset_minus_1_5,
+                        sunset_hours,
+                        alpha=0.2,
+                        color="orange",
+                        label="1.5h before Sunset",
+                        zorder=5,
+                    )
+                    # Shade 0.5 hours after sunset
+                    ax_main.fill_betweenx(
+                        valid_dates,
+                        sunset_hours,
+                        sunset_plus_0_5,
+                        alpha=0.3,
+                        color="orange",
+                        label="0.5h after Sunset",
+                        zorder=5,
+                    )
+
+                    ax_main.plot(
+                        sunset_hours,
+                        valid_dates,
+                        color="orange",
+                        linewidth=3,
+                        label="Sunset Time",
+                        alpha=0.9,
+                        zorder=10,
+                    )
+                    ax_main.plot(
+                        sunrise_hours,
+                        valid_dates,
+                        color="gold",
+                        linewidth=3,
+                        label="Sunrise Time",
+                        alpha=0.9,
+                        zorder=10,
+                    )
+
+                # Top distribution (hour of day)
+                ax_top.hist(
+                    species_data["hour_decimal"],
+                    bins=48,
+                    color="steelblue",
+                    alpha=0.7,
+                    edgecolor="black",
+                )
+                ax_top.set_ylabel("Count", fontsize=10)
+                ax_top.tick_params(labelbottom=False)
+                ax_top.grid(True, alpha=0.3, axis="y")
+                ax_top.set_xlim(0, 24)
+                ax_top.set_title(
+                    f"{species.capitalize()} Activity Throughout Year and Day (Last 12 Months, n={len(species_data)})",
+                    fontsize=12,
+                    fontweight="bold",
+                )
+
+                # Right distribution (date) - convert to numeric
+                ax_right.hist(
+                    pd.to_datetime(species_data["date"]).astype("int64")
+                    / 10**9
+                    / 86400,
+                    bins=52,
+                    orientation="horizontal",
+                    color="steelblue",
+                    alpha=0.7,
+                    edgecolor="black",
+                )
+                ax_right.set_xlabel("Count", fontsize=10)
+                ax_right.tick_params(labelleft=False)
+                ax_right.grid(True, alpha=0.3, axis="x")
+
+                # Main plot settings
+                ax_main.set_xlabel("Hour of Day", fontsize=12)
+                ax_main.set_ylabel("Date", fontsize=12)
+                ax_main.set_xlim(0, 24)
+                ax_main.set_xticks(range(0, 25, 2))
+                ax_main.set_xticklabels([f"{h:02d}:00" for h in range(0, 25, 2)])
+                ax_main.grid(True, alpha=0.3)
+                ax_main.legend(loc="upper right", fontsize=7)
+                ax_main.invert_yaxis()
+                ax_right.invert_yaxis()
+
+                # Add colorbar
+                cbar = plt.colorbar(scatter, cax=ax_cbar)
+                cbar.set_label(
+                    "Hours from Sunset", rotation=270, labelpad=15, fontsize=10
+                )
+
+                # Count sightings in hot zones
+                sunset_hot_zone = (
+                    (species_data["hours_from_sunset"] >= -1.5)
+                    & (species_data["hours_from_sunset"] <= 0.5)
+                ).sum()
+                sunset_hot_zone_pct = 100 * sunset_hot_zone / len(species_data)
+
+                sunrise_hot_zone = (
+                    (species_data["hours_from_sunrise"] >= -0.5)
+                    & (species_data["hours_from_sunrise"] <= 1.5)
+                ).sum()
+                sunrise_hot_zone_pct = 100 * sunrise_hot_zone / len(species_data)
+
+                # Add text annotation
+                ax_main.text(
+                    0.02,
+                    0.98,
+                    f"Sunset hot zone (-1.5h to +0.5h): {sunset_hot_zone} ({sunset_hot_zone_pct:.1f}%)\nSunrise hot zone (-0.5h to +1.5h): {sunrise_hot_zone} ({sunrise_hot_zone_pct:.1f}%)",
+                    transform=ax_main.transAxes,
+                    verticalalignment="top",
+                    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+                    fontsize=9,
+                    fontweight="bold",
+                )
+
+            # Close individual figures
+            for _, fig in fig_list:
+                plt.close(fig)
+
+            plt.tight_layout()
+            plt.savefig(
+                output_dir / "14_daily_yearly_activity_pattern.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            print("✓ Saved: 14_daily_yearly_activity_pattern.png")
+            plt.close(combined_fig)
+        elif len(fig_list) > 0:
+            # Save individual figures if only one species
+            for species, fig in fig_list:
+                plt.tight_layout()
+                plt.savefig(
+                    output_dir / f"14_daily_yearly_activity_pattern_{species}.png",
+                    dpi=300,
+                    bbox_inches="tight",
+                )
+                print(f"✓ Saved: 14_daily_yearly_activity_pattern_{species}.png")
+                plt.close(fig)
 
         # Print statistics
         print("\nSunrise/Sunset Activity Statistics:")
