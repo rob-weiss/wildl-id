@@ -438,20 +438,20 @@ if len(df_valid) > 0:
     # Separate human and wildlife sightings
     df_humans = df_valid[df_valid["class"] == "human"].copy()
     df_wildlife = df_valid[df_valid["class"] != "human"].copy()
-    
+
     print(f"\nHuman sightings: {len(df_humans)}")
     print(f"Wildlife sightings: {len(df_wildlife)}")
-    
+
     if len(df_humans) > 0 and len(df_wildlife) > 0:
         # Create figure with 3 subplots
         fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 14))
-        
+
         # Plot 1: Timeline showing human activity and wildlife activity
         daily_humans = df_humans.groupby("date").size().reset_index(name="count")
         daily_humans["date"] = pd.to_datetime(daily_humans["date"])
         daily_wildlife = df_wildlife.groupby("date").size().reset_index(name="count")
         daily_wildlife["date"] = pd.to_datetime(daily_wildlife["date"])
-        
+
         # Merge to have all dates
         date_range = pd.date_range(
             start=df_valid["date"].min(), end=df_valid["date"].max(), freq="D"
@@ -461,7 +461,7 @@ if len(df_valid) > 0:
         daily_data = daily_data.merge(
             daily_humans, on="date", how="left", suffixes=("_wildlife", "_human")
         ).fillna(0)
-        
+
         ax1_twin = ax1.twinx()
         ax1.bar(
             daily_data["date"],
@@ -479,29 +479,35 @@ if len(df_valid) > 0:
             label="Human (Baiting)",
             width=1.0,
         )
-        
+
         ax1.set_xlabel("Date", fontsize=12)
         ax1.set_ylabel("Wildlife Detections", fontsize=12, color="steelblue")
-        ax1_twin.set_ylabel("Human Detections (Baiting Events)", fontsize=12, color="orange")
+        ax1_twin.set_ylabel(
+            "Human Detections (Baiting Events)", fontsize=12, color="orange"
+        )
         ax1.tick_params(axis="y", labelcolor="steelblue")
         ax1_twin.tick_params(axis="y", labelcolor="orange")
-        ax1.set_title("Wildlife Activity vs Human Activity (Baiting) Over Time", fontsize=14, fontweight="bold")
+        ax1.set_title(
+            "Wildlife Activity vs Human Activity (Baiting) Over Time",
+            fontsize=14,
+            fontweight="bold",
+        )
         ax1.grid(True, alpha=0.3)
         ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
         ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
         plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
-        
+
         # Add legends
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax1_twin.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
-        
+
         # Plot 2: Wildlife activity before and after human sightings
         window_days = 7  # Look at +/- 7 days around human sightings
-        
+
         wildlife_before = []
         wildlife_after = []
-        
+
         for human_date in df_humans["date"].unique():
             human_date_pd = pd.to_datetime(human_date)
             # Before: 1-7 days before human sighting
@@ -510,7 +516,7 @@ if len(df_valid) > 0:
             # After: 1-7 days after human sighting
             after_start = human_date_pd + pd.Timedelta(days=1)
             after_end = human_date_pd + pd.Timedelta(days=window_days)
-            
+
             before_count = len(
                 df_wildlife[
                     (df_wildlife["timestamp"] >= before_start)
@@ -523,18 +529,20 @@ if len(df_valid) > 0:
                     & (df_wildlife["timestamp"] <= after_end)
                 ]
             )
-            
+
             wildlife_before.append(before_count / window_days)  # Average per day
             wildlife_after.append(after_count / window_days)
-        
+
         avg_before = np.mean(wildlife_before)
         avg_after = np.mean(wildlife_after)
-        
+
         categories = [f"{window_days} days\nbefore", f"{window_days} days\nafter"]
         averages = [avg_before, avg_after]
         colors_bar = ["coral", "lightgreen"]
-        
-        bars = ax2.bar(categories, averages, color=colors_bar, edgecolor="black", linewidth=2)
+
+        bars = ax2.bar(
+            categories, averages, color=colors_bar, edgecolor="black", linewidth=2
+        )
         ax2.set_ylabel("Average Wildlife Detections per Day", fontsize=12)
         ax2.set_title(
             f"Wildlife Activity Before vs After Baiting Events (n={len(df_humans['date'].unique())} baiting dates)",
@@ -542,7 +550,7 @@ if len(df_valid) > 0:
             fontweight="bold",
         )
         ax2.grid(axis="y", alpha=0.3)
-        
+
         # Add value labels on bars
         for i, (bar, val) in enumerate(zip(bars, averages)):
             ax2.text(
@@ -554,9 +562,11 @@ if len(df_valid) > 0:
                 fontweight="bold",
                 fontsize=11,
             )
-        
+
         # Calculate and display percentage increase
-        pct_change = ((avg_after - avg_before) / avg_before * 100) if avg_before > 0 else 0
+        pct_change = (
+            ((avg_after - avg_before) / avg_before * 100) if avg_before > 0 else 0
+        )
         ax2.text(
             0.5,
             0.95,
@@ -568,27 +578,30 @@ if len(df_valid) > 0:
             fontsize=12,
             fontweight="bold",
         )
-        
+
         # Plot 3: Wildlife activity by location, comparing locations with/without human activity
         location_human_counts = df_humans.groupby("location_id").size()
         location_wildlife_counts = df_wildlife.groupby("location_id").size()
-        
+
         location_comparison = pd.DataFrame(
             {
                 "wildlife": location_wildlife_counts,
                 "human": location_human_counts,
             }
         ).fillna(0)
-        
+
         # Calculate wildlife per human sighting ratio
         location_comparison["wildlife_per_human"] = location_comparison.apply(
-            lambda row: row["wildlife"] / row["human"] if row["human"] > 0 else 0, axis=1
+            lambda row: row["wildlife"] / row["human"] if row["human"] > 0 else 0,
+            axis=1,
         )
-        location_comparison = location_comparison.sort_values("wildlife", ascending=False)
-        
+        location_comparison = location_comparison.sort_values(
+            "wildlife", ascending=False
+        )
+
         x = np.arange(len(location_comparison))
         width = 0.35
-        
+
         bars1 = ax3.bar(
             x - width / 2,
             location_comparison["human"],
@@ -605,15 +618,19 @@ if len(df_valid) > 0:
             color="steelblue",
             edgecolor="black",
         )
-        
+
         ax3.set_xlabel("Location ID", fontsize=12)
         ax3.set_ylabel("Number of Detections", fontsize=12)
-        ax3.set_title("Human Activity vs Wildlife Activity by Location", fontsize=14, fontweight="bold")
+        ax3.set_title(
+            "Human Activity vs Wildlife Activity by Location",
+            fontsize=14,
+            fontweight="bold",
+        )
         ax3.set_xticks(x)
         ax3.set_xticklabels(location_comparison.index, rotation=45, ha="right")
         ax3.legend()
         ax3.grid(axis="y", alpha=0.3)
-        
+
         # Add ratio labels above wildlife bars
         for i, (idx, row) in enumerate(location_comparison.iterrows()):
             if row["human"] > 0:
@@ -627,9 +644,11 @@ if len(df_valid) > 0:
                     fontsize=8,
                     fontweight="bold",
                 )
-        
+
         plt.tight_layout()
-        plt.savefig(output_dir / "07_baiting_effect_analysis.png", dpi=300, bbox_inches="tight")
+        plt.savefig(
+            output_dir / "07_baiting_effect_analysis.png", dpi=300, bbox_inches="tight"
+        )
         plt.savefig(output_dir / "07_baiting_effect_analysis.svg", bbox_inches="tight")
         print("✓ Saved: 07_baiting_effect_analysis.png + .svg")
         plt.close()
@@ -1183,23 +1202,8 @@ if len(df_valid) > 0:
         if len(df_target) > 0:
             print(f"Found {len(df_target)} sightings of roe deer and wild boar")
 
-# ============================================================================
-# 12. SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
-# ============================================================================
-print("\n" + "=" * 70)
-print("SUNRISE/SUNSET ANALYSIS")
-print("=" * 70)
-
-if len(df_valid) > 0:
-    # Set up location for sunrise/sunset calculations
-    location = LocationInfo("Camera Location", "Germany", TIMEZONE, LATITUDE, LONGITUDE)
-
-    # Calculate sunrise and sunset for each date
-    print(
-        f"\nCalculating sunrise/sunset times for location: {LATITUDE}°N, {LONGITUDE}°E"
-    )
-
-    def get_sun_times(date):
+            # ========== PLOTS 11-12: Activity relative to sunset throughout the year ==========
+            plot_num = 11
             for species in target_species:
                 species_data = df_target[df_target["class"] == species]
                 if len(species_data) == 0:
