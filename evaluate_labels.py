@@ -730,6 +730,10 @@ if len(df_valid) > 0:
                     alpha=0.7,
                 )
 
+                # Shade 1.5 hours before sunset
+                ax.axhspan(
+                    -1.5, 0, alpha=0.2, color="orange", label="1.5 hours before Sunset"
+                )
                 # Shade 0.5 hours after sunset
                 ax.axhspan(
                     0, 0.5, alpha=0.3, color="orange", label="0.5 hours after Sunset"
@@ -811,6 +815,8 @@ if len(df_valid) > 0:
             ax.axhspan(
                 -0.5, 0, alpha=0.3, color="gold", label="0.5 hours before Sunrise"
             )
+            # Shade 1.5 hours after sunrise
+            ax.axhspan(0, 1.5, alpha=0.2, color="gold", label="1.5 hours after Sunrise")
 
             ax.set_title(
                 f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
@@ -870,6 +876,10 @@ if len(df_valid) > 0:
                 color="steelblue",
                 edgecolor="black",
                 alpha=0.7,
+            )
+            # Shade 1.5 hours before sunset
+            ax1.axvspan(
+                -1.5, 0, alpha=0.2, color="orange", label="1.5 hours before Sunset"
             )
             # Shade 0.5 hours after sunset
             ax1.axvspan(
@@ -1121,8 +1131,10 @@ if len(df_valid) > 0:
                     valid_dates.append(date)
 
             if len(valid_dates) > 0:
-                # Create shaded areas for 0.5 hours before sunrise and 0.5 hours after sunset
+                # Create shaded areas for twilight periods
                 sunrise_minus_0_5 = [h - 0.5 for h in sunrise_hours]
+                sunrise_plus_1_5 = [h + 1.5 for h in sunrise_hours]
+                sunset_minus_1_5 = [h - 1.5 for h in sunset_hours]
                 sunset_plus_0_5 = [h + 0.5 for h in sunset_hours]
 
                 # Shade 0.5 hours before sunrise
@@ -1130,9 +1142,31 @@ if len(df_valid) > 0:
                     valid_dates,
                     sunrise_minus_0_5,
                     sunrise_hours,
-                    alpha=0.2,
+                    alpha=0.3,
                     color="gold",
                     label="0.5 hours before Sunrise",
+                    zorder=5,
+                )
+
+                # Shade 1.5 hours after sunrise
+                ax.fill_betweenx(
+                    valid_dates,
+                    sunrise_hours,
+                    sunrise_plus_1_5,
+                    alpha=0.2,
+                    color="gold",
+                    label="1.5 hours after Sunrise",
+                    zorder=5,
+                )
+
+                # Shade 1.5 hours before sunset
+                ax.fill_betweenx(
+                    valid_dates,
+                    sunset_minus_1_5,
+                    sunset_hours,
+                    alpha=0.2,
+                    color="orange",
+                    label="1.5 hours before Sunset",
                     zorder=5,
                 )
 
@@ -1141,7 +1175,7 @@ if len(df_valid) > 0:
                     valid_dates,
                     sunset_hours,
                     sunset_plus_0_5,
-                    alpha=0.2,
+                    alpha=0.3,
                     color="orange",
                     label="0.5 hours after Sunset",
                     zorder=5,
