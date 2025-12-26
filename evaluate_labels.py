@@ -766,15 +766,29 @@ if len(df_valid) > 0:
                     bins=30,
                     orientation="horizontal",
                     color="steelblue",
-                    alpha=0.7,
+                    alpha=0.5,
                     edgecolor="black",
+                    density=True,
                 )
+
+                # Add KDE (continuous distribution)
+                from scipy import stats
+
+                kde_data = species_data["hours_from_sunset"].dropna()
+                if len(kde_data) > 1:
+                    kde = stats.gaussian_kde(kde_data)
+                    y_range = np.linspace(kde_data.min(), kde_data.max(), 100)
+                    kde_values = kde(y_range)
+                    ax_dist.plot(
+                        kde_values, y_range, "r-", linewidth=2, label="Density"
+                    )
+
                 ax_dist.axhline(
                     y=0, color="orange", linestyle="--", linewidth=2, alpha=0.7
                 )
                 ax_dist.axhspan(-1.5, 0, alpha=0.2, color="orange")
                 ax_dist.axhspan(0, 0.5, alpha=0.3, color="orange")
-                ax_dist.set_xlabel("Count", fontsize=10)
+                ax_dist.set_xlabel("Density", fontsize=10)
                 ax_dist.tick_params(labelleft=False)
                 ax_dist.grid(True, alpha=0.3, axis="x")
 
@@ -877,13 +891,25 @@ if len(df_valid) > 0:
                 bins=30,
                 orientation="horizontal",
                 color="steelblue",
-                alpha=0.7,
+                alpha=0.5,
                 edgecolor="black",
+                density=True,
             )
+
+            # Add KDE (continuous distribution)
+            from scipy import stats
+
+            kde_data = species_data["hours_from_sunrise"].dropna()
+            if len(kde_data) > 1:
+                kde = stats.gaussian_kde(kde_data)
+                y_range = np.linspace(kde_data.min(), kde_data.max(), 100)
+                kde_values = kde(y_range)
+                ax_dist.plot(kde_values, y_range, "r-", linewidth=2, label="Density")
+
             ax_dist.axhline(y=0, color="gold", linestyle="--", linewidth=2, alpha=0.7)
             ax_dist.axhspan(-0.5, 0, alpha=0.3, color="gold")
             ax_dist.axhspan(0, 1.5, alpha=0.2, color="gold")
-            ax_dist.set_xlabel("Count", fontsize=10)
+            ax_dist.set_xlabel("Density", fontsize=10)
             ax_dist.tick_params(labelleft=False)
             ax_dist.grid(True, alpha=0.3, axis="x")
 
@@ -1290,10 +1316,22 @@ if len(df_valid) > 0:
                 species_data["hour_decimal"],
                 bins=48,
                 color="steelblue",
-                alpha=0.7,
+                alpha=0.5,
                 edgecolor="black",
+                density=True,
             )
-            ax_top.set_ylabel("Count", fontsize=10)
+
+            # Add KDE for hour distribution
+            from scipy import stats
+
+            kde_hour = species_data["hour_decimal"].dropna()
+            if len(kde_hour) > 1:
+                kde = stats.gaussian_kde(kde_hour)
+                x_range = np.linspace(0, 24, 200)
+                kde_values = kde(x_range)
+                ax_top.plot(x_range, kde_values, "r-", linewidth=2, label="Density")
+
+            ax_top.set_ylabel("Density", fontsize=10)
             ax_top.tick_params(labelbottom=False)
             ax_top.grid(True, alpha=0.3, axis="y")
             ax_top.set_xlim(0, 24)
@@ -1304,16 +1342,27 @@ if len(df_valid) > 0:
             )
 
             # Right distribution (date)
-            date_bins = pd.date_range(start=twelve_months_ago, end=today, freq="W")
+            date_values = (
+                pd.to_datetime(species_data["date"]).astype("int64") / 10**9 / 86400
+            )
             ax_right.hist(
-                pd.to_datetime(species_data["date"]).astype("int64") / 10**9 / 86400,
+                date_values,
                 bins=52,
                 orientation="horizontal",
                 color="steelblue",
-                alpha=0.7,
+                alpha=0.5,
                 edgecolor="black",
+                density=True,
             )
-            ax_right.set_xlabel("Count", fontsize=10)
+
+            # Add KDE for date distribution
+            if len(date_values) > 1:
+                kde = stats.gaussian_kde(date_values)
+                y_range = np.linspace(date_values.min(), date_values.max(), 100)
+                kde_values = kde(y_range)
+                ax_right.plot(kde_values, y_range, "r-", linewidth=2)
+
+            ax_right.set_xlabel("Density", fontsize=10)
             ax_right.tick_params(labelleft=False)
             ax_right.grid(True, alpha=0.3, axis="x")
 
@@ -1505,10 +1554,22 @@ if len(df_valid) > 0:
                     species_data["hour_decimal"],
                     bins=48,
                     color="steelblue",
-                    alpha=0.7,
+                    alpha=0.5,
                     edgecolor="black",
+                    density=True,
                 )
-                ax_top.set_ylabel("Count", fontsize=10)
+
+                # Add KDE for hour distribution
+                from scipy import stats
+
+                kde_hour = species_data["hour_decimal"].dropna()
+                if len(kde_hour) > 1:
+                    kde = stats.gaussian_kde(kde_hour)
+                    x_range = np.linspace(0, 24, 200)
+                    kde_values = kde(x_range)
+                    ax_top.plot(x_range, kde_values, "r-", linewidth=2)
+
+                ax_top.set_ylabel("Density", fontsize=10)
                 ax_top.tick_params(labelbottom=False)
                 ax_top.grid(True, alpha=0.3, axis="y")
                 ax_top.set_xlim(0, 24)
@@ -1519,17 +1580,27 @@ if len(df_valid) > 0:
                 )
 
                 # Right distribution (date) - convert to numeric
+                date_values = (
+                    pd.to_datetime(species_data["date"]).astype("int64") / 10**9 / 86400
+                )
                 ax_right.hist(
-                    pd.to_datetime(species_data["date"]).astype("int64")
-                    / 10**9
-                    / 86400,
+                    date_values,
                     bins=52,
                     orientation="horizontal",
                     color="steelblue",
-                    alpha=0.7,
+                    alpha=0.5,
                     edgecolor="black",
+                    density=True,
                 )
-                ax_right.set_xlabel("Count", fontsize=10)
+
+                # Add KDE for date distribution
+                if len(date_values) > 1:
+                    kde = stats.gaussian_kde(date_values)
+                    y_range = np.linspace(date_values.min(), date_values.max(), 100)
+                    kde_values = kde(y_range)
+                    ax_right.plot(kde_values, y_range, "r-", linewidth=2)
+
+                ax_right.set_xlabel("Density", fontsize=10)
                 ax_right.tick_params(labelleft=False)
                 ax_right.grid(True, alpha=0.3, axis="x")
 
