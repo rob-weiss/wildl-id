@@ -1,1 +1,2 @@
 visualizations/*.svg filter=lfs diff=lfs merge=lfs -text
+visualizations/summary_statistics.txt filter=lfs diff=lfs merge=lfs -text
