@@ -900,6 +900,254 @@ if len(df_temp) > 0:
         )
         print(f"    {species}: {peak_temp:.1f}°C (n={len(species_data)})")
 
+    # Species-specific temperature-activity plots for Roe Deer and Wild Boar
+    print("\nGenerating species-specific temperature-activity plots...")
+
+    target_species = ["roe deer", "wild boar"]
+    plot_num = 8  # Start from plot 8c and 8d
+
+    for species in target_species:
+        species_data = df_temp[df_temp["class"] == species].copy()
+
+        if len(species_data) >= 10:  # Only create plot if sufficient data
+            plot_num += 1
+            letter = chr(ord("b") + plot_num - 8)  # 8c, 8d, etc.
+
+            fig = plt.figure(figsize=(16, 10))
+            gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
+
+            # 1. Scatter: Temperature vs Hour
+            ax1 = fig.add_subplot(gs[0, 0])
+            scatter1 = ax1.scatter(
+                species_data["temperature_celsius"],
+                species_data["hour"],
+                c=species_data["hour"],
+                cmap="twilight",
+                alpha=0.6,
+                s=30,
+                edgecolors="black",
+                linewidth=0.5,
+            )
+            ax1.set_xlabel("Temperature (°C)", fontsize=10)
+            ax1.set_ylabel("Hour of Day", fontsize=10)
+            ax1.set_title("Temperature vs Time of Day", fontsize=11, fontweight="bold")
+            ax1.grid(True, alpha=0.3)
+            ax1.set_yticks(range(0, 24, 4))
+
+            # 2. Temperature distribution
+            ax2 = fig.add_subplot(gs[0, 1])
+            ax2.hist(
+                species_data["temperature_celsius"],
+                bins=20,
+                color="steelblue",
+                edgecolor="black",
+                alpha=0.7,
+            )
+            ax2.axvline(
+                species_data["temperature_celsius"].mean(),
+                color="red",
+                linestyle="--",
+                linewidth=2,
+                label=f"Mean: {species_data['temperature_celsius'].mean():.1f}°C",
+            )
+            ax2.axvline(
+                species_data["temperature_celsius"].median(),
+                color="orange",
+                linestyle="--",
+                linewidth=2,
+                label=f"Median: {species_data['temperature_celsius'].median():.1f}°C",
+            )
+            ax2.set_xlabel("Temperature (°C)", fontsize=10)
+            ax2.set_ylabel("Frequency", fontsize=10)
+            ax2.set_title("Temperature Distribution", fontsize=11, fontweight="bold")
+            ax2.legend(fontsize=8)
+            ax2.grid(axis="y", alpha=0.3)
+
+            # 3. Activity count by temperature range
+            ax3 = fig.add_subplot(gs[0, 2])
+            temp_bins = np.arange(
+                species_data["temperature_celsius"].min() - 1,
+                species_data["temperature_celsius"].max() + 2,
+                3,
+            )
+            counts, edges = np.histogram(
+                species_data["temperature_celsius"], bins=temp_bins
+            )
+            bin_centers = (edges[:-1] + edges[1:]) / 2
+            ax3.bar(
+                bin_centers,
+                counts,
+                width=np.diff(edges),
+                color="forestgreen",
+                edgecolor="black",
+                alpha=0.7,
+            )
+            ax3.set_xlabel("Temperature (°C)", fontsize=10)
+            ax3.set_ylabel("Activity Count", fontsize=10)
+            ax3.set_title("Activity by Temperature", fontsize=11, fontweight="bold")
+            ax3.grid(axis="y", alpha=0.3)
+
+            # 4. Hourly activity by temperature range
+            ax4 = fig.add_subplot(gs[1, :])
+            species_data["temp_range"] = pd.cut(
+                species_data["temperature_celsius"], bins=5, precision=0
+            )
+            temp_hour_pivot = (
+                species_data.groupby(["temp_range", "hour"])
+                .size()
+                .unstack(fill_value=0)
+            )
+
+            temp_hour_pivot.T.plot(
+                kind="area", stacked=True, ax=ax4, alpha=0.7, colormap="RdYlBu_r"
+            )
+            ax4.set_xlabel("Hour of Day", fontsize=10)
+            ax4.set_ylabel("Activity Count", fontsize=10)
+            ax4.set_title(
+                "Hourly Activity Pattern by Temperature Range",
+                fontsize=11,
+                fontweight="bold",
+            )
+            ax4.set_xticks(range(0, 24, 2))
+            ax4.grid(axis="y", alpha=0.3)
+            ax4.legend(
+                title="Temp Range",
+                bbox_to_anchor=(1.02, 1),
+                loc="upper left",
+                fontsize=8,
+            )
+
+            # 5. Temperature by month (if month data available)
+            ax5 = fig.add_subplot(gs[2, 0])
+            if (
+                "month" in species_data.columns
+                and len(species_data["month"].unique()) > 1
+            ):
+                monthly_data = []
+                months = sorted(species_data["month"].unique())
+
+                for m in months:
+                    monthly_data.append(
+                        species_data[species_data["month"] == m][
+                            "temperature_celsius"
+                        ].values
+                    )
+
+                bp = ax5.boxplot(
+                    monthly_data,
+                    labels=[f"{m:02d}" for m in months],
+                    patch_artist=True,
+                    showfliers=False,
+                )
+
+                colors = plt.cm.coolwarm(np.linspace(0, 1, len(months)))
+                for patch, color in zip(bp["boxes"], colors):
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.7)
+
+                ax5.set_xlabel("Month", fontsize=10)
+                ax5.set_ylabel("Temperature (°C)", fontsize=10)
+                ax5.set_title(
+                    "Monthly Temperature Range", fontsize=11, fontweight="bold"
+                )
+                ax5.grid(axis="y", alpha=0.3)
+
+            # 6. Density plot: Temperature vs Hour
+            ax6 = fig.add_subplot(gs[2, 1])
+            try:
+                from scipy.stats import gaussian_kde
+
+                # Create density plot
+                xy = np.vstack(
+                    [species_data["temperature_celsius"], species_data["hour"]]
+                )
+                z = gaussian_kde(xy)(xy)
+
+                scatter2 = ax6.scatter(
+                    species_data["temperature_celsius"],
+                    species_data["hour"],
+                    c=z,
+                    s=20,
+                    cmap="YlOrRd",
+                    alpha=0.6,
+                    edgecolors="black",
+                    linewidth=0.3,
+                )
+                ax6.set_xlabel("Temperature (°C)", fontsize=10)
+                ax6.set_ylabel("Hour of Day", fontsize=10)
+                ax6.set_title(
+                    "Activity Density Heatmap", fontsize=11, fontweight="bold"
+                )
+                ax6.set_yticks(range(0, 24, 4))
+                ax6.grid(True, alpha=0.3)
+                cbar = plt.colorbar(scatter2, ax=ax6)
+                cbar.set_label("Density", fontsize=8)
+            except:
+                ax6.text(
+                    0.5,
+                    0.5,
+                    "Insufficient data\nfor density plot",
+                    ha="center",
+                    va="center",
+                    transform=ax6.transAxes,
+                )
+
+            # 7. Statistics summary
+            ax7 = fig.add_subplot(gs[2, 2])
+            ax7.axis("off")
+
+            stats_text = f"""
+STATISTICS SUMMARY
+
+Sample Size: {len(species_data)}
+
+Temperature (°C):
+  Mean: {species_data["temperature_celsius"].mean():.1f}
+  Median: {species_data["temperature_celsius"].median():.1f}
+  Std Dev: {species_data["temperature_celsius"].std():.1f}
+  Min: {species_data["temperature_celsius"].min():.1f}
+  Max: {species_data["temperature_celsius"].max():.1f}
+
+Most Active:
+  Hour: {species_data["hour"].mode().values[0] if len(species_data["hour"].mode()) > 0 else "N/A"}:00
+  Temp: {species_data["temperature_celsius"].mode().values[0] if len(species_data["temperature_celsius"].mode()) > 0 else species_data["temperature_celsius"].median():.1f}°C
+
+Temp-Hour Correlation:
+  {species_data[["temperature_celsius", "hour"]].corr().iloc[0, 1]:.3f}
+"""
+            ax7.text(
+                0.1,
+                0.9,
+                stats_text,
+                transform=ax7.transAxes,
+                fontsize=9,
+                verticalalignment="top",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
+            )
+
+            plt.suptitle(
+                f"{species.title()} - Temperature-Activity Relationship Analysis",
+                fontsize=14,
+                fontweight="bold",
+                y=0.998,
+            )
+
+            filename = species.lower().replace(" ", "_")
+            plt.savefig(
+                output_dir / f"08{letter}_{filename}_temperature_activity.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            plt.savefig(
+                output_dir / f"08{letter}_{filename}_temperature_activity.svg",
+                bbox_inches="tight",
+            )
+            print(f"✓ Saved: 08{letter}_{filename}_temperature_activity.png + .svg")
+            plt.close()
+        else:
+            print(f"  Insufficient data for {species} (n={len(species_data)})")
+
 else:
     print("\nNo temperature data available")
 
