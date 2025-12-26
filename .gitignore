@@ -174,4 +174,4 @@ cython_debug/
 .pypirc
 
 labelling_results*
-visualizations/*.png
+docs/diagrams/*.png

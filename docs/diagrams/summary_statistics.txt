@@ -1,3 +1,40 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:cba43db1ff8413b423416407754a287d1a971bc27ae1dcc397e90bd3392e0bbf
-size 865
+WILDLIFE CAMERA ACTIVITY ANALYSIS
+======================================================================
+
+Total Images: 1046
+Images with Timestamps: 1046
+Unique Species: 14
+Unique Locations: 5
+Date Range: 2025-02-16 to 2025-12-25
+Most Common Species: roe deer
+Most Active Hour: 21:00
+Most Active Location: Heliossitz
+
+======================================================================
+
+SPECIES COUNTS:
+class
+roe deer      791
+wild boar      72
+human          61
+fox            43
+hare           33
+jay            15
+pigeon         12
+squirrel        8
+dog             4
+badger          2
+woodpecker      2
+crow            1
+marten          1
+owl             1
+
+======================================================================
+
+LOCATION COUNTS:
+location_id
+Heliossitz      351
+Kirschensitz    222
+Amphitheater    219
+Brunftplatz     213
+Alusitz          41
