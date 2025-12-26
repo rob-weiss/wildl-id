@@ -443,8 +443,8 @@ if len(df_valid) > 0:
     print(f"Wildlife sightings: {len(df_wildlife)}")
 
     if len(df_humans) > 0 and len(df_wildlife) > 0:
-        # Create figure with 3 subplots
-        fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(16, 14))
+        # Create figure with 2 subplots
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10))
 
         # Plot 1: Timeline showing human activity and wildlife activity
         daily_humans = df_humans.groupby("date").size().reset_index(name="count")
@@ -503,17 +503,17 @@ if len(df_valid) > 0:
         ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
 
         # Plot 2: Wildlife activity before and after human sightings
-        window_days = 7  # Look at +/- 7 days around human sightings
+        window_days = 2  # Look at +/- 2 days around human sightings
 
         wildlife_before = []
         wildlife_after = []
 
         for human_date in df_humans["date"].unique():
             human_date_pd = pd.to_datetime(human_date)
-            # Before: 1-7 days before human sighting
+            # Before: 1-2 days before human sighting
             before_start = human_date_pd - pd.Timedelta(days=window_days)
             before_end = human_date_pd - pd.Timedelta(days=1)
-            # After: 1-7 days after human sighting
+            # After: 1-2 days after human sighting
             after_start = human_date_pd + pd.Timedelta(days=1)
             after_end = human_date_pd + pd.Timedelta(days=window_days)
 
@@ -578,72 +578,6 @@ if len(df_valid) > 0:
             fontsize=12,
             fontweight="bold",
         )
-
-        # Plot 3: Wildlife activity by location, comparing locations with/without human activity
-        location_human_counts = df_humans.groupby("location_id").size()
-        location_wildlife_counts = df_wildlife.groupby("location_id").size()
-
-        location_comparison = pd.DataFrame(
-            {
-                "wildlife": location_wildlife_counts,
-                "human": location_human_counts,
-            }
-        ).fillna(0)
-
-        # Calculate wildlife per human sighting ratio
-        location_comparison["wildlife_per_human"] = location_comparison.apply(
-            lambda row: row["wildlife"] / row["human"] if row["human"] > 0 else 0,
-            axis=1,
-        )
-        location_comparison = location_comparison.sort_values(
-            "wildlife", ascending=False
-        )
-
-        x = np.arange(len(location_comparison))
-        width = 0.35
-
-        bars1 = ax3.bar(
-            x - width / 2,
-            location_comparison["human"],
-            width,
-            label="Human (Baiting)",
-            color="orange",
-            edgecolor="black",
-        )
-        bars2 = ax3.bar(
-            x + width / 2,
-            location_comparison["wildlife"],
-            width,
-            label="Wildlife",
-            color="steelblue",
-            edgecolor="black",
-        )
-
-        ax3.set_xlabel("Location ID", fontsize=12)
-        ax3.set_ylabel("Number of Detections", fontsize=12)
-        ax3.set_title(
-            "Human Activity vs Wildlife Activity by Location",
-            fontsize=14,
-            fontweight="bold",
-        )
-        ax3.set_xticks(x)
-        ax3.set_xticklabels(location_comparison.index, rotation=45, ha="right")
-        ax3.legend()
-        ax3.grid(axis="y", alpha=0.3)
-
-        # Add ratio labels above wildlife bars
-        for i, (idx, row) in enumerate(location_comparison.iterrows()):
-            if row["human"] > 0:
-                ratio = row["wildlife_per_human"]
-                ax3.text(
-                    i + width / 2,
-                    row["wildlife"] + location_comparison["wildlife"].max() * 0.02,
-                    f"{ratio:.1f}:1",
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                    fontweight="bold",
-                )
 
         plt.tight_layout()
         plt.savefig(
