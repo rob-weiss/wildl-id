@@ -668,6 +668,10 @@ if len(df_valid) > 0:
 
     # Times are already in local time (naive datetimes) from get_sun_times
 
+    # Filter out rows where sunrise/sunset calculation failed
+    df_valid = df_valid[df_valid["sunset"].notna() & df_valid["sunrise"].notna()].copy()
+    print(f"After filtering for valid sunrise/sunset: {len(df_valid)} images")
+
     # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
     df_valid["minutes_from_sunset"] = (
         df_valid["timestamp"] - df_valid["sunset"]
