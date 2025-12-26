@@ -1223,36 +1223,35 @@ if len(df_valid) > 0:
                 vmax=3,
             )
 
-            # Calculate sunset and sunrise times for each date and plot as lines
-            unique_dates = sorted(species_data["date"].unique())
-            sunset_hours = []
-            sunrise_hours = []
-            valid_dates = []
-
-            for date in unique_dates:
-                date_data = species_data[species_data["date"] == date]
-                sunset_time = date_data["sunset"].iloc[0]
-                sunrise_time = date_data["sunrise"].iloc[0]
-
-                if pd.notna(sunset_time) and pd.notna(sunrise_time):
+            # Calculate sunset and sunrise times for all dates in range for smooth lines
+            all_dates = pd.date_range(start=twelve_months_ago, end=today, freq='D')
+            all_sunset_hours = []
+            all_sunrise_hours = []
+            all_valid_dates = []
+            
+            for date in all_dates:
+                date_obj = date.date()
+                sunset_sunrise = get_sun_times(date_obj)
+                if sunset_sunrise[0] is not None and sunset_sunrise[1] is not None:
+                    sunrise_time, sunset_time = sunset_sunrise
                     sunset_hour = sunset_time.hour + sunset_time.minute / 60
                     sunrise_hour = sunrise_time.hour + sunrise_time.minute / 60
-                    sunset_hours.append(sunset_hour)
-                    sunrise_hours.append(sunrise_hour)
-                    valid_dates.append(date)
+                    all_sunset_hours.append(sunset_hour)
+                    all_sunrise_hours.append(sunrise_hour)
+                    all_valid_dates.append(date_obj)
 
-            if len(valid_dates) > 0:
+            if len(all_valid_dates) > 0:
                 # Create shaded areas for twilight periods
-                sunrise_minus_0_5 = [h - 0.5 for h in sunrise_hours]
-                sunrise_plus_1_5 = [h + 1.5 for h in sunrise_hours]
-                sunset_minus_1_5 = [h - 1.5 for h in sunset_hours]
-                sunset_plus_0_5 = [h + 0.5 for h in sunset_hours]
+                sunrise_minus_0_5 = [h - 0.5 for h in all_sunrise_hours]
+                sunrise_plus_1_5 = [h + 1.5 for h in all_sunrise_hours]
+                sunset_minus_1_5 = [h - 1.5 for h in all_sunset_hours]
+                sunset_plus_0_5 = [h + 0.5 for h in all_sunset_hours]
 
                 # Shade 0.5 hours before sunrise
                 ax_main.fill_betweenx(
-                    valid_dates,
+                    all_valid_dates,
                     sunrise_minus_0_5,
-                    sunrise_hours,
+                    all_sunrise_hours,
                     alpha=0.3,
                     color="gold",
                     label="0.5 hours before Sunrise",
@@ -1261,8 +1260,8 @@ if len(df_valid) > 0:
 
                 # Shade 1.5 hours after sunrise
                 ax_main.fill_betweenx(
-                    valid_dates,
-                    sunrise_hours,
+                    all_valid_dates,
+                    all_sunrise_hours,
                     sunrise_plus_1_5,
                     alpha=0.2,
                     color="gold",
@@ -1272,9 +1271,9 @@ if len(df_valid) > 0:
 
                 # Shade 1.5 hours before sunset
                 ax_main.fill_betweenx(
-                    valid_dates,
+                    all_valid_dates,
                     sunset_minus_1_5,
-                    sunset_hours,
+                    all_sunset_hours,
                     alpha=0.2,
                     color="orange",
                     label="1.5 hours before Sunset",
@@ -1283,8 +1282,8 @@ if len(df_valid) > 0:
 
                 # Shade 0.5 hours after sunset
                 ax_main.fill_betweenx(
-                    valid_dates,
-                    sunset_hours,
+                    all_valid_dates,
+                    all_sunset_hours,
                     sunset_plus_0_5,
                     alpha=0.3,
                     color="orange",
@@ -1293,8 +1292,8 @@ if len(df_valid) > 0:
                 )
 
                 ax_main.plot(
-                    sunset_hours,
-                    valid_dates,
+                    all_sunset_hours,
+                    all_valid_dates,
                     color="orange",
                     linewidth=3,
                     label="Sunset Time",
@@ -1302,8 +1301,8 @@ if len(df_valid) > 0:
                     zorder=10,
                 )
                 ax_main.plot(
-                    sunrise_hours,
-                    valid_dates,
+                    all_sunrise_hours,
+                    all_valid_dates,
                     color="gold",
                     linewidth=3,
                     label="Sunrise Time",
@@ -1464,36 +1463,35 @@ if len(df_valid) > 0:
                     vmax=3,
                 )
 
-                # Calculate sunset and sunrise times for each date and plot as lines
-                unique_dates = sorted(species_data["date"].unique())
-                sunset_hours = []
-                sunrise_hours = []
-                valid_dates = []
-
-                for date in unique_dates:
-                    date_data = species_data[species_data["date"] == date]
-                    sunset_time = date_data["sunset"].iloc[0]
-                    sunrise_time = date_data["sunrise"].iloc[0]
-
-                    if pd.notna(sunset_time) and pd.notna(sunrise_time):
+                # Calculate sunset and sunrise times for all dates in range for smooth lines
+                all_dates = pd.date_range(start=twelve_months_ago, end=today, freq='D')
+                all_sunset_hours = []
+                all_sunrise_hours = []
+                all_valid_dates = []
+                
+                for date in all_dates:
+                    date_obj = date.date()
+                    sunset_sunrise = get_sun_times(date_obj)
+                    if sunset_sunrise[0] is not None and sunset_sunrise[1] is not None:
+                        sunrise_time, sunset_time = sunset_sunrise
                         sunset_hour = sunset_time.hour + sunset_time.minute / 60
                         sunrise_hour = sunrise_time.hour + sunrise_time.minute / 60
-                        sunset_hours.append(sunset_hour)
-                        sunrise_hours.append(sunrise_hour)
-                        valid_dates.append(date)
+                        all_sunset_hours.append(sunset_hour)
+                        all_sunrise_hours.append(sunrise_hour)
+                        all_valid_dates.append(date_obj)
 
-                if len(valid_dates) > 0:
+                if len(all_valid_dates) > 0:
                     # Create shaded areas for twilight periods
-                    sunrise_minus_0_5 = [h - 0.5 for h in sunrise_hours]
-                    sunrise_plus_1_5 = [h + 1.5 for h in sunrise_hours]
-                    sunset_minus_1_5 = [h - 1.5 for h in sunset_hours]
-                    sunset_plus_0_5 = [h + 0.5 for h in sunset_hours]
+                    sunrise_minus_0_5 = [h - 0.5 for h in all_sunrise_hours]
+                    sunrise_plus_1_5 = [h + 1.5 for h in all_sunrise_hours]
+                    sunset_minus_1_5 = [h - 1.5 for h in all_sunset_hours]
+                    sunset_plus_0_5 = [h + 0.5 for h in all_sunset_hours]
 
                     # Shade 0.5 hours before sunrise
                     ax_main.fill_betweenx(
-                        valid_dates,
+                        all_valid_dates,
                         sunrise_minus_0_5,
-                        sunrise_hours,
+                        all_sunrise_hours,
                         alpha=0.3,
                         color="gold",
                         label="0.5h before Sunrise",
@@ -1501,8 +1499,8 @@ if len(df_valid) > 0:
                     )
                     # Shade 1.5 hours after sunrise
                     ax_main.fill_betweenx(
-                        valid_dates,
-                        sunrise_hours,
+                        all_valid_dates,
+                        all_sunrise_hours,
                         sunrise_plus_1_5,
                         alpha=0.2,
                         color="gold",
@@ -1511,9 +1509,9 @@ if len(df_valid) > 0:
                     )
                     # Shade 1.5 hours before sunset
                     ax_main.fill_betweenx(
-                        valid_dates,
+                        all_valid_dates,
                         sunset_minus_1_5,
-                        sunset_hours,
+                        all_sunset_hours,
                         alpha=0.2,
                         color="orange",
                         label="1.5h before Sunset",
@@ -1521,8 +1519,8 @@ if len(df_valid) > 0:
                     )
                     # Shade 0.5 hours after sunset
                     ax_main.fill_betweenx(
-                        valid_dates,
-                        sunset_hours,
+                        all_valid_dates,
+                        all_sunset_hours,
                         sunset_plus_0_5,
                         alpha=0.3,
                         color="orange",
@@ -1531,8 +1529,8 @@ if len(df_valid) > 0:
                     )
 
                     ax_main.plot(
-                        sunset_hours,
-                        valid_dates,
+                        all_sunset_hours,
+                        all_valid_dates,
                         color="orange",
                         linewidth=3,
                         label="Sunset Time",
@@ -1540,20 +1538,9 @@ if len(df_valid) > 0:
                         zorder=10,
                     )
                     ax_main.plot(
-                        sunrise_hours,
-                        valid_dates,
-                        color="gold",
-                        linewidth=3,
-                        label="Sunrise Time",
-                        alpha=0.9,
-                        zorder=10,
-                    )
+                        all_sunrise_hours,
+                        all_valid_dates,
 
-                # Top distribution (hour of day)
-                ax_top.hist(
-                    species_data["hour_decimal"],
-                    bins=48,
-                    color="steelblue",
                     alpha=0.5,
                     edgecolor="black",
                     density=True,
