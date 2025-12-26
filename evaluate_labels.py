@@ -698,20 +698,21 @@ if len(df_valid) > 0:
         if len(df_target) > 0:
             print(f"Found {len(df_target)} sightings of roe deer and wild boar")
 
-            # ========== PLOT 1: Activity relative to sunset throughout the year ==========
-            fig = plt.figure(figsize=(18, 10))
-            gs = fig.add_gridspec(2, 2, width_ratios=[4, 1], hspace=0.3, wspace=0.1)
-
-            for idx, species in enumerate(target_species):
+            # ========== PLOTS 11-12: Activity relative to sunset throughout the year ==========
+            plot_num = 11
+            for species in target_species:
                 species_data = df_target[df_target["class"] == species]
                 if len(species_data) == 0:
                     continue
 
+                fig = plt.figure(figsize=(14, 6))
+                gs = fig.add_gridspec(1, 2, width_ratios=[4, 1], wspace=0.1)
+
                 # Main scatter plot
-                ax_main = fig.add_subplot(gs[idx, 0])
+                ax_main = fig.add_subplot(gs[0, 0])
 
                 # Distribution plot on the right
-                ax_dist = fig.add_subplot(gs[idx, 1], sharey=ax_main)
+                ax_dist = fig.add_subplot(gs[0, 1], sharey=ax_main)
 
                 # Scatter plot: x=date, y=hours from sunset
                 scatter = ax_main.scatter(
@@ -816,27 +817,34 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "11_sunset_activity_scatter.png", dpi=300, bbox_inches="tight"
-        )
-        print("✓ Saved: 11_sunset_activity_scatter.png")
-        plt.close()
+                plt.tight_layout()
+                plt.savefig(
+                    output_dir
+                    / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.png",
+                    dpi=300,
+                    bbox_inches="tight",
+                )
+                print(
+                    f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.png"
+                )
+                plt.close()
+                plot_num += 1
 
-        # ========== PLOT 11b: Activity relative to sunrise throughout the year ==========
-        fig = plt.figure(figsize=(18, 10))
-        gs = fig.add_gridspec(2, 2, width_ratios=[4, 1], hspace=0.3, wspace=0.1)
-
-        for idx, species in enumerate(target_species):
+        # ========== PLOTS 13-14: Activity relative to sunrise throughout the year ==========
+        plot_num = 13
+        for species in target_species:
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
 
+            fig = plt.figure(figsize=(14, 6))
+            gs = fig.add_gridspec(1, 2, width_ratios=[4, 1], wspace=0.1)
+
             # Main scatter plot
-            ax_main = fig.add_subplot(gs[idx, 0])
+            ax_main = fig.add_subplot(gs[0, 0])
 
             # Distribution plot on the right
-            ax_dist = fig.add_subplot(gs[idx, 1], sharey=ax_main)
+            ax_dist = fig.add_subplot(gs[0, 1], sharey=ax_main)
 
             # Scatter plot: x=date, y=hours from sunrise
             scatter = ax_main.scatter(
@@ -937,25 +945,27 @@ if len(df_valid) > 0:
                 fontweight="bold",
             )
 
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "11b_sunrise_activity_scatter.png",
-            dpi=300,
-            bbox_inches="tight",
-        )
-        print("✓ Saved: 11b_sunrise_activity_scatter.png")
-        plt.close()
+            plt.tight_layout()
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.png"
+            )
+            plt.close()
+            plot_num += 1
 
-        # ========== PLOT 2: Distribution of activity relative to sunset ==========
-        fig, axes = plt.subplots(2, 2, figsize=(16, 10))
-
-        for idx, species in enumerate(target_species):
+        # ========== PLOTS 15-16: Distribution of activity relative to sunset ==========
+        plot_num = 15
+        for species in target_species:
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
 
-            # Histogram of hours from sunset
-            ax1 = axes[idx, 0]
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
             ax1.hist(
                 species_data["hours_from_sunset"],
                 bins=50,
@@ -1041,24 +1051,27 @@ if len(df_valid) > 0:
             ax2.legend()
             ax2.grid(axis="y", alpha=0.3)
 
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "12_sunset_activity_distribution.png",
-            dpi=300,
-            bbox_inches="tight",
-        )
-        print("✓ Saved: 12_sunset_activity_distribution.png")
-        plt.close()
+            plt.tight_layout()
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_distribution.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_distribution.png"
+            )
+            plt.close()
+            plot_num += 1
 
-        # ========== PLOT 3: Seasonal patterns ==========
-        fig, axes = plt.subplots(2, 1, figsize=(14, 10))
-
-        for idx, species in enumerate(target_species):
+        # ========== PLOTS 17-18: Seasonal patterns ==========
+        plot_num = 17
+        for species in target_species:
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
 
-            ax = axes[idx]
+            fig, ax = plt.subplots(1, 1, figsize=(14, 6))
 
             # Group by month and calculate statistics
             species_data["month"] = species_data["timestamp"].dt.month
@@ -1148,14 +1161,20 @@ if len(df_valid) > 0:
                 ax.legend(loc="upper right")
                 ax.grid(axis="y", alpha=0.3)
 
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "13_monthly_sunset_patterns.png", dpi=300, bbox_inches="tight"
-        )
-        print("✓ Saved: 13_monthly_sunset_patterns.png")
-        plt.close()
+            plt.tight_layout()
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.png"
+            )
+            plt.close()
+            plot_num += 1
 
-        # ========== PLOT 4: Daily activity pattern over the year with sunset line ==========
+        # ========== PLOTS 19-21: Daily activity pattern over the year with sunset line ==========
         # Use gridspec to add marginal distributions
         from datetime import datetime, timedelta
 
@@ -1165,9 +1184,9 @@ if len(df_valid) > 0:
         twelve_months_ago = today - timedelta(days=365)
 
         # Create a figure for each species with distributions
-        fig_list = []
+        plot_num = 19
 
-        for idx, species in enumerate(target_species):
+        for species in target_species:
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
@@ -1224,11 +1243,11 @@ if len(df_valid) > 0:
             )
 
             # Calculate sunset and sunrise times for all dates in range for smooth lines
-            all_dates = pd.date_range(start=twelve_months_ago, end=today, freq='D')
+            all_dates = pd.date_range(start=twelve_months_ago, end=today, freq="D")
             all_sunset_hours = []
             all_sunrise_hours = []
             all_valid_dates = []
-            
+
             for date in all_dates:
                 date_obj = date.date()
                 sunset_sunrise = get_sun_times(date_obj)
@@ -1407,10 +1426,23 @@ if len(df_valid) > 0:
                 fontweight="bold",
             )
 
-            fig_list.append((species, fig))
+            # Save individual figure
+            plt.tight_layout()
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.png"
+            )
+            plt.close()
+            plot_num += 1
 
-        # Save all figures
-        if len(fig_list) == 2:
+        # Save combined figure with both species
+        plot_num = 21
+        if True:  # Always create combined figure if we have any species
             # Combine both species into one figure
             combined_fig = plt.figure(figsize=(20, 18))
             combined_gs = GridSpec(
@@ -1423,7 +1455,7 @@ if len(df_valid) > 0:
                 wspace=0.05,
             )
 
-            for idx, (species, _) in enumerate(fig_list):
+            for idx, species in enumerate(target_species):
                 species_data = df_target[df_target["class"] == species]
                 species_data = species_data[
                     species_data["date"] >= twelve_months_ago
@@ -1464,11 +1496,11 @@ if len(df_valid) > 0:
                 )
 
                 # Calculate sunset and sunrise times for all dates in range for smooth lines
-                all_dates = pd.date_range(start=twelve_months_ago, end=today, freq='D')
+                all_dates = pd.date_range(start=twelve_months_ago, end=today, freq="D")
                 all_sunset_hours = []
                 all_sunrise_hours = []
                 all_valid_dates = []
-                
+
                 for date in all_dates:
                     date_obj = date.date()
                     sunset_sunrise = get_sun_times(date_obj)
@@ -1540,7 +1572,18 @@ if len(df_valid) > 0:
                     ax_main.plot(
                         all_sunrise_hours,
                         all_valid_dates,
+                        color="gold",
+                        linewidth=3,
+                        label="Sunrise Time",
+                        alpha=0.9,
+                        zorder=10,
+                    )
 
+                # Top distribution (hour of day)
+                ax_top.hist(
+                    species_data["hour_decimal"],
+                    bins=48,
+                    color="steelblue",
                     alpha=0.5,
                     edgecolor="black",
                     density=True,
@@ -1633,29 +1676,15 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
-            # Close individual figures
-            for _, fig in fig_list:
-                plt.close(fig)
-
             plt.tight_layout()
             plt.savefig(
-                output_dir / "14_daily_yearly_activity_pattern.png",
+                output_dir
+                / f"{plot_num:02d}_combined_daily_yearly_activity_pattern.png",
                 dpi=300,
                 bbox_inches="tight",
             )
-            print("✓ Saved: 14_daily_yearly_activity_pattern.png")
+            print(f"✓ Saved: {plot_num:02d}_combined_daily_yearly_activity_pattern.png")
             plt.close(combined_fig)
-        elif len(fig_list) > 0:
-            # Save individual figures if only one species
-            for species, fig in fig_list:
-                plt.tight_layout()
-                plt.savefig(
-                    output_dir / f"14_daily_yearly_activity_pattern_{species}.png",
-                    dpi=300,
-                    bbox_inches="tight",
-                )
-                print(f"✓ Saved: 14_daily_yearly_activity_pattern_{species}.png")
-                plt.close(fig)
 
         # Print statistics
         print("\nSunrise/Sunset Activity Statistics:")
