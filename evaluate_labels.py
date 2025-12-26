@@ -137,9 +137,7 @@ ax2.pie(
     startangle=90,
     colors=pie_colors,
 )
-ax2.set_title(
-    "Species Distribution - Percentages (Animals Only)", fontsize=14, fontweight="bold"
-)
+ax2.set_title("Species Distribution - Percentages", fontsize=14, fontweight="bold")
 
 plt.tight_layout()
 plt.savefig(output_dir / "01_species_distribution.png", dpi=300, bbox_inches="tight")
