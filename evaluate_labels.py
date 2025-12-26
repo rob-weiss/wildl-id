@@ -34,9 +34,9 @@ from astral.sun import sun
 model = "qwen3-vl:235b-a22b-thinking"
 image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
 labels_dir = image_dir / f"labels_{model}"
-# Put visualizations next to this script
+# Put visualizations in docs/diagrams
 script_dir = Path(__file__).parent
-output_dir = script_dir / "visualizations"
+output_dir = script_dir / "docs" / "diagrams"
 
 # Delete old visualizations directory and recreate it
 if output_dir.exists():

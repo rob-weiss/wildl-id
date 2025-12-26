@@ -10,7 +10,7 @@ This project provides tools for wildlife identification and label evaluation.
 
 - Wildlife species identification
 - Label evaluation and validation
-- Data visualization
+- Data visualisation
 
 ## Getting Started
 
@@ -18,6 +18,7 @@ Check out the [README](../README.md) for installation and usage instructions.
 
 ## Documentation
 
+- [Visualisations](visualizations.md)
 - [Labelling Guide](labelling.md)
 - [Evaluation Guide](evaluation.md)
 
