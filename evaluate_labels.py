@@ -368,21 +368,12 @@ fig, ax = plt.subplots(figsize=(14, 8))
 # Species diversity by location
 location_species = pd.crosstab(df["location_id"], df["class"])
 
-# Get top locations and group others
-top_locations = location_counts.head(10).index
-other_locations = location_counts.iloc[10:].index
-
-location_species_top = location_species.loc[top_locations]
-
-# Add "other locations" row if there are any
-if len(other_locations) > 0:
-    other_locations_sum = location_species.loc[other_locations].sum(axis=0)
-    location_species_top = pd.concat(
-        [location_species_top, other_locations_sum.to_frame("other locations").T]
-    )
+# Show all locations (sorted by total count)
+all_locations = location_counts.index
+location_species_all = location_species.loc[all_locations]
 
 # Group species that make up the last 10% into "other"
-species_totals = location_species_top.sum(axis=0).sort_values(ascending=False)
+species_totals = location_species_all.sum(axis=0).sort_values(ascending=False)
 total_sightings = species_totals.sum()
 cumulative_pct = (species_totals.cumsum() / total_sightings) * 100
 threshold_idx = (cumulative_pct >= 90).idxmax()
@@ -394,12 +385,12 @@ other_species_cols = species_totals.iloc[threshold_position + 1 :].index
 
 # Create new dataframe with "other" category
 if len(other_species_cols) > 0:
-    location_species_grouped = location_species_top[main_species_cols].copy()
-    location_species_grouped["other"] = location_species_top[other_species_cols].sum(
+    location_species_grouped = location_species_all[main_species_cols].copy()
+    location_species_grouped["other"] = location_species_all[other_species_cols].sum(
         axis=1
     )
 else:
-    location_species_grouped = location_species_top[main_species_cols].copy()
+    location_species_grouped = location_species_all[main_species_cols].copy()
 
 # Plot species distribution per location (stacked bar)
 location_species_grouped.plot(
