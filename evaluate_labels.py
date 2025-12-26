@@ -730,6 +730,11 @@ if len(df_valid) > 0:
                     alpha=0.7,
                 )
 
+                # Shade the critical 30-minute window around sunset
+                ax.axhspan(
+                    -0.5, 0.5, alpha=0.3, color="orange", label="±30 min around Sunset"
+                )
+
                 # Shade the "before sunset" region
                 ax.axhspan(-3, 0, alpha=0.1, color="gold", label="Before Sunset")
                 ax.axhspan(0, 3, alpha=0.1, color="navy", label="After Sunset")
@@ -790,6 +795,10 @@ if len(df_valid) > 0:
                 color="steelblue",
                 edgecolor="black",
                 alpha=0.7,
+            )
+            # Shade critical 30-minute window around sunset
+            ax1.axvspan(
+                -0.5, 0.5, alpha=0.3, color="orange", label="±30 min around Sunset"
             )
             ax1.axvline(
                 x=0, color="orange", linestyle="--", linewidth=2, label="Sunset"
@@ -1037,6 +1046,32 @@ if len(df_valid) > 0:
                     valid_dates.append(date)
 
             if len(valid_dates) > 0:
+                # Create shaded areas for 30 minutes before sunrise and after sunset
+                sunrise_minus_30 = [h - 0.5 for h in sunrise_hours]
+                sunset_plus_30 = [h + 0.5 for h in sunset_hours]
+
+                # Shade 30 min before sunrise
+                ax.fill_betweenx(
+                    valid_dates,
+                    sunrise_minus_30,
+                    sunrise_hours,
+                    alpha=0.2,
+                    color="gold",
+                    label="30 min before Sunrise",
+                    zorder=5,
+                )
+
+                # Shade 30 min after sunset
+                ax.fill_betweenx(
+                    valid_dates,
+                    sunset_hours,
+                    sunset_plus_30,
+                    alpha=0.2,
+                    color="orange",
+                    label="30 min after Sunset",
+                    zorder=5,
+                )
+
                 ax.plot(
                     sunset_hours,
                     valid_dates,
