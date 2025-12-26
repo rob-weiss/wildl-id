@@ -66,6 +66,30 @@ df["year"] = df["timestamp"].dt.year
 df_valid = df[df["timestamp"].notna()].copy()
 print(f"\n{len(df_valid)} images with valid timestamps")
 
+# Data Quality Summary
+print("\n" + "=" * 70)
+print("DATA QUALITY SUMMARY")
+print("=" * 70)
+print(f"Total images: {len(df)}")
+print(
+    f"Images with valid timestamps: {len(df_valid)} ({100 * len(df_valid) / len(df):.1f}%)"
+)
+print(
+    f"Images with temperature data: {df['temperature_celsius'].notna().sum()} ({100 * df['temperature_celsius'].notna().sum() / len(df):.1f}%)"
+)
+if len(df_valid) > 0:
+    date_range = df_valid["date"].max() - df_valid["date"].min()
+    print(
+        f"Date range: {df_valid['date'].min()} to {df_valid['date'].max()} ({date_range.days} days)"
+    )
+    # Check for potential duplicates
+    duplicates = df_valid.groupby("timestamp").size()
+    if (duplicates > 1).any():
+        print(
+            f"⚠ Warning: {(duplicates > 1).sum()} timestamps have multiple images (burst mode?)"
+        )
+print("=" * 70)
+
 # Set style
 sns.set_style("whitegrid")
 plt.rcParams["figure.figsize"] = (14, 8)
@@ -264,34 +288,79 @@ if len(df_valid) > 0:
     daily_counts = df_valid.groupby("date").size().reset_index(name="count")
     daily_counts["date"] = pd.to_datetime(daily_counts["date"])
 
-    # Create figure
-    fig, ax = plt.subplots(figsize=(16, 8))
-
     # Prepare data for heatmap
     daily_counts["year"] = daily_counts["date"].dt.year
     daily_counts["week"] = daily_counts["date"].dt.isocalendar().week
     daily_counts["day_of_week"] = daily_counts["date"].dt.dayofweek
 
-    # Pivot table for heatmap
-    pivot_data = daily_counts.pivot_table(
-        values="count", index="day_of_week", columns="week", aggfunc="sum", fill_value=0
-    )
+    # Get unique years
+    years = sorted(daily_counts["year"].unique())
 
-    # Create heatmap
-    sns.heatmap(
-        pivot_data,
-        cmap="YlOrRd",
-        linewidths=0.5,
-        linecolor="white",
-        cbar_kws={"label": "Detections"},
-        ax=ax,
-        annot=False,
-    )
+    # Create figure with subplots for each year if multiple years, else single plot
+    if len(years) > 1:
+        fig, axes = plt.subplots(len(years), 1, figsize=(16, 4 * len(years)))
+        if len(years) == 1:
+            axes = [axes]
 
-    ax.set_title("Wildlife Activity Calendar Heatmap", fontsize=16, fontweight="bold")
-    ax.set_xlabel("Week of Year", fontsize=12)
-    ax.set_ylabel("Day of Week", fontsize=12)
-    ax.set_yticklabels(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], rotation=0)
+        for idx, year in enumerate(years):
+            year_data = daily_counts[daily_counts["year"] == year]
+            pivot_data = year_data.pivot_table(
+                values="count",
+                index="day_of_week",
+                columns="week",
+                aggfunc="sum",
+                fill_value=0,
+            )
+
+            sns.heatmap(
+                pivot_data,
+                cmap="YlOrRd",
+                linewidths=0.5,
+                linecolor="white",
+                cbar_kws={"label": "Detections"},
+                ax=axes[idx],
+                annot=False,
+            )
+
+            axes[idx].set_title(
+                f"Wildlife Activity Calendar - {year}", fontsize=14, fontweight="bold"
+            )
+            axes[idx].set_xlabel("Week of Year", fontsize=12)
+            axes[idx].set_ylabel("Day of Week", fontsize=12)
+            axes[idx].set_yticklabels(
+                ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], rotation=0
+            )
+    else:
+        # Single year
+        fig, ax = plt.subplots(figsize=(16, 8))
+        pivot_data = daily_counts.pivot_table(
+            values="count",
+            index="day_of_week",
+            columns="week",
+            aggfunc="sum",
+            fill_value=0,
+        )
+
+        sns.heatmap(
+            pivot_data,
+            cmap="YlOrRd",
+            linewidths=0.5,
+            linecolor="white",
+            cbar_kws={"label": "Detections"},
+            ax=ax,
+            annot=False,
+        )
+
+        ax.set_title(
+            f"Wildlife Activity Calendar Heatmap - {years[0]}",
+            fontsize=16,
+            fontweight="bold",
+        )
+        ax.set_xlabel("Week of Year", fontsize=12)
+        ax.set_ylabel("Day of Week", fontsize=12)
+        ax.set_yticklabels(
+            ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], rotation=0
+        )
 
     plt.tight_layout()
     plt.savefig(
@@ -672,7 +741,12 @@ if len(df_valid) > 0:
     )
 
     def get_sun_times(date):
-        """Get sunrise and sunset times for a given date, adjusted to standard time (no DST jump)."""
+        """Get sunrise and sunset times for a given date, adjusted to standard time (no DST jump).
+
+        ⚠ NOTE: Times are in standard time (CET, UTC+1) WITHOUT daylight saving adjustments.
+        This may be ~1 hour off local time during DST periods (late March to late October).
+        This approach creates smooth curves but trades accuracy during summer months.
+        """
         try:
             import pytz
 
@@ -713,9 +787,16 @@ if len(df_valid) > 0:
         df_valid["hours_from_sunset"] = df_valid["minutes_from_sunset"] / 60
         df_valid["hours_from_sunrise"] = df_valid["minutes_from_sunrise"] / 60
 
-        # Filter for roe deer and wild boar
+        # Filter for roe deer and wild boar (configurable - edit this list to analyze other species)
         target_species = ["roe deer", "wild boar"]
+        print(f"\nAnalyzing crepuscular activity for: {', '.join(target_species)}")
         df_target = df_valid[df_valid["class"].isin(target_species)].copy()
+
+        # Check if target species exist in data
+        for species in target_species:
+            count = (df_valid["class"] == species).sum()
+            if count == 0:
+                print(f"⚠ Warning: '{species}' not found in dataset")
 
         if len(df_target) > 0:
             print(f"Found {len(df_target)} sightings of roe deer and wild boar")
@@ -770,8 +851,8 @@ if len(df_valid) > 0:
                 )
 
                 ax_main.set_title(
-                    f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
-                    fontsize=14,
+                    f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})\n⚠ Times in standard time (may be ~1h off during DST)",
+                    fontsize=13,
                     fontweight="bold",
                 )
                 ax_main.set_xlabel("Date", fontsize=12)
@@ -905,8 +986,8 @@ if len(df_valid) > 0:
             )
 
             ax_main.set_title(
-                f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
-                fontsize=14,
+                f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})\n⚠ Times in standard time (may be ~1h off during DST)",
+                fontsize=13,
                 fontweight="bold",
             )
             ax_main.set_xlabel("Date", fontsize=12)
