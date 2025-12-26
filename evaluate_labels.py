@@ -716,6 +716,190 @@ if len(df_temp) > 0:
     plt.savefig(output_dir / "08_temperature_analysis.svg", bbox_inches="tight")
     print("✓ Saved: 08_temperature_analysis.png + .svg")
     plt.close()
+
+    # Additional temperature-activity relationship plots
+    print("\nGenerating detailed temperature-activity correlation plots...")
+
+    # Create figure with multiple subplots for comprehensive analysis
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(3, 2, hspace=0.3, wspace=0.3)
+
+    # 1. Scatter plot: Temperature vs Time of Day (colored by hour)
+    ax1 = fig.add_subplot(gs[0, 0])
+    scatter = ax1.scatter(
+        df_temp["temperature_celsius"],
+        df_temp["hour"],
+        c=df_temp["hour"],
+        cmap="twilight",
+        alpha=0.6,
+        s=20,
+        edgecolors="black",
+        linewidth=0.5,
+    )
+    ax1.set_xlabel("Temperature (°C)", fontsize=11)
+    ax1.set_ylabel("Hour of Day", fontsize=11)
+    ax1.set_title(
+        "Activity Distribution: Temperature vs Time of Day",
+        fontsize=12,
+        fontweight="bold",
+    )
+    ax1.grid(True, alpha=0.3)
+    ax1.set_yticks(range(0, 24, 4))
+    cbar1 = plt.colorbar(scatter, ax=ax1)
+    cbar1.set_label("Hour", fontsize=10)
+
+    # 2. Activity count by temperature (binned)
+    ax2 = fig.add_subplot(gs[0, 1])
+    temp_bins = np.arange(
+        df_temp["temperature_celsius"].min() - 2,
+        df_temp["temperature_celsius"].max() + 2,
+        2,
+    )
+    ax2.hist(
+        df_temp["temperature_celsius"],
+        bins=temp_bins,
+        color="forestgreen",
+        edgecolor="black",
+        alpha=0.7,
+    )
+    ax2.set_xlabel("Temperature (°C)", fontsize=11)
+    ax2.set_ylabel("Activity Count", fontsize=11)
+    ax2.set_title("Activity Frequency by Temperature", fontsize=12, fontweight="bold")
+    ax2.grid(axis="y", alpha=0.3)
+
+    # Add trend line
+    from scipy import stats
+
+    z = np.polyfit(
+        range(len(temp_bins) - 1),
+        np.histogram(df_temp["temperature_celsius"], bins=temp_bins)[0],
+        2,
+    )
+    p = np.poly1d(z)
+
+    # 3. Hourly activity by temperature range
+    ax3 = fig.add_subplot(gs[1, :])
+    temp_hour_pivot = (
+        df_temp.groupby(["temp_range", "hour"]).size().unstack(fill_value=0)
+    )
+
+    # Create stacked area chart
+    temp_hour_pivot.T.plot(
+        kind="area", stacked=True, ax=ax3, alpha=0.7, colormap="RdYlBu_r"
+    )
+    ax3.set_xlabel("Hour of Day", fontsize=11)
+    ax3.set_ylabel("Number of Detections", fontsize=11)
+    ax3.set_title(
+        "Hourly Activity Pattern by Temperature Range", fontsize=12, fontweight="bold"
+    )
+    ax3.set_xticks(range(0, 24, 2))
+    ax3.grid(axis="y", alpha=0.3)
+    ax3.legend(
+        title="Temperature", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=9
+    )
+
+    # 4. Species-specific temperature preferences
+    ax4 = fig.add_subplot(gs[2, 0])
+    species_temp = df_temp.groupby("class")["temperature_celsius"].agg(
+        ["mean", "std", "count"]
+    )
+    species_temp = species_temp[species_temp["count"] >= 5].sort_values("mean")
+
+    if len(species_temp) > 0:
+        species_temp["mean"].plot(
+            kind="barh",
+            ax=ax4,
+            color="coral",
+            edgecolor="black",
+            xerr=species_temp["std"],
+        )
+        ax4.set_xlabel("Mean Temperature (°C)", fontsize=11)
+        ax4.set_ylabel("Species", fontsize=11)
+        ax4.set_title(
+            "Average Temperature During Activity by Species",
+            fontsize=12,
+            fontweight="bold",
+        )
+        ax4.grid(axis="x", alpha=0.3)
+
+        # Add sample counts
+        for i, (species, row) in enumerate(species_temp.iterrows()):
+            ax4.text(
+                row["mean"] + row["std"] + 1,
+                i,
+                f"n={int(row['count'])}",
+                va="center",
+                fontsize=8,
+            )
+
+    # 5. Temperature distribution by month
+    ax5 = fig.add_subplot(gs[2, 1])
+    if "month" in df_temp.columns:
+        monthly_temp = df_temp.groupby("month")["temperature_celsius"].apply(list)
+        months = sorted(df_temp["month"].unique())
+
+        bp = ax5.boxplot(
+            [df_temp[df_temp["month"] == m]["temperature_celsius"] for m in months],
+            labels=[f"{m:02d}" for m in months],
+            patch_artist=True,
+            showfliers=False,
+        )
+
+        # Color boxes by temperature gradient
+        colors = plt.cm.coolwarm(np.linspace(0, 1, len(months)))
+        for patch, color in zip(bp["boxes"], colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+
+        ax5.set_xlabel("Month", fontsize=11)
+        ax5.set_ylabel("Temperature (°C)", fontsize=11)
+        ax5.set_title(
+            "Temperature Range by Month During Activity", fontsize=12, fontweight="bold"
+        )
+        ax5.grid(axis="y", alpha=0.3)
+
+    plt.suptitle(
+        "Comprehensive Temperature-Activity Relationship Analysis",
+        fontsize=14,
+        fontweight="bold",
+        y=0.995,
+    )
+
+    plt.savefig(
+        output_dir / "08b_temperature_activity_relationships.png",
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        output_dir / "08b_temperature_activity_relationships.svg", bbox_inches="tight"
+    )
+    print("✓ Saved: 08b_temperature_activity_relationships.png + .svg")
+    plt.close()
+
+    # Correlation statistics
+    print("\nTemperature-Activity Correlation Analysis:")
+    print(
+        f"  Temperature range: {df_temp['temperature_celsius'].min():.1f}°C to {df_temp['temperature_celsius'].max():.1f}°C"
+    )
+    print(
+        f"  Most active temperature: {df_temp.groupby(pd.cut(df_temp['temperature_celsius'], bins=20))['temperature_celsius'].count().idxmax()}"
+    )
+
+    # Correlation with hour of day
+    temp_hour_corr = df_temp[["temperature_celsius", "hour"]].corr().iloc[0, 1]
+    print(f"  Correlation (Temperature vs Hour): {temp_hour_corr:.3f}")
+
+    # Peak activity temperature by species
+    print("\n  Peak activity temperatures by species:")
+    for species in df_temp["class"].value_counts().head(5).index:
+        species_data = df_temp[df_temp["class"] == species]
+        peak_temp = (
+            species_data["temperature_celsius"].mode().values[0]
+            if len(species_data["temperature_celsius"].mode()) > 0
+            else species_data["temperature_celsius"].median()
+        )
+        print(f"    {species}: {peak_temp:.1f}°C (n={len(species_data)})")
+
 else:
     print("\nNo temperature data available")
 
