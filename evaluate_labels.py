@@ -23,8 +23,11 @@ from pathlib import Path
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
+from astral import LocationInfo
+from astral.sun import sun
 
 # Configuration
 model = "qwen3-vl:235b-a22b-thinking"
@@ -32,6 +35,12 @@ image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
 labels_dir = image_dir / f"labels_{model}"
 output_dir = labels_dir / "visualizations"
 output_dir.mkdir(exist_ok=True)
+
+# Location for sunrise/sunset calculations (default: Germany)
+# Update these coordinates to match your camera location
+LATITUDE = 51.1657  # Germany (example: Frankfurt)
+LONGITUDE = 10.4515
+TIMEZONE = "Europe/Berlin"
 
 # Load the data
 csv_path = labels_dir / f"labelling_results_{model}.csv"
@@ -623,6 +632,347 @@ if len(df_valid) > 0:
         )
         print("✓ Saved: 10_individual_species_timelines.png")
         plt.close()
+
+# ============================================================================
+# 11. SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
+# ============================================================================
+print("\n" + "=" * 70)
+print("SUNRISE/SUNSET ANALYSIS")
+print("=" * 70)
+
+if len(df_valid) > 0:
+    # Set up location for sunrise/sunset calculations
+    location = LocationInfo("Camera Location", "Germany", TIMEZONE, LATITUDE, LONGITUDE)
+
+    # Calculate sunrise and sunset for each date
+    print(
+        f"\nCalculating sunrise/sunset times for location: {LATITUDE}°N, {LONGITUDE}°E"
+    )
+
+    def get_sun_times(date):
+        """Get sunrise and sunset times for a given date."""
+        try:
+            s = sun(location.observer, date=date, tzinfo=location.timezone)
+            return s["sunrise"], s["sunset"]
+        except Exception:
+            return None, None
+
+    # Add sunrise/sunset times to dataframe
+    df_valid["sunrise"] = df_valid["date"].apply(lambda d: get_sun_times(d)[0])
+    df_valid["sunset"] = df_valid["date"].apply(lambda d: get_sun_times(d)[1])
+
+    # Convert timezone-aware sunrise/sunset to naive (remove timezone info)
+    df_valid["sunrise"] = pd.to_datetime(df_valid["sunrise"]).dt.tz_localize(None)
+    df_valid["sunset"] = pd.to_datetime(df_valid["sunset"]).dt.tz_localize(None)
+
+    # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
+    df_valid["minutes_from_sunset"] = (
+        df_valid["timestamp"] - df_valid["sunset"]
+    ).dt.total_seconds() / 60
+    df_valid["minutes_from_sunrise"] = (
+        df_valid["timestamp"] - df_valid["sunrise"]
+    ).dt.total_seconds() / 60
+
+    # Filter for roe deer and wild boar
+    target_species = ["roe deer", "wild boar"]
+    df_target = df_valid[df_valid["class"].isin(target_species)].copy()
+
+    if len(df_target) > 0:
+        print(f"Found {len(df_target)} sightings of roe deer and wild boar")
+
+        # ========== PLOT 1: Activity relative to sunset throughout the year ==========
+        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+
+        for idx, species in enumerate(target_species):
+            species_data = df_target[df_target["class"] == species]
+            if len(species_data) == 0:
+                continue
+
+            ax = axes[idx]
+
+            # Scatter plot: x=date, y=minutes from sunset
+            scatter = ax.scatter(
+                species_data["date"],
+                species_data["minutes_from_sunset"],
+                c=species_data["minutes_from_sunset"],
+                cmap="RdYlBu_r",
+                alpha=0.6,
+                s=50,
+                edgecolors="black",
+                linewidth=0.5,
+            )
+
+            # Add horizontal line at sunset (0 minutes)
+            ax.axhline(
+                y=0,
+                color="orange",
+                linestyle="--",
+                linewidth=2,
+                label="Sunset",
+                alpha=0.7,
+            )
+
+            # Shade the "before sunset" region
+            ax.axhspan(-180, 0, alpha=0.1, color="gold", label="Before Sunset")
+            ax.axhspan(0, 180, alpha=0.1, color="navy", label="After Sunset")
+
+            ax.set_title(
+                f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
+                fontsize=14,
+                fontweight="bold",
+            )
+            ax.set_xlabel("Date", fontsize=12)
+            ax.set_ylabel("Minutes from Sunset", fontsize=12)
+            ax.set_ylim(-180, 180)
+            ax.grid(True, alpha=0.3)
+            ax.legend(loc="upper right")
+
+            # Add colorbar
+            cbar = plt.colorbar(scatter, ax=ax)
+            cbar.set_label("Minutes from Sunset", rotation=270, labelpad=20)
+
+            # Count sightings before sunset
+            before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
+            after_sunset = (species_data["minutes_from_sunset"] >= 0).sum()
+            pct_before = 100 * before_sunset / len(species_data)
+
+            # Add text annotation
+            ax.text(
+                0.02,
+                0.98,
+                f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}",
+                transform=ax.transAxes,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+                fontsize=10,
+                fontweight="bold",
+            )
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / "11_sunset_activity_scatter.png", dpi=300, bbox_inches="tight"
+        )
+        print("✓ Saved: 11_sunset_activity_scatter.png")
+        plt.close()
+
+        # ========== PLOT 2: Distribution of activity relative to sunset ==========
+        fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+        for idx, species in enumerate(target_species):
+            species_data = df_target[df_target["class"] == species]
+            if len(species_data) == 0:
+                continue
+
+            # Histogram of minutes from sunset
+            ax1 = axes[idx, 0]
+            ax1.hist(
+                species_data["minutes_from_sunset"],
+                bins=50,
+                color="steelblue",
+                edgecolor="black",
+                alpha=0.7,
+            )
+            ax1.axvline(
+                x=0, color="orange", linestyle="--", linewidth=2, label="Sunset"
+            )
+            ax1.set_title(
+                f"{species.capitalize()} - Distribution Relative to Sunset",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax1.set_xlabel("Minutes from Sunset", fontsize=10)
+            ax1.set_ylabel("Number of Sightings", fontsize=10)
+            ax1.legend()
+            ax1.grid(axis="y", alpha=0.3)
+
+            # Hour of day with sunset overlay
+            ax2 = axes[idx, 1]
+            hourly_counts = species_data.groupby("hour").size()
+            hours = range(24)
+            counts = [hourly_counts.get(h, 0) for h in hours]
+
+            # Calculate average sunset hour by month
+            species_data["month"] = species_data["timestamp"].dt.month
+            sunset_hours = (
+                species_data.groupby("month")["sunset"]
+                .apply(lambda x: x.dt.hour + x.dt.minute / 60)
+                .mean()
+            )
+
+            ax2.bar(hours, counts, color="steelblue", alpha=0.7, edgecolor="black")
+
+            # Plot average sunset time line
+            months_range = range(1, 13)
+            sunset_hours_all = []
+            for month in months_range:
+                month_data = species_data[species_data["month"] == month]
+                if len(month_data) > 0:
+                    avg_hour = (
+                        month_data["sunset"].dt.hour.mean()
+                        + month_data["sunset"].dt.minute.mean() / 60
+                    )
+                    sunset_hours_all.append(avg_hour)
+                else:
+                    sunset_hours_all.append(np.nan)
+
+            # Add sunset range as shaded area
+            if not all(np.isnan(sunset_hours_all)):
+                valid_sunset_hours = [h for h in sunset_hours_all if not np.isnan(h)]
+                if valid_sunset_hours:
+                    min_sunset = min(valid_sunset_hours)
+                    max_sunset = max(valid_sunset_hours)
+                    ax2.axvspan(
+                        min_sunset - 0.5,
+                        max_sunset + 0.5,
+                        alpha=0.2,
+                        color="orange",
+                        label=f"Sunset range ({min_sunset:.1f}h-{max_sunset:.1f}h)",
+                    )
+
+            ax2.set_title(
+                f"{species.capitalize()} - Hourly Activity Pattern",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax2.set_xlabel("Hour of Day", fontsize=10)
+            ax2.set_ylabel("Number of Sightings", fontsize=10)
+            ax2.set_xticks(hours[::2])
+            ax2.legend()
+            ax2.grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / "12_sunset_activity_distribution.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        print("✓ Saved: 12_sunset_activity_distribution.png")
+        plt.close()
+
+        # ========== PLOT 3: Seasonal patterns ==========
+        fig, axes = plt.subplots(2, 1, figsize=(14, 10))
+
+        for idx, species in enumerate(target_species):
+            species_data = df_target[df_target["class"] == species]
+            if len(species_data) == 0:
+                continue
+
+            ax = axes[idx]
+
+            # Group by month and calculate statistics
+            species_data["month"] = species_data["timestamp"].dt.month
+
+            monthly_stats = []
+            for month in range(1, 13):
+                month_data = species_data[species_data["month"] == month]
+                if len(month_data) > 0:
+                    before_sunset = (month_data["minutes_from_sunset"] < 0).sum()
+                    after_sunset = (month_data["minutes_from_sunset"] >= 0).sum()
+                    pct_before = 100 * before_sunset / len(month_data)
+                    monthly_stats.append(
+                        {
+                            "month": month,
+                            "before_sunset": before_sunset,
+                            "after_sunset": after_sunset,
+                            "pct_before": pct_before,
+                            "total": len(month_data),
+                        }
+                    )
+
+            if monthly_stats:
+                stats_df = pd.DataFrame(monthly_stats)
+
+                # Stacked bar chart
+                x = stats_df["month"]
+                width = 0.7
+
+                p1 = ax.bar(
+                    x,
+                    stats_df["before_sunset"],
+                    width,
+                    label="Before Sunset",
+                    color="gold",
+                    edgecolor="black",
+                )
+                p2 = ax.bar(
+                    x,
+                    stats_df["after_sunset"],
+                    width,
+                    bottom=stats_df["before_sunset"],
+                    label="After Sunset",
+                    color="navy",
+                    alpha=0.7,
+                    edgecolor="black",
+                )
+
+                # Add percentage labels
+                for i, (month, pct) in enumerate(
+                    zip(stats_df["month"], stats_df["pct_before"])
+                ):
+                    total = stats_df.loc[i, "total"]
+                    ax.text(
+                        month,
+                        total + max(stats_df["total"]) * 0.02,
+                        f"{pct:.0f}%",
+                        ha="center",
+                        va="bottom",
+                        fontweight="bold",
+                        fontsize=8,
+                    )
+
+                ax.set_title(
+                    f"{species.capitalize()} - Monthly Activity Before/After Sunset",
+                    fontsize=14,
+                    fontweight="bold",
+                )
+                ax.set_xlabel("Month", fontsize=12)
+                ax.set_ylabel("Number of Sightings", fontsize=12)
+                ax.set_xticks(range(1, 13))
+                ax.set_xticklabels(
+                    [
+                        "Jan",
+                        "Feb",
+                        "Mar",
+                        "Apr",
+                        "May",
+                        "Jun",
+                        "Jul",
+                        "Aug",
+                        "Sep",
+                        "Oct",
+                        "Nov",
+                        "Dec",
+                    ]
+                )
+                ax.legend(loc="upper right")
+                ax.grid(axis="y", alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / "13_monthly_sunset_patterns.png", dpi=300, bbox_inches="tight"
+        )
+        print("✓ Saved: 13_monthly_sunset_patterns.png")
+        plt.close()
+
+        # Print statistics
+        print("\nSunrise/Sunset Activity Statistics:")
+        for species in target_species:
+            species_data = df_target[df_target["class"] == species]
+            if len(species_data) > 0:
+                before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
+                after_sunset = (species_data["minutes_from_sunset"] >= 0).sum()
+                pct_before = 100 * before_sunset / len(species_data)
+                print(f"\n{species.capitalize()}:")
+                print(f"  Total sightings: {len(species_data)}")
+                print(f"  Before sunset: {before_sunset} ({pct_before:.1f}%)")
+                print(f"  After sunset: {after_sunset} ({100 - pct_before:.1f}%)")
+                print(
+                    f"  Avg minutes from sunset: {species_data['minutes_from_sunset'].mean():.1f}"
+                )
+    else:
+        print("\nNo data found for roe deer or wild boar")
+else:
+    print("\nNo valid timestamp data for sunrise/sunset analysis")
 
 # ============================================================================
 # SUMMARY STATISTICS
