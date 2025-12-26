@@ -756,7 +756,7 @@ if len(df_valid) > 0:
                 ax_main.set_yticks(range(-3, 4))
                 ax_main.grid(True, alpha=0.3)
                 ax_main.legend(loc="upper right")
-                plt.setp(ax_main.xaxis.get_majorticklabels(), rotation=45, ha='right')
+                plt.setp(ax_main.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
                 # Add colorbar
                 cbar = plt.colorbar(scatter, ax=ax_main)
@@ -889,7 +889,7 @@ if len(df_valid) > 0:
             ax_main.set_yticks(range(-3, 4))
             ax_main.grid(True, alpha=0.3)
             ax_main.legend(loc="upper right")
-            plt.setp(ax_main.xaxis.get_majorticklabels(), rotation=45, ha='right')
+            plt.setp(ax_main.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
             # Add colorbar
             cbar = plt.colorbar(scatter, ax=ax_main)
