@@ -87,17 +87,18 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 # Bar chart
 colors = sns.color_palette("husl", len(species_counts))
 species_counts.plot(kind="bar", ax=ax1, color=colors)
-ax1.set_title("Species Distribution - Counts", fontsize=14, fontweight="bold")
+ax1.set_title("Species Distribution - Counts (Log Scale)", fontsize=14, fontweight="bold")
 ax1.set_xlabel("Species", fontsize=12)
-ax1.set_ylabel("Number of Detections", fontsize=12)
+ax1.set_ylabel("Number of Detections (log scale)", fontsize=12)
+ax1.set_yscale('log')
 ax1.tick_params(axis="x", rotation=45)
-ax1.grid(axis="y", alpha=0.3)
+ax1.grid(axis="y", alpha=0.3, which='both')
 
 # Add count labels on bars
 for i, v in enumerate(species_counts.values):
     ax1.text(
         i,
-        v + max(species_counts.values) * 0.01,
+        v * 1.15,
         str(v),
         ha="center",
         va="bottom",
@@ -106,12 +107,31 @@ for i, v in enumerate(species_counts.values):
 
 # Pie chart (exclude 'none' for better visualization)
 species_with_animals = species_counts[species_counts.index != "none"]
+
+# Group species that make up the last 10% into "other"
+total_animals = species_with_animals.sum()
+cumulative_pct = (species_with_animals.cumsum() / total_animals) * 100
+threshold_idx = (cumulative_pct >= 90).idxmax()
+threshold_position = species_with_animals.index.get_loc(threshold_idx)
+
+# Split into main species and "other"
+main_species = species_with_animals.iloc[:threshold_position + 1]
+other_species = species_with_animals.iloc[threshold_position + 1:]
+
+# Create final data for pie chart
+if len(other_species) > 0:
+    pie_data = pd.concat([main_species, pd.Series([other_species.sum()], index=['other'])])
+    pie_colors = list(colors[:len(main_species)]) + ['lightgray']
+else:
+    pie_data = main_species
+    pie_colors = colors[:len(main_species)]
+
 ax2.pie(
-    species_with_animals.values,
-    labels=species_with_animals.index,
+    pie_data.values,
+    labels=pie_data.index,
     autopct="%1.1f%%",
     startangle=90,
-    colors=colors[: len(species_with_animals)],
+    colors=pie_colors,
 )
 ax2.set_title(
     "Species Distribution - Percentages (Animals Only)", fontsize=14, fontweight="bold"
