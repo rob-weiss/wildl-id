@@ -779,6 +779,91 @@ if len(df_valid) > 0:
         print("✓ Saved: 11_sunset_activity_scatter.png")
         plt.close()
 
+        # ========== PLOT 11b: Activity relative to sunrise throughout the year ==========
+        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+
+        for idx, species in enumerate(target_species):
+            species_data = df_target[df_target["class"] == species]
+            if len(species_data) == 0:
+                continue
+
+            ax = axes[idx]
+
+            # Scatter plot: x=date, y=hours from sunrise
+            scatter = ax.scatter(
+                species_data["date"],
+                species_data["hours_from_sunrise"],
+                c=species_data["hours_from_sunrise"],
+                cmap="RdYlBu_r",
+                alpha=0.6,
+                s=50,
+                edgecolors="black",
+                linewidth=0.5,
+            )
+
+            # Add horizontal line at sunrise (0 hours)
+            ax.axhline(
+                y=0,
+                color="gold",
+                linestyle="--",
+                linewidth=2,
+                label="Sunrise",
+                alpha=0.7,
+            )
+
+            # Shade the critical 30-minute window around sunrise
+            ax.axhspan(
+                -0.5, 0.5, alpha=0.3, color="gold", label="±30 min around Sunrise"
+            )
+
+            # Shade the "before sunrise" region (night) and "after sunrise" region (day)
+            ax.axhspan(-3, 0, alpha=0.1, color="navy", label="Before Sunrise (Night)")
+            ax.axhspan(
+                0, 3, alpha=0.1, color="lightyellow", label="After Sunrise (Day)"
+            )
+
+            ax.set_title(
+                f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
+                fontsize=14,
+                fontweight="bold",
+            )
+            ax.set_xlabel("Date", fontsize=12)
+            ax.set_ylabel("Hours from Sunrise", fontsize=12)
+            ax.set_ylim(-3, 3)
+            ax.set_yticks(range(-3, 4))
+            ax.grid(True, alpha=0.3)
+            ax.legend(loc="upper right")
+
+            # Add colorbar
+            cbar = plt.colorbar(scatter, ax=ax)
+            cbar.set_label("Hours from Sunrise", rotation=270, labelpad=20)
+
+            # Count sightings before sunrise
+            before_sunrise = (species_data["minutes_from_sunrise"] < 0).sum()
+            after_sunrise = (species_data["minutes_from_sunrise"] >= 0).sum()
+            pct_before = 100 * before_sunrise / len(species_data)
+
+            # Add text annotation
+            ax.text(
+                0.02,
+                0.98,
+                f"Before sunrise: {before_sunrise} ({pct_before:.1f}%)\nAfter sunrise: {after_sunrise}",
+                transform=ax.transAxes,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+                fontsize=10,
+                fontweight="bold",
+            )
+
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / "11b_sunrise_activity_scatter.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        print("✓ Saved: 11b_sunrise_activity_scatter.png")
+        plt.close()
+
         # ========== PLOT 2: Distribution of activity relative to sunset ==========
         fig, axes = plt.subplots(2, 2, figsize=(16, 10))
 
