@@ -36,6 +36,11 @@ labels_dir = image_dir / f"labels_{model}"
 output_dir = labels_dir / "visualizations"
 output_dir.mkdir(exist_ok=True)
 
+# Delete old visualizations
+for old_file in output_dir.glob("*.png"):
+    old_file.unlink()
+print(f"Cleared old visualizations from {output_dir}")
+
 # Location for sunrise/sunset calculations
 # Renningen, Baden-Württemberg, Germany
 LATITUDE = 48.7667
