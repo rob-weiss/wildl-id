@@ -724,6 +724,8 @@ if len(df_valid) > 0:
                     s=50,
                     edgecolors="black",
                     linewidth=0.5,
+                    vmin=-3,
+                    vmax=3,
                 )
 
                 # Add horizontal line at sunset (0 hours)
@@ -857,6 +859,8 @@ if len(df_valid) > 0:
                 s=50,
                 edgecolors="black",
                 linewidth=0.5,
+                vmin=-3,
+                vmax=3,
             )
 
             # Add horizontal line at sunrise (0 hours)
