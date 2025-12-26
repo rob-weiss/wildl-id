@@ -942,7 +942,7 @@ if len(df_valid) > 0:
             if len(species_data) == 0:
                 continue
 
-            fig = plt.figure(figsize=(14, 6), constrained_layout=True, constrained_layout=True)
+            fig = plt.figure(figsize=(14, 6), constrained_layout=True)
             gs = fig.add_gridspec(1, 2, width_ratios=[4, 1], wspace=0.1)
 
             # Main scatter plot
