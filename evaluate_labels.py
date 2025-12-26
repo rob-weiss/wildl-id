@@ -650,10 +650,15 @@ if len(df_valid) > 0:
     )
 
     def get_sun_times(date):
-        """Get sunrise and sunset times for a given date."""
+        """Get sunrise and sunset times for a given date in local time (handles DST)."""
         try:
-            s = sun(location.observer, date=date, tzinfo=location.timezone)
-            return s["sunrise"], s["sunset"]
+            # Get sun times in UTC
+            s = sun(location.observer, date=date)
+            # Convert to local timezone (this handles DST automatically)
+            sunrise_local = s["sunrise"].astimezone(location.timezone)
+            sunset_local = s["sunset"].astimezone(location.timezone)
+            # Remove timezone info to get naive datetime in local time
+            return sunrise_local.replace(tzinfo=None), sunset_local.replace(tzinfo=None)
         except Exception:
             return None, None
 
@@ -661,14 +666,7 @@ if len(df_valid) > 0:
     df_valid["sunrise"] = df_valid["date"].apply(lambda d: get_sun_times(d)[0])
     df_valid["sunset"] = df_valid["date"].apply(lambda d: get_sun_times(d)[1])
 
-    # Convert timezone-aware sunrise/sunset to naive by converting to local time first
-    # This properly handles daylight saving time transitions
-    df_valid["sunrise"] = (
-        pd.to_datetime(df_valid["sunrise"]).dt.tz_convert(TIMEZONE).dt.tz_localize(None)
-    )
-    df_valid["sunset"] = (
-        pd.to_datetime(df_valid["sunset"]).dt.tz_convert(TIMEZONE).dt.tz_localize(None)
-    )
+    # Times are already in local time (naive datetimes) from get_sun_times
 
     # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
     df_valid["minutes_from_sunset"] = (
