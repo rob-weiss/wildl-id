@@ -661,9 +661,14 @@ if len(df_valid) > 0:
     df_valid["sunrise"] = df_valid["date"].apply(lambda d: get_sun_times(d)[0])
     df_valid["sunset"] = df_valid["date"].apply(lambda d: get_sun_times(d)[1])
 
-    # Convert timezone-aware sunrise/sunset to naive (remove timezone info)
-    df_valid["sunrise"] = pd.to_datetime(df_valid["sunrise"]).dt.tz_localize(None)
-    df_valid["sunset"] = pd.to_datetime(df_valid["sunset"]).dt.tz_localize(None)
+    # Convert timezone-aware sunrise/sunset to naive by converting to local time first
+    # This properly handles daylight saving time transitions
+    df_valid["sunrise"] = (
+        pd.to_datetime(df_valid["sunrise"]).dt.tz_convert(TIMEZONE).dt.tz_localize(None)
+    )
+    df_valid["sunset"] = (
+        pd.to_datetime(df_valid["sunset"]).dt.tz_convert(TIMEZONE).dt.tz_localize(None)
+    )
 
     # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
     df_valid["minutes_from_sunset"] = (
