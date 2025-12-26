@@ -650,15 +650,21 @@ if len(df_valid) > 0:
     )
 
     def get_sun_times(date):
-        """Get sunrise and sunset times for a given date in local time (handles DST)."""
+        """Get sunrise and sunset times for a given date, adjusted to standard time (no DST jump)."""
         try:
+            import pytz
+
             # Get sun times in UTC
             s = sun(location.observer, date=date)
-            # Convert to local timezone (this handles DST automatically)
-            sunrise_local = s["sunrise"].astimezone(location.timezone)
-            sunset_local = s["sunset"].astimezone(location.timezone)
-            # Remove timezone info to get naive datetime in local time
-            return sunrise_local.replace(tzinfo=None), sunset_local.replace(tzinfo=None)
+            # Convert to standard time (CET, UTC+1) to avoid DST discontinuity in plots
+            # This ensures smooth curves for sunrise/sunset times throughout the year
+            standard_tz = pytz.timezone("Etc/GMT-1")  # CET (UTC+1, no DST)
+            sunrise_standard = s["sunrise"].astimezone(standard_tz)
+            sunset_standard = s["sunset"].astimezone(standard_tz)
+            # Remove timezone info to get naive datetime in standard time
+            return sunrise_standard.replace(tzinfo=None), sunset_standard.replace(
+                tzinfo=None
+            )
         except Exception:
             return None, None
 
