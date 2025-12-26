@@ -1,0 +1,19 @@
+title: Wildlife Identification and Analysis
+description: A comprehensive wildlife identification and analysis platform
+theme: jekyll-theme-cayman
+baseurl: ""
+url: "https://wildlife.robweiss.io"
+
+# GitHub repository
+github:
+  repository_url: https://github.com/rob-weiss/wildl-id
+
+# Build settings
+markdown: kramdown
+plugins:
+  - jekyll-relative-links
+  
+# Enable relative links
+relative_links:
+  enabled: true
+  collections: true
