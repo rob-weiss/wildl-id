@@ -87,12 +87,14 @@ fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 # Bar chart
 colors = sns.color_palette("husl", len(species_counts))
 species_counts.plot(kind="bar", ax=ax1, color=colors)
-ax1.set_title("Species Distribution - Counts (Log Scale)", fontsize=14, fontweight="bold")
+ax1.set_title(
+    "Species Distribution - Counts (Log Scale)", fontsize=14, fontweight="bold"
+)
 ax1.set_xlabel("Species", fontsize=12)
 ax1.set_ylabel("Number of Detections (log scale)", fontsize=12)
-ax1.set_yscale('log')
+ax1.set_yscale("log")
 ax1.tick_params(axis="x", rotation=45)
-ax1.grid(axis="y", alpha=0.3, which='both')
+ax1.grid(axis="y", alpha=0.3, which="both")
 
 # Add count labels on bars
 for i, v in enumerate(species_counts.values):
@@ -115,16 +117,18 @@ threshold_idx = (cumulative_pct >= 90).idxmax()
 threshold_position = species_with_animals.index.get_loc(threshold_idx)
 
 # Split into main species and "other"
-main_species = species_with_animals.iloc[:threshold_position + 1]
-other_species = species_with_animals.iloc[threshold_position + 1:]
+main_species = species_with_animals.iloc[: threshold_position + 1]
+other_species = species_with_animals.iloc[threshold_position + 1 :]
 
 # Create final data for pie chart
 if len(other_species) > 0:
-    pie_data = pd.concat([main_species, pd.Series([other_species.sum()], index=['other'])])
-    pie_colors = list(colors[:len(main_species)]) + ['lightgray']
+    pie_data = pd.concat(
+        [main_species, pd.Series([other_species.sum()], index=["other"])]
+    )
+    pie_colors = list(colors[: len(main_species)]) + ["lightgray"]
 else:
     pie_data = main_species
-    pie_colors = colors[:len(main_species)]
+    pie_colors = colors[: len(main_species)]
 
 ax2.pie(
     pie_data.values,
