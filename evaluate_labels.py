@@ -923,7 +923,6 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
-                plt.tight_layout()
                 plt.savefig(
                     output_dir
                     / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.png",
@@ -943,7 +942,7 @@ if len(df_valid) > 0:
             if len(species_data) == 0:
                 continue
 
-            fig = plt.figure(figsize=(14, 6))
+            fig = plt.figure(figsize=(14, 6), constrained_layout=True, constrained_layout=True)
             gs = fig.add_gridspec(1, 2, width_ratios=[4, 1], wspace=0.1)
 
             # Main scatter plot
@@ -1054,7 +1053,6 @@ if len(df_valid) > 0:
                 fontweight="bold",
             )
 
-            plt.tight_layout()
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.png",
@@ -1070,7 +1068,7 @@ if len(df_valid) > 0:
         # ========== PLOTS 15-16: Distribution of activity relative to sunset ==========
         plot_num = 15
         for species in target_species:
-            species_data = df_target[df_target["class"] == species]
+            species_data = df_target[df_target["class"] == species].copy()
             if len(species_data) == 0:
                 continue
 
@@ -1175,7 +1173,7 @@ if len(df_valid) > 0:
         # ========== PLOTS 17-18: Seasonal patterns ==========
         plot_num = 17
         for species in target_species:
-            species_data = df_target[df_target["class"] == species]
+            species_data = df_target[df_target["class"] == species].copy()
             if len(species_data) == 0:
                 continue
 
@@ -1295,7 +1293,7 @@ if len(df_valid) > 0:
         plot_num = 19
 
         for species in target_species:
-            species_data = df_target[df_target["class"] == species]
+            species_data = df_target[df_target["class"] == species].copy()
             if len(species_data) == 0:
                 continue
 
@@ -1307,7 +1305,7 @@ if len(df_valid) > 0:
                 continue
 
             # Create figure for this species
-            fig = plt.figure(figsize=(18, 10))
+            fig = plt.figure(figsize=(18, 10), constrained_layout=False)
             gs = GridSpec(
                 2,
                 3,
@@ -1535,7 +1533,6 @@ if len(df_valid) > 0:
             )
 
             # Save individual figure
-            plt.tight_layout()
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.png",
@@ -1552,7 +1549,7 @@ if len(df_valid) > 0:
         plot_num = 21
         if True:  # Always create combined figure if we have any species
             # Combine both species into one figure
-            combined_fig = plt.figure(figsize=(20, 18))
+            combined_fig = plt.figure(figsize=(20, 18), constrained_layout=False)
             combined_gs = GridSpec(
                 4,
                 3,
@@ -1564,7 +1561,7 @@ if len(df_valid) > 0:
             )
 
             for idx, species in enumerate(target_species):
-                species_data = df_target[df_target["class"] == species]
+                species_data = df_target[df_target["class"] == species].copy()
                 species_data = species_data[
                     species_data["date"] >= twelve_months_ago
                 ].copy()
@@ -1784,7 +1781,6 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
-            plt.tight_layout()
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_combined_daily_yearly_activity_pattern.png",
