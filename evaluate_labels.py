@@ -1233,6 +1233,31 @@ if len(df_valid) > 0:
             cbar = plt.colorbar(scatter, ax=ax)
             cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
 
+            # Count sightings in hot zones
+            sunset_hot_zone = (
+                (species_data["hours_from_sunset"] >= -1.5)
+                & (species_data["hours_from_sunset"] <= 0.5)
+            ).sum()
+            sunset_hot_zone_pct = 100 * sunset_hot_zone / len(species_data)
+
+            sunrise_hot_zone = (
+                (species_data["hours_from_sunrise"] >= -0.5)
+                & (species_data["hours_from_sunrise"] <= 1.5)
+            ).sum()
+            sunrise_hot_zone_pct = 100 * sunrise_hot_zone / len(species_data)
+
+            # Add text annotation
+            ax.text(
+                0.02,
+                0.98,
+                f"Sunset hot zone (-1.5h to +0.5h): {sunset_hot_zone} ({sunset_hot_zone_pct:.1f}%)\nSunrise hot zone (-0.5h to +1.5h): {sunrise_hot_zone} ({sunrise_hot_zone_pct:.1f}%)",
+                transform=ax.transAxes,
+                verticalalignment="top",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+                fontsize=10,
+                fontweight="bold",
+            )
+
         plt.tight_layout()
         plt.savefig(
             output_dir / "14_daily_yearly_activity_pattern.png",
