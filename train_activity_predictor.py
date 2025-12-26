@@ -11,7 +11,6 @@ Features:
 - Temperature (°C)
 - Hour of day (0-23)
 - Day of year (1-365)
-- Month (1-12)
 
 Target:
 - Activity level (normalized by species maximum)
@@ -72,7 +71,6 @@ print(f"Loaded {len(df)} labelled images")
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
 df["hour"] = df["timestamp"].dt.hour
 df["day_of_year"] = df["timestamp"].dt.dayofyear
-df["month"] = df["timestamp"].dt.month
 df["weekday"] = df["timestamp"].dt.dayofweek  # Monday=0, Sunday=6
 
 # Filter for valid data
@@ -105,7 +103,7 @@ df_target["temp_bin"] = pd.cut(
 
 # Aggregate activity by species, hour, day_of_year, and temperature bin
 activity_groups = (
-    df_target.groupby(["class", "hour", "day_of_year", "month", "temp_bin"])
+    df_target.groupby(["class", "hour", "day_of_year", "temp_bin"])
     .size()
     .reset_index(name="activity_count")
 )
@@ -149,25 +147,21 @@ print("=" * 70)
 # This helps the model learn the full pattern even where data is sparse
 def create_expanded_dataset(species_data, species_name):
     """Create expanded dataset with synthetic samples for better coverage."""
-    # Create grid of all possible hour/temp/month combinations
+    # Create grid of all possible hour/temp/day combinations
     hours = np.arange(24)
     temps = np.arange(-10, 30, 2)
-    months = np.arange(1, 13)
-    days_of_year = np.arange(1, 366)
+    days_of_year = np.arange(1, 366, 15)  # Sample every 15 days
 
     # Sample synthetic data based on observed patterns
     synthetic_samples = []
     for hour in hours:
         for temp in temps:
-            for month in months:
-                # Estimate day_of_year from month (middle of month)
-                day = month * 30
-
+            for day in days_of_year:
                 # Check if we have nearby observations
                 nearby = species_data[
                     (species_data["hour"] == hour)
                     & (species_data["temperature"].between(temp - 4, temp + 4))
-                    & (species_data["month"] == month)
+                    & (species_data["day_of_year"].between(day - 15, day + 15))
                 ]
 
                 if len(nearby) > 0:
@@ -181,7 +175,6 @@ def create_expanded_dataset(species_data, species_name):
                     {
                         "hour": hour,
                         "temperature": temp,
-                        "month": month,
                         "day_of_year": day,
                         "activity_normalized": activity,
                     }
@@ -193,7 +186,7 @@ def create_expanded_dataset(species_data, species_name):
     combined_data = pd.concat(
         [
             species_data[
-                ["hour", "temperature", "month", "day_of_year", "activity_normalized"]
+                ["hour", "temperature", "day_of_year", "activity_normalized"]
             ],
             synthetic_df,
         ],
@@ -202,7 +195,7 @@ def create_expanded_dataset(species_data, species_name):
 
     # Remove duplicates, keeping the original data when available
     combined_data = combined_data.drop_duplicates(
-        subset=["hour", "temperature", "month"], keep="first"
+        subset=["hour", "temperature", "day_of_year"], keep="first"
     )
 
     return combined_data
@@ -220,17 +213,15 @@ def train_species_model(species_data, species_name):
     print(f"Expanded dataset: {len(data)} samples")
 
     # Prepare features and target
-    features = ["hour", "temperature", "month", "day_of_year"]
+    features = ["hour", "temperature", "day_of_year"]
     X = data[features].values
     y = data["activity_normalized"].values
 
     # Add cyclical encoding for hour and day_of_year
     hour_sin = np.sin(2 * np.pi * X[:, 0] / 24)
     hour_cos = np.cos(2 * np.pi * X[:, 0] / 24)
-    day_sin = np.sin(2 * np.pi * X[:, 3] / 365)
-    day_cos = np.cos(2 * np.pi * X[:, 3] / 365)
-    month_sin = np.sin(2 * np.pi * X[:, 2] / 12)
-    month_cos = np.cos(2 * np.pi * X[:, 2] / 12)
+    day_sin = np.sin(2 * np.pi * X[:, 2] / 365)
+    day_cos = np.cos(2 * np.pi * X[:, 2] / 365)
 
     X_enhanced = np.column_stack(
         [
@@ -239,8 +230,6 @@ def train_species_model(species_data, species_name):
             hour_cos,
             day_sin,
             day_cos,
-            month_sin,
-            month_cos,
         ]
     )
 
@@ -417,20 +406,17 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
 
     for i, temp in enumerate(temps):
         for j, hour in enumerate(hours):
-            # Use middle of the year (day 180, month 6)
+            # Use middle of the year (day 180)
             day = 180
-            month = 6
 
             # Prepare features
             hour_sin = np.sin(2 * np.pi * hour / 24)
             hour_cos = np.cos(2 * np.pi * hour / 24)
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
-            month_sin = np.sin(2 * np.pi * month / 12)
-            month_cos = np.cos(2 * np.pi * month / 12)
 
             X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos, month_sin, month_cos]]
+                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
             )
             X_scaled = scaler.transform(X)
             activity_grid[i, j] = model.predict(X_scaled, verbose=0)[0, 0]
@@ -452,16 +438,13 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
         activities = []
         for hour in hours:
             day = 180
-            month = 6
             hour_sin = np.sin(2 * np.pi * hour / 24)
             hour_cos = np.cos(2 * np.pi * hour / 24)
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
-            month_sin = np.sin(2 * np.pi * month / 12)
-            month_cos = np.cos(2 * np.pi * month / 12)
 
             X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos, month_sin, month_cos]]
+                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
             )
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
@@ -483,16 +466,13 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
         activities = []
         for temp in temps_range:
             day = 180
-            month = 6
             hour_sin = np.sin(2 * np.pi * hour / 24)
             hour_cos = np.cos(2 * np.pi * hour / 24)
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
-            month_sin = np.sin(2 * np.pi * month / 12)
-            month_cos = np.cos(2 * np.pi * month / 12)
 
             X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos, month_sin, month_cos]]
+                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
             )
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
@@ -505,35 +485,31 @@ def visualize_activity_predictions(model, scaler, species_name, temp_range=(-10,
     ax.legend()
     ax.grid(True, alpha=0.3)
 
-    # 4. Seasonal variation (activity by month)
+    # 4. Seasonal variation (activity by day of year)
     ax = axes[1, 1]
-    months = np.arange(1, 13)
+    days = np.arange(1, 366, 15)  # Sample every 15 days
     for hour in [6, 12, 18, 21]:
         activities = []
-        for month in months:
+        for day in days:
             temp = 10  # Fixed temperature
-            day = month * 30
             hour_sin = np.sin(2 * np.pi * hour / 24)
             hour_cos = np.cos(2 * np.pi * hour / 24)
             day_sin = np.sin(2 * np.pi * day / 365)
             day_cos = np.cos(2 * np.pi * day / 365)
-            month_sin = np.sin(2 * np.pi * month / 12)
-            month_cos = np.cos(2 * np.pi * month / 12)
 
             X = np.array(
-                [[temp, hour_sin, hour_cos, day_sin, day_cos, month_sin, month_cos]]
+                [[temp, hour_sin, hour_cos, day_sin, day_cos]]
             )
             X_scaled = scaler.transform(X)
             activities.append(model.predict(X_scaled, verbose=0)[0, 0])
 
-        ax.plot(months, activities, marker="o", label=f"{hour}:00")
+        ax.plot(days, activities, marker="o", label=f"{hour}:00", markersize=3)
 
-    ax.set_xlabel("Month")
+    ax.set_xlabel("Day of Year")
     ax.set_ylabel("Predicted Activity")
     ax.set_title("Seasonal Activity Variation (at 10°C)")
     ax.legend()
     ax.grid(True, alpha=0.3)
-    ax.set_xticks(range(1, 13))
 
     plt.suptitle(
         f"{species_name.title()} - Activity Predictions", fontsize=14, fontweight="bold"
@@ -567,8 +543,6 @@ metadata = {
         "hour_cos",
         "day_sin",
         "day_cos",
-        "month_sin",
-        "month_cos",
     ],
     "roe_deer": {
         "samples": len(roe_deer_data),
