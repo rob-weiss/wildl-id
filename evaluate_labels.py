@@ -186,8 +186,10 @@ print("\n" + "=" * 70)
 print("ACTIVITY BY HOUR OF DAY")
 print("=" * 70)
 
-hourly_activity = df_valid.groupby("hour").size()
-print("\nActivity counts by hour:")
+# Exclude humans from this analysis
+df_valid_no_humans = df_valid[df_valid["class"] != "human"]
+hourly_activity = df_valid_no_humans.groupby("hour").size()
+print("\nActivity counts by hour (excluding humans):")
 print(hourly_activity)
 
 fig, ax = plt.subplots(figsize=(14, 6))
