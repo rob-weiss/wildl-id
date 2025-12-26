@@ -672,34 +672,35 @@ if len(df_valid) > 0:
     df_valid = df_valid[df_valid["sunset"].notna() & df_valid["sunrise"].notna()].copy()
     print(f"After filtering for valid sunrise/sunset: {len(df_valid)} images")
 
-    # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
-    df_valid["minutes_from_sunset"] = (
-        df_valid["timestamp"] - df_valid["sunset"]
-    ).dt.total_seconds() / 60
-    df_valid["minutes_from_sunrise"] = (
-        df_valid["timestamp"] - df_valid["sunrise"]
-    ).dt.total_seconds() / 60
+    if len(df_valid) > 0:
+        # Calculate minutes relative to sunset (negative = before sunset, positive = after sunset)
+        df_valid["minutes_from_sunset"] = (
+            df_valid["timestamp"] - df_valid["sunset"]
+        ).dt.total_seconds() / 60
+        df_valid["minutes_from_sunrise"] = (
+            df_valid["timestamp"] - df_valid["sunrise"]
+        ).dt.total_seconds() / 60
 
-    # Also calculate hours for plotting
-    df_valid["hours_from_sunset"] = df_valid["minutes_from_sunset"] / 60
-    df_valid["hours_from_sunrise"] = df_valid["minutes_from_sunrise"] / 60
+        # Also calculate hours for plotting
+        df_valid["hours_from_sunset"] = df_valid["minutes_from_sunset"] / 60
+        df_valid["hours_from_sunrise"] = df_valid["minutes_from_sunrise"] / 60
 
-    # Filter for roe deer and wild boar
-    target_species = ["roe deer", "wild boar"]
-    df_target = df_valid[df_valid["class"].isin(target_species)].copy()
+        # Filter for roe deer and wild boar
+        target_species = ["roe deer", "wild boar"]
+        df_target = df_valid[df_valid["class"].isin(target_species)].copy()
 
-    if len(df_target) > 0:
-        print(f"Found {len(df_target)} sightings of roe deer and wild boar")
+        if len(df_target) > 0:
+            print(f"Found {len(df_target)} sightings of roe deer and wild boar")
 
-        # ========== PLOT 1: Activity relative to sunset throughout the year ==========
-        fig, axes = plt.subplots(2, 1, figsize=(16, 10))
+            # ========== PLOT 1: Activity relative to sunset throughout the year ==========
+            fig, axes = plt.subplots(2, 1, figsize=(16, 10))
 
-        for idx, species in enumerate(target_species):
-            species_data = df_target[df_target["class"] == species]
-            if len(species_data) == 0:
-                continue
+            for idx, species in enumerate(target_species):
+                species_data = df_target[df_target["class"] == species]
+                if len(species_data) == 0:
+                    continue
 
-            ax = axes[idx]
+                ax = axes[idx]
 
             # Scatter plot: x=date, y=hours from sunset
             scatter = ax.scatter(
@@ -1092,8 +1093,10 @@ if len(df_valid) > 0:
                 print(
                     f"  Avg minutes from sunset: {species_data['minutes_from_sunset'].mean():.1f}"
                 )
+        else:
+            print("\nNo data found for roe deer or wild boar")
     else:
-        print("\nNo data found for roe deer or wild boar")
+        print("\nNo valid sunrise/sunset data available for analysis")
 else:
     print("\nNo valid timestamp data for sunrise/sunset analysis")
 
