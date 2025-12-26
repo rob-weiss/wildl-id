@@ -708,64 +708,64 @@ if len(df_valid) > 0:
 
                 ax = axes[idx]
 
-            # Scatter plot: x=date, y=hours from sunset
-            scatter = ax.scatter(
-                species_data["date"],
-                species_data["hours_from_sunset"],
-                c=species_data["hours_from_sunset"],
-                cmap="RdYlBu_r",
-                alpha=0.6,
-                s=50,
-                edgecolors="black",
-                linewidth=0.5,
-            )
+                # Scatter plot: x=date, y=hours from sunset
+                scatter = ax.scatter(
+                    species_data["date"],
+                    species_data["hours_from_sunset"],
+                    c=species_data["hours_from_sunset"],
+                    cmap="RdYlBu_r",
+                    alpha=0.6,
+                    s=50,
+                    edgecolors="black",
+                    linewidth=0.5,
+                )
 
-            # Add horizontal line at sunset (0 hours)
-            ax.axhline(
-                y=0,
-                color="orange",
-                linestyle="--",
-                linewidth=2,
-                label="Sunset",
-                alpha=0.7,
-            )
+                # Add horizontal line at sunset (0 hours)
+                ax.axhline(
+                    y=0,
+                    color="orange",
+                    linestyle="--",
+                    linewidth=2,
+                    label="Sunset",
+                    alpha=0.7,
+                )
 
-            # Shade the "before sunset" region
-            ax.axhspan(-3, 0, alpha=0.1, color="gold", label="Before Sunset")
-            ax.axhspan(0, 3, alpha=0.1, color="navy", label="After Sunset")
+                # Shade the "before sunset" region
+                ax.axhspan(-3, 0, alpha=0.1, color="gold", label="Before Sunset")
+                ax.axhspan(0, 3, alpha=0.1, color="navy", label="After Sunset")
 
-            ax.set_title(
-                f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
-                fontsize=14,
-                fontweight="bold",
-            )
-            ax.set_xlabel("Date", fontsize=12)
-            ax.set_ylabel("Hours from Sunset", fontsize=12)
-            ax.set_ylim(-3, 3)
-            ax.set_yticks(range(-3, 4))
-            ax.grid(True, alpha=0.3)
-            ax.legend(loc="upper right")
+                ax.set_title(
+                    f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
+                    fontsize=14,
+                    fontweight="bold",
+                )
+                ax.set_xlabel("Date", fontsize=12)
+                ax.set_ylabel("Hours from Sunset", fontsize=12)
+                ax.set_ylim(-3, 3)
+                ax.set_yticks(range(-3, 4))
+                ax.grid(True, alpha=0.3)
+                ax.legend(loc="upper right")
 
-            # Add colorbar
-            cbar = plt.colorbar(scatter, ax=ax)
-            cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
+                # Add colorbar
+                cbar = plt.colorbar(scatter, ax=ax)
+                cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
 
-            # Count sightings before sunset
-            before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
-            after_sunset = (species_data["minutes_from_sunset"] >= 0).sum()
-            pct_before = 100 * before_sunset / len(species_data)
+                # Count sightings before sunset
+                before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
+                after_sunset = (species_data["minutes_from_sunset"] >= 0).sum()
+                pct_before = 100 * before_sunset / len(species_data)
 
-            # Add text annotation
-            ax.text(
-                0.02,
-                0.98,
-                f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}",
-                transform=ax.transAxes,
-                verticalalignment="top",
-                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
-                fontsize=10,
-                fontweight="bold",
-            )
+                # Add text annotation
+                ax.text(
+                    0.02,
+                    0.98,
+                    f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}",
+                    transform=ax.transAxes,
+                    verticalalignment="top",
+                    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+                    fontsize=10,
+                    fontweight="bold",
+                )
 
         plt.tight_layout()
         plt.savefig(
