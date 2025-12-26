@@ -997,7 +997,6 @@ if len(df_valid) > 0:
             ax1.grid(axis="y", alpha=0.3)
 
             # Hour of day with sunset overlay
-            ax2 = axes[idx, 1]
             hourly_counts = species_data.groupby("hour").size()
             hours = range(24)
             counts = [hourly_counts.get(h, 0) for h in hours]
@@ -1451,7 +1450,7 @@ if len(df_valid) > 0:
                 figure=combined_fig,
                 width_ratios=[4, 1, 0.2],
                 height_ratios=[1, 4, 1, 4],
-                hspace=0.1,
+                hspace=0.35,
                 wspace=0.05,
             )
 
