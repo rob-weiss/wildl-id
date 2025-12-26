@@ -730,14 +730,10 @@ if len(df_valid) > 0:
                     alpha=0.7,
                 )
 
-                # Shade the critical 30-minute window around sunset
+                # Shade 30 minutes after sunset
                 ax.axhspan(
-                    -0.5, 0.5, alpha=0.3, color="orange", label="±30 min around Sunset"
+                    0, 0.5, alpha=0.3, color="orange", label="30 min after Sunset"
                 )
-
-                # Shade the "before sunset" region
-                ax.axhspan(-3, 0, alpha=0.1, color="gold", label="Before Sunset")
-                ax.axhspan(0, 3, alpha=0.1, color="navy", label="After Sunset")
 
                 ax.set_title(
                     f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
@@ -811,16 +807,8 @@ if len(df_valid) > 0:
                 alpha=0.7,
             )
 
-            # Shade the critical 30-minute window around sunrise
-            ax.axhspan(
-                -0.5, 0.5, alpha=0.3, color="gold", label="±30 min around Sunrise"
-            )
-
-            # Shade the "before sunrise" region (night) and "after sunrise" region (day)
-            ax.axhspan(-3, 0, alpha=0.1, color="navy", label="Before Sunrise (Night)")
-            ax.axhspan(
-                0, 3, alpha=0.1, color="lightyellow", label="After Sunrise (Day)"
-            )
+            # Shade 30 minutes before sunrise
+            ax.axhspan(-0.5, 0, alpha=0.3, color="gold", label="30 min before Sunrise")
 
             ax.set_title(
                 f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
@@ -881,10 +869,8 @@ if len(df_valid) > 0:
                 edgecolor="black",
                 alpha=0.7,
             )
-            # Shade critical 30-minute window around sunset
-            ax1.axvspan(
-                -0.5, 0.5, alpha=0.3, color="orange", label="±30 min around Sunset"
-            )
+            # Shade 30 minutes after sunset
+            ax1.axvspan(0, 0.5, alpha=0.3, color="orange", label="30 min after Sunset")
             ax1.axvline(
                 x=0, color="orange", linestyle="--", linewidth=2, label="Sunset"
             )
