@@ -18,7 +18,7 @@ Check out the [README](../README.md) for installation and usage instructions.
 
 ## Documentation
 
-- [Visualisations](visualizations.md)
+- [Visualisations](visualisations.md)
 - [Labelling Guide](labelling.md)
 - [Evaluation Guide](evaluation.md)
 
