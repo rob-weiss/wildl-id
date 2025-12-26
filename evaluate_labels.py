@@ -19,6 +19,7 @@ Usage:
 """
 
 import os
+import shutil
 from pathlib import Path
 
 import matplotlib.dates as mdates
@@ -34,12 +35,12 @@ model = "qwen3-vl:235b-a22b-thinking"
 image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
 labels_dir = image_dir / f"labels_{model}"
 output_dir = labels_dir / "visualizations"
-output_dir.mkdir(exist_ok=True)
 
-# Delete old visualizations
-for old_file in output_dir.glob("*.png"):
-    old_file.unlink()
-print(f"Cleared old visualizations from {output_dir}")
+# Delete old visualizations directory and recreate it
+if output_dir.exists():
+    shutil.rmtree(output_dir)
+    print(f"Cleared old visualizations from {output_dir}")
+output_dir.mkdir(exist_ok=True)
 
 # Location for sunrise/sunset calculations
 # Renningen, Baden-Württemberg, Germany
