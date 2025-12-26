@@ -367,9 +367,19 @@ fig, ax = plt.subplots(figsize=(14, 8))
 
 # Species diversity by location
 location_species = pd.crosstab(df["location_id"], df["class"])
-# Get top locations
+
+# Get top locations and group others
 top_locations = location_counts.head(10).index
+other_locations = location_counts.iloc[10:].index
+
 location_species_top = location_species.loc[top_locations]
+
+# Add "other locations" row if there are any
+if len(other_locations) > 0:
+    other_locations_sum = location_species.loc[other_locations].sum(axis=0)
+    location_species_top = pd.concat(
+        [location_species_top, other_locations_sum.to_frame("other locations").T]
+    )
 
 # Group species that make up the last 10% into "other"
 species_totals = location_species_top.sum(axis=0).sort_values(ascending=False)
@@ -406,12 +416,12 @@ ax.legend(title="Species", bbox_to_anchor=(1.05, 1), loc="upper left")
 ax.grid(axis="y", alpha=0.3)
 
 # Add total count labels on top of each bar
-for i, location in enumerate(top_locations):
-    total = location_counts[location]
+for i, location in enumerate(location_species_grouped.index):
+    total = location_species_grouped.loc[location].sum()
     ax.text(
         i,
-        total + max(location_counts[top_locations]) * 0.01,
-        str(total),
+        total + location_species_grouped.sum(axis=1).max() * 0.01,
+        str(int(total)),
         ha="center",
         va="bottom",
         fontweight="bold",
