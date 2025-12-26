@@ -66,6 +66,11 @@ df["year"] = df["timestamp"].dt.year
 df_valid = df[df["timestamp"].notna()].copy()
 print(f"\n{len(df_valid)} images with valid timestamps")
 
+# Filter out 'none' and 'unknown' classes
+df = df[~df["class"].isin(["none", "unknown"])].copy()
+df_valid = df_valid[~df_valid["class"].isin(["none", "unknown"])].copy()
+print(f"{len(df_valid)} images after filtering out 'none' and 'unknown' classes")
+
 # Data Quality Summary
 print("\n" + "=" * 70)
 print("DATA QUALITY SUMMARY")
