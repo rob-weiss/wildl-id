@@ -780,7 +780,9 @@ if len(df_temp) > 0:
     # 3. Hourly activity by temperature range
     ax3 = fig.add_subplot(gs[1, :])
     temp_hour_pivot = (
-        df_temp.groupby(["temp_range", "hour"]).size().unstack(fill_value=0)
+        df_temp.groupby(["temp_range", "hour"], observed=True)
+        .size()
+        .unstack(fill_value=0)
     )
 
     # Create stacked area chart
@@ -840,7 +842,7 @@ if len(df_temp) > 0:
 
         bp = ax5.boxplot(
             [df_temp[df_temp["month"] == m]["temperature_celsius"] for m in months],
-            labels=[f"{m:02d}" for m in months],
+            tick_labels=[f"{m:02d}" for m in months],
             patch_artist=True,
             showfliers=False,
         )
@@ -882,7 +884,7 @@ if len(df_temp) > 0:
         f"  Temperature range: {df_temp['temperature_celsius'].min():.1f}°C to {df_temp['temperature_celsius'].max():.1f}°C"
     )
     print(
-        f"  Most active temperature: {df_temp.groupby(pd.cut(df_temp['temperature_celsius'], bins=20))['temperature_celsius'].count().idxmax()}"
+        f"  Most active temperature: {df_temp.groupby(pd.cut(df_temp['temperature_celsius'], bins=20), observed=True)['temperature_celsius'].count().idxmax()}"
     )
 
     # Correlation with hour of day
@@ -993,7 +995,7 @@ if len(df_temp) > 0:
                 species_data["temperature_celsius"], bins=5, precision=0
             )
             temp_hour_pivot = (
-                species_data.groupby(["temp_range", "hour"])
+                species_data.groupby(["temp_range", "hour"], observed=True)
                 .size()
                 .unstack(fill_value=0)
             )
@@ -1035,7 +1037,7 @@ if len(df_temp) > 0:
 
                 bp = ax5.boxplot(
                     monthly_data,
-                    labels=[f"{m:02d}" for m in months],
+                    tick_labels=[f"{m:02d}" for m in months],
                     patch_artist=True,
                     showfliers=False,
                 )
