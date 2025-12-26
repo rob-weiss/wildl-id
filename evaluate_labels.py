@@ -673,6 +673,10 @@ if len(df_valid) > 0:
         df_valid["timestamp"] - df_valid["sunrise"]
     ).dt.total_seconds() / 60
 
+    # Also calculate hours for plotting
+    df_valid["hours_from_sunset"] = df_valid["minutes_from_sunset"] / 60
+    df_valid["hours_from_sunrise"] = df_valid["minutes_from_sunrise"] / 60
+
     # Filter for roe deer and wild boar
     target_species = ["roe deer", "wild boar"]
     df_target = df_valid[df_valid["class"].isin(target_species)].copy()
@@ -690,11 +694,11 @@ if len(df_valid) > 0:
 
             ax = axes[idx]
 
-            # Scatter plot: x=date, y=minutes from sunset
+            # Scatter plot: x=date, y=hours from sunset
             scatter = ax.scatter(
                 species_data["date"],
-                species_data["minutes_from_sunset"],
-                c=species_data["minutes_from_sunset"],
+                species_data["hours_from_sunset"],
+                c=species_data["hours_from_sunset"],
                 cmap="RdYlBu_r",
                 alpha=0.6,
                 s=50,
@@ -702,7 +706,7 @@ if len(df_valid) > 0:
                 linewidth=0.5,
             )
 
-            # Add horizontal line at sunset (0 minutes)
+            # Add horizontal line at sunset (0 hours)
             ax.axhline(
                 y=0,
                 color="orange",
@@ -713,8 +717,8 @@ if len(df_valid) > 0:
             )
 
             # Shade the "before sunset" region
-            ax.axhspan(-180, 0, alpha=0.1, color="gold", label="Before Sunset")
-            ax.axhspan(0, 180, alpha=0.1, color="navy", label="After Sunset")
+            ax.axhspan(-3, 0, alpha=0.1, color="gold", label="Before Sunset")
+            ax.axhspan(0, 3, alpha=0.1, color="navy", label="After Sunset")
 
             ax.set_title(
                 f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
@@ -722,14 +726,15 @@ if len(df_valid) > 0:
                 fontweight="bold",
             )
             ax.set_xlabel("Date", fontsize=12)
-            ax.set_ylabel("Minutes from Sunset", fontsize=12)
-            ax.set_ylim(-180, 180)
+            ax.set_ylabel("Hours from Sunset", fontsize=12)
+            ax.set_ylim(-3, 3)
+            ax.set_yticks(range(-3, 4))
             ax.grid(True, alpha=0.3)
             ax.legend(loc="upper right")
 
             # Add colorbar
             cbar = plt.colorbar(scatter, ax=ax)
-            cbar.set_label("Minutes from Sunset", rotation=270, labelpad=20)
+            cbar.set_label("Hours from Sunset", rotation=270, labelpad=20)
 
             # Count sightings before sunset
             before_sunset = (species_data["minutes_from_sunset"] < 0).sum()
@@ -763,10 +768,10 @@ if len(df_valid) > 0:
             if len(species_data) == 0:
                 continue
 
-            # Histogram of minutes from sunset
+            # Histogram of hours from sunset
             ax1 = axes[idx, 0]
             ax1.hist(
-                species_data["minutes_from_sunset"],
+                species_data["hours_from_sunset"],
                 bins=50,
                 color="steelblue",
                 edgecolor="black",
@@ -780,8 +785,10 @@ if len(df_valid) > 0:
                 fontsize=12,
                 fontweight="bold",
             )
-            ax1.set_xlabel("Minutes from Sunset", fontsize=10)
+            ax1.set_xlabel("Hours from Sunset", fontsize=10)
             ax1.set_ylabel("Number of Sightings", fontsize=10)
+            # Add hour ticks
+            ax1.set_xticks(range(-6, 7, 1))
             ax1.legend()
             ax1.grid(axis="y", alpha=0.3)
 
