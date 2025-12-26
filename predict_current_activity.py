@@ -23,11 +23,16 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import requests
 from tensorflow import keras
 
 # Configuration
 script_dir = Path(__file__).parent
 model_dir = script_dir / "models"
+
+# Location for weather data (Renningen, Germany)
+LATITUDE = 48.7667
+LONGITUDE = 8.9333
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(
@@ -36,8 +41,8 @@ parser = argparse.ArgumentParser(
 parser.add_argument(
     "--temperature",
     type=float,
-    default=10.0,
-    help="Temperature in Celsius (default: 10.0)",
+    default=None,
+    help="Temperature in Celsius (default: fetch current temperature)",
 )
 parser.add_argument(
     "--hour",
@@ -135,6 +140,35 @@ def predict_activity(model, scaler, hour, day_of_year, temperature):
     return prediction
 
 
+def get_current_temperature():
+    """Fetch current temperature from Open-Meteo API (no API key required).
+
+    Returns
+    -------
+    float or None
+        Current temperature in Celsius, or None if fetch fails
+    """
+    try:
+        # Open-Meteo API - free, no API key required
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude": LATITUDE,
+            "longitude": LONGITUDE,
+            "current": "temperature_2m",
+            "temperature_unit": "celsius",
+        }
+
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+
+        temperature = data.get("current", {}).get("temperature_2m")
+        return temperature
+    except Exception as e:
+        print(f"⚠ Could not fetch current temperature: {e}")
+        return None
+
+
 def get_activity_description(activity_score):
     """Convert activity score to descriptive text.
 
@@ -170,7 +204,18 @@ def main():
     now = datetime.now()
     hour = args.hour if args.hour is not None else now.hour
     day_of_year = args.day if args.day is not None else now.timetuple().tm_yday
-    temperature = args.temperature
+
+    # Get temperature - fetch current if not specified
+    if args.temperature is None:
+        print("\nFetching current temperature...")
+        temperature = get_current_temperature()
+        if temperature is None:
+            print("Using default temperature: 10°C")
+            temperature = 10.0
+        else:
+            print(f"✓ Current temperature: {temperature}°C")
+    else:
+        temperature = args.temperature
 
     # Display input conditions
     print("\nPrediction Conditions:")
