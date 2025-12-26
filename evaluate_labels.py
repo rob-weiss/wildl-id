@@ -36,10 +36,10 @@ labels_dir = image_dir / f"labels_{model}"
 output_dir = labels_dir / "visualizations"
 output_dir.mkdir(exist_ok=True)
 
-# Location for sunrise/sunset calculations (default: Germany)
-# Update these coordinates to match your camera location
-LATITUDE = 51.1657  # Germany (example: Frankfurt)
-LONGITUDE = 10.4515
+# Location for sunrise/sunset calculations
+# Renningen, Baden-Württemberg, Germany
+LATITUDE = 48.7667
+LONGITUDE = 8.9333
 TIMEZONE = "Europe/Berlin"
 
 # Load the data
