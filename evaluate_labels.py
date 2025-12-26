@@ -175,7 +175,8 @@ ax2.set_title("Species Distribution - Percentages", fontsize=14, fontweight="bol
 
 plt.tight_layout()
 plt.savefig(output_dir / "01_species_distribution.png", dpi=300, bbox_inches="tight")
-print("✓ Saved: 01_species_distribution.png")
+plt.savefig(output_dir / "01_species_distribution.svg", bbox_inches="tight")
+print("✓ Saved: 01_species_distribution.png + .svg")
 plt.close()
 
 # ============================================================================
@@ -230,7 +231,8 @@ ax.annotate(
 
 plt.tight_layout()
 plt.savefig(output_dir / "02_activity_by_hour.png", dpi=300, bbox_inches="tight")
-print("✓ Saved: 02_activity_by_hour.png")
+plt.savefig(output_dir / "02_activity_by_hour.svg", bbox_inches="tight")
+print("✓ Saved: 02_activity_by_hour.png + .svg")
 plt.close()
 
 # ============================================================================
@@ -283,7 +285,8 @@ plt.tight_layout()
 plt.savefig(
     output_dir / "03_species_activity_patterns.png", dpi=300, bbox_inches="tight"
 )
-print("✓ Saved: 03_species_activity_patterns.png")
+plt.savefig(output_dir / "03_species_activity_patterns.svg", bbox_inches="tight")
+print("✓ Saved: 03_species_activity_patterns.png + .svg")
 plt.close()
 
 # ============================================================================
@@ -376,7 +379,8 @@ if len(df_valid) > 0:
     plt.savefig(
         output_dir / "04_activity_calendar_heatmap.png", dpi=300, bbox_inches="tight"
     )
-    print("✓ Saved: 04_activity_calendar_heatmap.png")
+    plt.savefig(output_dir / "04_activity_calendar_heatmap.svg", bbox_inches="tight")
+    print("✓ Saved: 04_activity_calendar_heatmap.png + .svg")
     plt.close()
 
 # ============================================================================
@@ -435,7 +439,8 @@ ax2.grid(axis="y", alpha=0.3)
 
 plt.tight_layout()
 plt.savefig(output_dir / "05_lighting_analysis.png", dpi=300, bbox_inches="tight")
-print("✓ Saved: 05_lighting_analysis.png")
+plt.savefig(output_dir / "05_lighting_analysis.svg", bbox_inches="tight")
+print("✓ Saved: 05_lighting_analysis.png + .svg")
 plt.close()
 
 # ============================================================================
@@ -493,7 +498,8 @@ ax2.grid(axis="y", alpha=0.3)
 
 plt.tight_layout()
 plt.savefig(output_dir / "06_location_comparison.png", dpi=300, bbox_inches="tight")
-print("✓ Saved: 06_location_comparison.png")
+plt.savefig(output_dir / "06_location_comparison.svg", bbox_inches="tight")
+print("✓ Saved: 06_location_comparison.png + .svg")
 plt.close()
 
 # ============================================================================
@@ -560,7 +566,8 @@ if len(df_temp) > 0:
     plt.savefig(
         output_dir / "07_temperature_analysis.png", dpi=300, bbox_inches="tight"
     )
-    print("✓ Saved: 07_temperature_analysis.png")
+    plt.savefig(output_dir / "07_temperature_analysis.svg", bbox_inches="tight")
+    print("✓ Saved: 07_temperature_analysis.png + .svg")
     plt.close()
 else:
     print("\nNo temperature data available")
@@ -604,7 +611,8 @@ if len(df_valid) > 0:
 
     plt.tight_layout()
     plt.savefig(output_dir / "08_activity_timeline.png", dpi=300, bbox_inches="tight")
-    print("✓ Saved: 08_activity_timeline.png")
+    plt.savefig(output_dir / "08_activity_timeline.svg", bbox_inches="tight")
+    print("✓ Saved: 08_activity_timeline.png + .svg")
     plt.close()
 
 # ============================================================================
@@ -665,7 +673,10 @@ if len(df_valid) > 0:
             dpi=300,
             bbox_inches="tight",
         )
-        print("✓ Saved: 09_species_activity_timeline.png")
+        plt.savefig(
+            output_dir / "09_species_activity_timeline.svg", bbox_inches="tight"
+        )
+        print("✓ Saved: 09_species_activity_timeline.png + .svg")
         plt.close()
 
         # Also create individual timeline plots for each species
@@ -731,7 +742,10 @@ if len(df_valid) > 0:
             dpi=300,
             bbox_inches="tight",
         )
-        print("✓ Saved: 10_individual_species_timelines.png")
+        plt.savefig(
+            output_dir / "10_individual_species_timelines.svg", bbox_inches="tight"
+        )
+        print("✓ Saved: 10_individual_species_timelines.png + .svg")
         plt.close()
 
 # ============================================================================
@@ -939,8 +953,13 @@ if len(df_valid) > 0:
                     dpi=300,
                     bbox_inches="tight",
                 )
+                plt.savefig(
+                    output_dir
+                    / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.svg",
+                    bbox_inches="tight",
+                )
                 print(
-                    f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.png"
+                    f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.png + .svg"
                 )
                 plt.close()
                 plot_num += 1
@@ -1069,8 +1088,13 @@ if len(df_valid) > 0:
                 dpi=300,
                 bbox_inches="tight",
             )
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.svg",
+                bbox_inches="tight",
+            )
             print(
-                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.png"
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.png + .svg"
             )
             plt.close()
             plot_num += 1
@@ -1174,8 +1198,13 @@ if len(df_valid) > 0:
                 dpi=300,
                 bbox_inches="tight",
             )
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_distribution.svg",
+                bbox_inches="tight",
+            )
             print(
-                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_distribution.png"
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_distribution.png + .svg"
             )
             plt.close()
             plot_num += 1
@@ -1284,8 +1313,13 @@ if len(df_valid) > 0:
                 dpi=300,
                 bbox_inches="tight",
             )
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.svg",
+                bbox_inches="tight",
+            )
             print(
-                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.png"
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.png + .svg"
             )
             plt.close()
             plot_num += 1
@@ -1549,8 +1583,13 @@ if len(df_valid) > 0:
                 dpi=300,
                 bbox_inches="tight",
             )
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.svg",
+                bbox_inches="tight",
+            )
             print(
-                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.png"
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.png + .svg"
             )
             plt.close()
             plot_num += 1
@@ -1797,7 +1836,14 @@ if len(df_valid) > 0:
                 dpi=300,
                 bbox_inches="tight",
             )
-            print(f"✓ Saved: {plot_num:02d}_combined_daily_yearly_activity_pattern.png")
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_combined_daily_yearly_activity_pattern.svg",
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_combined_daily_yearly_activity_pattern.png + .svg"
+            )
             plt.close(combined_fig)
 
         # Print statistics
