@@ -760,11 +760,18 @@ if len(df_valid) > 0:
                 after_sunset = (species_data["minutes_from_sunset"] >= 0).sum()
                 pct_before = 100 * before_sunset / len(species_data)
 
+                # Count sightings in hot zone (0.5 hours after sunset)
+                hot_zone = (
+                    (species_data["hours_from_sunset"] >= 0)
+                    & (species_data["hours_from_sunset"] <= 0.5)
+                ).sum()
+                hot_zone_pct = 100 * hot_zone / len(species_data)
+
                 # Add text annotation
                 ax.text(
                     0.02,
                     0.98,
-                    f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}",
+                    f"Before sunset: {before_sunset} ({pct_before:.1f}%)\nAfter sunset: {after_sunset}\nHot zone (0.5h after): {hot_zone} ({hot_zone_pct:.1f}%)",
                     transform=ax.transAxes,
                     verticalalignment="top",
                     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
@@ -839,11 +846,18 @@ if len(df_valid) > 0:
             after_sunrise = (species_data["minutes_from_sunrise"] >= 0).sum()
             pct_before = 100 * before_sunrise / len(species_data)
 
+            # Count sightings in hot zone (0.5 hours before sunrise)
+            hot_zone = (
+                (species_data["hours_from_sunrise"] >= -0.5)
+                & (species_data["hours_from_sunrise"] < 0)
+            ).sum()
+            hot_zone_pct = 100 * hot_zone / len(species_data)
+
             # Add text annotation
             ax.text(
                 0.02,
                 0.98,
-                f"Before sunrise: {before_sunrise} ({pct_before:.1f}%)\nAfter sunrise: {after_sunrise}",
+                f"Before sunrise: {before_sunrise} ({pct_before:.1f}%)\nAfter sunrise: {after_sunrise}\nHot zone (0.5h before): {hot_zone} ({hot_zone_pct:.1f}%)",
                 transform=ax.transAxes,
                 verticalalignment="top",
                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
