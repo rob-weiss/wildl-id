@@ -38,6 +38,24 @@ Analysis of wildlife activity under different lighting conditions.
 
 Correlation between temperature and wildlife activity.
 
+### Temperature-Activity Relationships
+
+![Temperature Activity Relationships](diagrams/08b_temperature_activity_relationships.svg)
+
+Comprehensive analysis of temperature-activity relationships including scatter plots, hourly patterns, species preferences, and monthly variations.
+
+### Roe Deer - Temperature Activity Analysis
+
+![Roe Deer Temperature Activity](diagrams/08c_roe_deer_temperature_activity.svg)
+
+Detailed temperature-activity relationship analysis for roe deer, including distribution patterns, hourly activity by temperature, and statistical correlations.
+
+### Wild Boar - Temperature Activity Analysis
+
+![Wild Boar Temperature Activity](diagrams/08d_wild_boar_temperature_activity.svg)
+
+Detailed temperature-activity relationship analysis for wild boar, including distribution patterns, hourly activity by temperature, and statistical correlations.
+
 ## Location and Baiting Effects
 
 ### Location Comparison
@@ -65,6 +83,12 @@ Timeline showing wildlife activity over the study period.
 ![Species Activity Timeline](diagrams/09_species_activity_timeline.svg)
 
 Timeline of activity patterns for different species.
+
+### Species Activity Timeline (Alternative)
+
+![Species Activity Timeline Alt](diagrams/10_species_activity_timeline.svg)
+
+Alternative view of species activity timeline with different visualization approach.
 
 ### Individual Species Timelines
 
