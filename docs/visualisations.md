@@ -160,7 +160,7 @@ Side-by-side comparison of daily and yearly activity patterns for both roe deer 
 
 ## Summary Statistics
 
-```
+```text
 {% include_relative diagrams/summary_statistics.txt %}
 ```
 

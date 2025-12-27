@@ -43,10 +43,14 @@ if output_dir.exists():
     print(f"Clearing old visualizations from {output_dir}")
     try:
         # Remove directory tree, ignoring errors for read-only files
+        def handle_remove_error(func, path, exc):
+            os.chmod(path, 0o777)
+            func(path)
+
         shutil.rmtree(
             output_dir,
             ignore_errors=False,
-            onerror=lambda func, path, exc: (os.chmod(path, 0o777), func(path)),
+            onerror=handle_remove_error,
         )
         print("✓ Cleared old visualizations")
     except Exception as e:
@@ -162,13 +166,16 @@ species_with_animals = species_counts[species_counts.index != "none"]
 
 # Group species that make up the last 10% into "other"
 total_animals = species_with_animals.sum()
-cumulative_pct = (species_with_animals.cumsum() / total_animals) * 100
+cumulative_pct: pd.Series = (species_with_animals.cumsum() / total_animals) * 100
 threshold_idx = (cumulative_pct >= 90).idxmax()
 threshold_position = species_with_animals.index.get_loc(threshold_idx)
+threshold_pos_int = (
+    int(threshold_position) if isinstance(threshold_position, (int, np.integer)) else 0
+)
 
 # Split into main species and "other"
-main_species = species_with_animals.iloc[: threshold_position + 1]
-other_species = species_with_animals.iloc[threshold_position + 1 :]
+main_species = species_with_animals.iloc[: threshold_pos_int + 1]
+other_species = species_with_animals.iloc[threshold_pos_int + 1 :]
 
 # Create final data for pie chart
 if len(other_species) > 0:
@@ -178,7 +185,7 @@ if len(other_species) > 0:
     pie_colors = list(colors[: len(main_species)]) + ["lightgray"]
 else:
     pie_data = main_species
-    pie_colors = colors[: len(main_species)]
+    pie_colors = list(colors[: len(main_species)])
 
 ax2.pie(
     pie_data.values,
@@ -244,10 +251,11 @@ ax.legend(loc="upper left")
 # Add peak hours annotation
 peak_hour = hourly_activity.idxmax()
 peak_count = hourly_activity.max()
+peak_hour_float = float(peak_hour)
 ax.annotate(
-    f"Peak: {peak_hour:02d}:00\n({peak_count} detections)",
-    xy=(peak_hour, peak_count),
-    xytext=(peak_hour, peak_count * 1.15),
+    f"Peak: {int(peak_hour):02d}:00\n({peak_count} detections)",
+    xy=(peak_hour_float, float(peak_count)),
+    xytext=(peak_hour_float, float(peak_count) * 1.15),
     ha="center",
     fontweight="bold",
     bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.7),
@@ -408,13 +416,18 @@ location_species_all = location_species.loc[all_locations]
 # Group species that make up the last 10% into "other"
 species_totals = location_species_all.sum(axis=0).sort_values(ascending=False)
 total_sightings = species_totals.sum()
-cumulative_pct = (species_totals.cumsum() / total_sightings) * 100
-threshold_idx = (cumulative_pct >= 90).idxmax()
-threshold_position = species_totals.index.get_loc(threshold_idx)
+cumulative_pct_loc: pd.Series = (species_totals.cumsum() / total_sightings) * 100
+threshold_idx_loc = (cumulative_pct_loc >= 90).idxmax()
+threshold_position_loc = species_totals.index.get_loc(threshold_idx_loc)
+threshold_pos_loc_int = (
+    int(threshold_position_loc)
+    if isinstance(threshold_position_loc, (int, np.integer))
+    else 0
+)
 
 # Split into main species and "other"
-main_species_cols = species_totals.iloc[: threshold_position + 1].index
-other_species_cols = species_totals.iloc[threshold_position + 1 :].index
+main_species_cols = species_totals.iloc[: threshold_pos_loc_int + 1].index
+other_species_cols = species_totals.iloc[threshold_pos_loc_int + 1 :].index
 
 # Create new dataframe with "other" category
 if len(other_species_cols) > 0:
@@ -587,9 +600,10 @@ if len(df_valid) > 0:
 
         # Add value labels on bars
         for i, (bar, val) in enumerate(zip(bars, averages)):
+            max_avg = float(max(averages)) if averages else 1.0
             ax2.text(
                 bar.get_x() + bar.get_width() / 2,
-                val + max(averages) * 0.02,
+                val + max_avg * 0.02,
                 f"{val:.2f}",
                 ha="center",
                 va="bottom",
@@ -893,7 +907,8 @@ if len(df_temp) > 0:
         )
 
         # Color boxes by temperature gradient
-        colors = plt.cm.coolwarm(np.linspace(0, 1, len(months)))
+        coolwarm_cmap = plt.get_cmap("coolwarm")
+        colors = coolwarm_cmap(np.linspace(0, 1, len(months)))
         for patch, color in zip(bp["boxes"], colors):
             patch.set_facecolor(color)
             patch.set_alpha(0.7)
@@ -1017,13 +1032,13 @@ if len(df_temp) > 0:
                 species_data["temperature_celsius"].max() + 2,
                 3,
             )
-            counts, edges = np.histogram(
+            hist_counts, edges = np.histogram(
                 species_data["temperature_celsius"], bins=temp_bins
             )
             bin_centers = (edges[:-1] + edges[1:]) / 2
             ax3.bar(
                 bin_centers,
-                counts,
+                hist_counts,
                 width=np.diff(edges),
                 color="forestgreen",
                 edgecolor="black",
@@ -1087,7 +1102,8 @@ if len(df_temp) > 0:
                     showfliers=False,
                 )
 
-                colors = plt.cm.coolwarm(np.linspace(0, 1, len(months)))
+                coolwarm_cmap = plt.get_cmap("coolwarm")
+                colors = coolwarm_cmap(np.linspace(0, 1, len(months)))
                 for patch, color in zip(bp["boxes"], colors):
                     patch.set_facecolor(color)
                     patch.set_alpha(0.7)
@@ -1129,7 +1145,7 @@ if len(df_temp) > 0:
                 ax6.grid(True, alpha=0.3)
                 cbar = plt.colorbar(scatter2, ax=ax6)
                 cbar.set_label("Density", fontsize=8)
-            except:
+            except Exception:
                 ax6.text(
                     0.5,
                     0.5,
@@ -2067,7 +2083,7 @@ if len(df_valid) > 0:
             all_valid_dates = []
 
             for date in all_dates:
-                date_obj = date.date()
+                date_obj = pd.Timestamp(date).date()
                 sunset_sunrise = get_sun_times(date_obj)
                 if sunset_sunrise[0] is not None and sunset_sunrise[1] is not None:
                     sunrise_time, sunset_time = sunset_sunrise
@@ -2324,7 +2340,7 @@ if len(df_valid) > 0:
                 all_valid_dates = []
 
                 for date in all_dates:
-                    date_obj = date.date()
+                    date_obj = pd.Timestamp(date).date()
                     sunset_sunrise = get_sun_times(date_obj)
                     if sunset_sunrise[0] is not None and sunset_sunrise[1] is not None:
                         sunrise_time, sunset_time = sunset_sunrise
