@@ -2,10 +2,6 @@
 
 Wildlife activity patterns and analysis visualisations.
 
-```
-{% include_relative diagrams/summary_statistics.txt %}
-```
-
 ## Species Distribution
 
 ### 01. Species Distribution
@@ -159,6 +155,14 @@ Comprehensive heatmap showing wild boar activity across hour of day and month of
 ![Combined Daily Yearly Activity Pattern](diagrams/24_combined_daily_yearly_activity_pattern.svg)
 
 Side-by-side comparison of daily and yearly activity patterns for both roe deer and wild boar.
+
+---
+
+## Summary Statistics
+
+```
+{% include_relative diagrams/summary_statistics.txt %}
+```
 
 ---
 
