@@ -88,65 +88,65 @@ Combined timeline showing activity patterns for multiple species over time.
 
 Separate timeline panels for each of the top species, showing individual activity patterns.
 
-## Crepuscular Activity Analysis
+### 13. Roe Deer - Sunset Activity Scatter
 
-### 14. Roe Deer - Sunset Activity Scatter
-
-![Roe Deer Sunset Activity Scatter](diagrams/14_roe_deer_sunset_activity_scatter.svg)
+![Roe Deer Sunset Activity Scatter](diagrams/13_roe_deer_sunset_activity_scatter.svg)
 
 Scatter plot showing roe deer activity relative to sunset times throughout the year, with distribution histogram.
 
-### 15. Wild Boar - Sunset Activity Scatter
+## Crepuscular Activity Analysis
 
-![Wild Boar Sunset Activity Scatter](diagrams/15_wild_boar_sunset_activity_scatter.svg)
+### 14. Wild Boar - Sunset Activity Scatter
+
+![Wild Boar Sunset Activity Scatter](diagrams/14_wild_boar_sunset_activity_scatter.svg)
 
 Scatter plot showing wild boar activity relative to sunset times throughout the year, with distribution histogram.
 
-### 16. Roe Deer - Sunrise Activity Scatter
+### 15. Roe Deer - Sunrise Activity Scatter
 
-![Roe Deer Sunrise Activity Scatter](diagrams/16_roe_deer_sunrise_activity_scatter.svg)
+![Roe Deer Sunrise Activity Scatter](diagrams/15_roe_deer_sunrise_activity_scatter.svg)
 
 Scatter plot showing roe deer activity relative to sunrise times throughout the year, with distribution histogram.
 
-### 17. Wild Boar - Sunrise Activity Scatter
+### 16. Wild Boar - Sunrise Activity Scatter
 
-![Wild Boar Sunrise Activity Scatter](diagrams/17_wild_boar_sunrise_activity_scatter.svg)
+![Wild Boar Sunrise Activity Scatter](diagrams/16_wild_boar_sunrise_activity_scatter.svg)
 
 Scatter plot showing wild boar activity relative to sunrise times throughout the year, with distribution histogram.
 
-### 18. Roe Deer - Sunset Activity Distribution
+### 17. Roe Deer - Sunset Activity Distribution
 
-![Roe Deer Sunset Activity Distribution](diagrams/18_roe_deer_sunset_activity_distribution.svg)
+![Roe Deer Sunset Activity Distribution](diagrams/17_roe_deer_sunset_activity_distribution.svg)
 
 Detailed distribution analysis of roe deer activity around sunset, showing activity peaks and patterns.
 
-### 19. Wild Boar - Sunset Activity Distribution
+### 18. Wild Boar - Sunset Activity Distribution
 
-![Wild Boar Sunset Activity Distribution](diagrams/19_wild_boar_sunset_activity_distribution.svg)
+![Wild Boar Sunset Activity Distribution](diagrams/18_wild_boar_sunset_activity_distribution.svg)
 
 Detailed distribution analysis of wild boar activity around sunset, showing activity peaks and patterns.
 
-### 20. Roe Deer - Monthly Sunset Patterns
+### 19. Roe Deer - Monthly Sunset Patterns
 
-![Roe Deer Monthly Sunset Patterns](diagrams/20_roe_deer_monthly_sunset_patterns.svg)
+![Roe Deer Monthly Sunset Patterns](diagrams/19_roe_deer_monthly_sunset_patterns.svg)
 
 Monthly variation in roe deer activity patterns relative to sunset, showing seasonal trends.
 
-### 21. Wild Boar - Monthly Sunset Patterns
+### 20. Wild Boar - Monthly Sunset Patterns
 
-![Wild Boar Monthly Sunset Patterns](diagrams/21_wild_boar_monthly_sunset_patterns.svg)
+![Wild Boar Monthly Sunset Patterns](diagrams/20_wild_boar_monthly_sunset_patterns.svg)
 
 Monthly variation in wild boar activity patterns relative to sunset, showing seasonal trends.
 
-### 22. Roe Deer - Daily and Yearly Activity Pattern
+### 21. Roe Deer - Daily and Yearly Activity Pattern
 
-![Roe Deer Daily Yearly Activity Pattern](diagrams/22_roe_deer_daily_yearly_activity_pattern.svg)
+![Roe Deer Daily Yearly Activity Pattern](diagrams/21_roe_deer_daily_yearly_activity_pattern.svg)
 
 Comprehensive heatmap showing roe deer activity across hour of day and month of year (last 12 months).
 
-### 23. Wild Boar - Daily and Yearly Activity Pattern
+### 22. Wild Boar - Daily and Yearly Activity Pattern
 
-![Wild Boar Daily Yearly Activity Pattern](diagrams/23_wild_boar_daily_yearly_activity_pattern.svg)
+![Wild Boar Daily Yearly Activity Pattern](diagrams/22_wild_boar_daily_yearly_activity_pattern.svg)
 
 Comprehensive heatmap showing wild boar activity across hour of day and month of year (last 12 months).
 

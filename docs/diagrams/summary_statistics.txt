@@ -1,8 +1,8 @@
 WILDLIFE CAMERA ACTIVITY ANALYSIS
 ======================================================================
 
-Total Images: 1859
-Images with Timestamps: 1859
+Total Images: 1872
+Images with Timestamps: 1872
 Unique Species: 14
 Unique Locations: 7
 Date Range: 2025-02-16 to 2025-12-25
@@ -14,10 +14,10 @@ Most Active Location: Sandweg
 
 SPECIES COUNTS:
 class
-roe deer      1336
+roe deer      1345
 wild boar      151
-fox             98
-human           98
+fox            101
+human           99
 hare            71
 badger          35
 jay             20
@@ -34,7 +34,7 @@ woodpecker       2
 LOCATION COUNTS:
 location_id
 Sandweg         436
-Sauenburg       353
+Sauenburg       366
 Heliossitz      351
 Kirschensitz    246
 Amphitheater    219
