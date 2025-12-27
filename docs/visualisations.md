@@ -2,6 +2,10 @@
 
 Wildlife activity patterns and analysis visualisations.
 
+```
+{% include_relative diagrams/summary_statistics.txt %}
+```
+
 ## Species Distribution
 
 ### 01. Species Distribution
