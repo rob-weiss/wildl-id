@@ -4,169 +4,157 @@ Wildlife activity patterns and analysis visualisations.
 
 ## Species Distribution
 
-### Species Distribution
+### 01. Species Distribution
 
 ![Species Distribution](diagrams/01_species_distribution.svg)
 
-Overall distribution of species detections across the study area.
+Overall distribution of species detections across the study area, shown in both bar chart and pie chart formats.
 
 ## Activity Patterns
 
-### Activity by Hour
+### 02. Activity by Hour
 
 ![Activity by Hour](diagrams/02_activity_by_hour.svg)
 
-Hourly activity patterns showing when wildlife is most active throughout the day.
+Hourly activity patterns showing when wildlife is most active throughout the day, with day/night indicators.
 
-### Species Activity Patterns
+### 03. Species Activity Patterns
 
 ![Species Activity Patterns](diagrams/03_species_activity_patterns.svg)
 
-Activity patterns broken down by individual species.
+Activity patterns broken down by individual species, showing hourly activity for top 8 species.
 
 ## Environmental Factors
 
-### Lighting Analysis
+### 04. Lighting Analysis
 
-![Lighting Analysis](diagrams/05_lighting_analysis.svg)
+![Lighting Analysis](diagrams/04_lighting_analysis.svg)
 
-Analysis of wildlife activity under different lighting conditions.
+Analysis of wildlife activity under different lighting conditions (bright vs dark), including species-specific day/night preferences.
 
-### Temperature Analysis
+### 05. Location Comparison
 
-![Temperature Analysis](diagrams/08_temperature_analysis.svg)
+![Location Comparison](diagrams/05_location_comparison.svg)
 
-Correlation between temperature and wildlife activity.
+Comparison of wildlife activity across different camera locations, showing species diversity at each site.
 
-### Temperature-Activity Relationships
+### 06. Baiting Effect Analysis
 
-![Temperature Activity Relationships](diagrams/08b_temperature_activity_relationships.svg)
+![Baiting Effect Analysis](diagrams/06_baiting_effect_analysis.svg)
 
-Comprehensive analysis of temperature-activity relationships including scatter plots, hourly patterns, species preferences, and monthly variations.
+Impact of baiting (human activity) on wildlife presence, showing timeline comparison and before/after analysis.
 
-### Roe Deer - Temperature Activity Analysis
+### 07. Temperature Analysis
 
-![Roe Deer Temperature Activity](diagrams/08c_roe_deer_temperature_activity.svg)
+![Temperature Analysis](diagrams/07_temperature_analysis.svg)
 
-Detailed temperature-activity relationship analysis for roe deer, including distribution patterns, hourly activity by temperature, and statistical correlations.
+Basic temperature analysis showing distribution of detections across temperature ranges.
 
-### Wild Boar - Temperature Activity Analysis
+### 08. Temperature-Activity Relationships
 
-![Wild Boar Temperature Activity](diagrams/08d_wild_boar_temperature_activity.svg)
+![Temperature Activity Relationships](diagrams/08_temperature_activity_relationships.svg)
 
-Detailed temperature-activity relationship analysis for wild boar, including distribution patterns, hourly activity by temperature, and statistical correlations.
+Comprehensive analysis of temperature-activity relationships including scatter plots, hourly patterns by temperature range, species temperature preferences, and monthly temperature distributions.
 
-## Location and Baiting Effects
+### 09. Roe Deer - Temperature Activity
 
-### Location Comparison
+![Roe Deer Temperature Activity](diagrams/09_roe_deer_temperature_activity.svg)
 
-![Location Comparison](diagrams/06_location_comparison.svg)
+Detailed temperature-activity relationship analysis for roe deer, including temperature vs time scatter, distribution patterns, hourly activity by temperature, monthly variations, and statistical summary.
 
-Comparison of wildlife activity across different locations.
+### 10. Wild Boar - Temperature Activity
 
-### Baiting Effect Analysis
+![Wild Boar Temperature Activity](diagrams/10_wild_boar_temperature_activity.svg)
 
-![Baiting Effect Analysis](diagrams/07_baiting_effect_analysis.svg)
-
-Impact of baiting on wildlife presence and behavior.
+Detailed temperature-activity relationship analysis for wild boar, including temperature vs time scatter, distribution patterns, hourly activity by temperature, monthly variations, and statistical summary.
 
 ## Activity Timelines
 
-### Overall Activity Timeline
+### 11. Overall Activity Timeline
 
-![Activity Timeline](diagrams/09_activity_timeline.svg)
+![Activity Timeline](diagrams/11_activity_timeline.svg)
 
-Timeline showing wildlife activity over the study period.
+Timeline showing total wildlife activity over the study period with daily counts.
 
-### Species Activity Timeline
+### 12. Species Activity Timeline
 
-![Species Activity Timeline](diagrams/09_species_activity_timeline.svg)
+![Species Activity Timeline](diagrams/12_species_activity_timeline.svg)
 
-Timeline of activity patterns for different species.
+Combined timeline showing activity patterns for multiple species over time.
 
-### Species Activity Timeline (Alternative)
+### 13. Individual Species Timelines
 
-![Species Activity Timeline Alt](diagrams/10_species_activity_timeline.svg)
+![Individual Species Timelines](diagrams/13_individual_species_timelines.svg)
 
-Alternative view of species activity timeline with different visualization approach.
+Separate timeline panels for each of the top species, showing individual activity patterns.
 
-### Individual Species Timelines
+## Crepuscular Activity Analysis
 
-![Individual Species Timelines](diagrams/11_individual_species_timelines.svg)
+### 14. Roe Deer - Sunset Activity Scatter
 
-Detailed timelines for individual species.
+![Roe Deer Sunset Activity Scatter](diagrams/14_roe_deer_sunset_activity_scatter.svg)
 
-## Sunset/Sunrise Activity Analysis
+Scatter plot showing roe deer activity relative to sunset times throughout the year, with distribution histogram.
 
-### Roe Deer - Sunset Activity Scatter
+### 15. Wild Boar - Sunset Activity Scatter
 
-![Roe Deer Sunset Activity Scatter](diagrams/11_roe_deer_sunset_activity_scatter.svg)
+![Wild Boar Sunset Activity Scatter](diagrams/15_wild_boar_sunset_activity_scatter.svg)
 
-Scatter plot showing roe deer activity relative to sunset times.
+Scatter plot showing wild boar activity relative to sunset times throughout the year, with distribution histogram.
 
-### Wild Boar - Sunset Activity Scatter
+### 16. Roe Deer - Sunrise Activity Scatter
 
-![Wild Boar Sunset Activity Scatter](diagrams/12_wild_boar_sunset_activity_scatter.svg)
+![Roe Deer Sunrise Activity Scatter](diagrams/16_roe_deer_sunrise_activity_scatter.svg)
 
-Scatter plot showing wild boar activity relative to sunset times.
+Scatter plot showing roe deer activity relative to sunrise times throughout the year, with distribution histogram.
 
-### Roe Deer - Sunrise Activity Scatter
+### 17. Wild Boar - Sunrise Activity Scatter
 
-![Roe Deer Sunrise Activity Scatter](diagrams/13_roe_deer_sunrise_activity_scatter.svg)
+![Wild Boar Sunrise Activity Scatter](diagrams/17_wild_boar_sunrise_activity_scatter.svg)
 
-Scatter plot showing roe deer activity relative to sunrise times.
+Scatter plot showing wild boar activity relative to sunrise times throughout the year, with distribution histogram.
 
-### Wild Boar - Sunrise Activity Scatter
+### 18. Roe Deer - Sunset Activity Distribution
 
-![Wild Boar Sunrise Activity Scatter](diagrams/14_wild_boar_sunrise_activity_scatter.svg)
+![Roe Deer Sunset Activity Distribution](diagrams/18_roe_deer_sunset_activity_distribution.svg)
 
-Scatter plot showing wild boar activity relative to sunrise times.
+Detailed distribution analysis of roe deer activity around sunset, showing activity peaks and patterns.
 
-### Roe Deer - Sunset Activity Distribution
+### 19. Wild Boar - Sunset Activity Distribution
 
-![Roe Deer Sunset Activity Distribution](diagrams/15_roe_deer_sunset_activity_distribution.svg)
+![Wild Boar Sunset Activity Distribution](diagrams/19_wild_boar_sunset_activity_distribution.svg)
 
-Distribution of roe deer activity around sunset.
+Detailed distribution analysis of wild boar activity around sunset, showing activity peaks and patterns.
 
-### Wild Boar - Sunset Activity Distribution
+### 20. Roe Deer - Monthly Sunset Patterns
 
-![Wild Boar Sunset Activity Distribution](diagrams/16_wild_boar_sunset_activity_distribution.svg)
+![Roe Deer Monthly Sunset Patterns](diagrams/20_roe_deer_monthly_sunset_patterns.svg)
 
-Distribution of wild boar activity around sunset.
+Monthly variation in roe deer activity patterns relative to sunset, showing seasonal trends.
 
-## Monthly Sunset Patterns
+### 21. Wild Boar - Monthly Sunset Patterns
 
-### Roe Deer - Monthly Sunset Patterns
+![Wild Boar Monthly Sunset Patterns](diagrams/21_wild_boar_monthly_sunset_patterns.svg)
 
-![Roe Deer Monthly Sunset Patterns](diagrams/17_roe_deer_monthly_sunset_patterns.svg)
+Monthly variation in wild boar activity patterns relative to sunset, showing seasonal trends.
 
-Monthly variation in roe deer activity patterns relative to sunset.
+### 22. Roe Deer - Daily and Yearly Activity Pattern
 
-### Wild Boar - Monthly Sunset Patterns
+![Roe Deer Daily Yearly Activity Pattern](diagrams/22_roe_deer_daily_yearly_activity_pattern.svg)
 
-![Wild Boar Monthly Sunset Patterns](diagrams/18_wild_boar_monthly_sunset_patterns.svg)
+Comprehensive heatmap showing roe deer activity across hour of day and month of year (last 12 months).
 
-Monthly variation in wild boar activity patterns relative to sunset.
+### 23. Wild Boar - Daily and Yearly Activity Pattern
 
-## Daily and Yearly Activity Patterns
+![Wild Boar Daily Yearly Activity Pattern](diagrams/23_wild_boar_daily_yearly_activity_pattern.svg)
 
-### Roe Deer - Daily and Yearly Activity Pattern
+Comprehensive heatmap showing wild boar activity across hour of day and month of year (last 12 months).
 
-![Roe Deer Daily Yearly Activity Pattern](diagrams/19_roe_deer_daily_yearly_activity_pattern.svg)
+### 24. Combined Daily and Yearly Activity Pattern
 
-Combined daily and yearly activity pattern for roe deer.
+![Combined Daily Yearly Activity Pattern](diagrams/24_combined_daily_yearly_activity_pattern.svg)
 
-### Wild Boar - Daily and Yearly Activity Pattern
-
-![Wild Boar Daily Yearly Activity Pattern](diagrams/20_wild_boar_daily_yearly_activity_pattern.svg)
-
-Combined daily and yearly activity pattern for wild boar.
-
-### Combined Daily and Yearly Activity Pattern
-
-![Combined Daily Yearly Activity Pattern](diagrams/21_combined_daily_yearly_activity_pattern.svg)
-
-Combined daily and yearly activity patterns across all species.
+Side-by-side comparison of daily and yearly activity patterns for both roe deer and wild boar.
 
 ---
 
