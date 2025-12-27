@@ -1370,141 +1370,14 @@ if len(df_valid) > 0:
             dpi=300,
             bbox_inches="tight",
         )
-# ============================================================================
-# 10. SPECIES ACTIVITY TIMELINE
-# ============================================================================
-print("\n" + "=" * 70)
-print("SPECIES ACTIVITY TIMELINE")
-print("=" * 70)
-
-if len(df_valid) > 0:
-    # Get top species (excluding 'none')
-    top_species = species_counts[species_counts.index != "none"].head(8).index.tolist()
-
-    if len(top_species) > 0:
-        fig, ax = plt.subplots(figsize=(16, 8))
-
-        # Prepare color palette
-        colors_species = sns.color_palette("husl", len(top_species))
-
-        # Plot each species over time
-        for idx, species in enumerate(top_species):
-            species_data = df_valid[df_valid["class"] == species]
-            daily_species_activity = (
-                species_data.groupby("date").size().reset_index(name="count")
-            )
-            daily_species_activity["date"] = pd.to_datetime(
-                daily_species_activity["date"]
-            )
-            daily_species_activity = daily_species_activity.sort_values("date")
-
-            ax.plot(
-                daily_species_activity["date"],
-                daily_species_activity["count"],
-                color=colors_species[idx],
-                linewidth=2,
-                marker="o",
-                markersize=3,
-                label=f"{species.capitalize()} (n={len(species_data)})",
-                alpha=0.8,
-            )
-
-        ax.set_title(
-            "Wildlife Activity Over Time by Species", fontsize=16, fontweight="bold"
-        )
-        ax.set_xlabel("Date", fontsize=12)
-        ax.set_ylabel("Number of Detections", fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc="best", framealpha=0.9)
-
-        # Format x-axis
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-        plt.xticks(rotation=45, ha="right")
-
-        plt.tight_layout()
         plt.savefig(
-            output_dir / "10_species_activity_timeline.png",
-            dpi=300,
-            bbox_inches="tight",
+            output_dir / "10_individual_species_timelines.svg", bbox_inches="tight"
         )
-        plt.savefig(
-            output_dir / "10_species_activity_timeline.svg", bbox_inches="tight"
-        )
-        print("✓ Saved: 10_species_activity_timeline.png + .svg")
-        plt.close()
-
-        # Also create individual timeline plots for each species
-        n_species = len(top_species)
-        n_cols = 2
-        n_rows = (n_species + 1) // 2
-
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows))
-        if n_rows == 1:
-            axes = axes.reshape(1, -1)
-        axes = axes.flatten()
-
-        for idx, species in enumerate(top_species):
-            species_data = df_valid[df_valid["class"] == species]
-            daily_species_activity = (
-                species_data.groupby("date").size().reset_index(name="count")
-            )
-            daily_species_activity["date"] = pd.to_datetime(
-                daily_species_activity["date"]
-            )
-            daily_species_activity = daily_species_activity.sort_values("date")
-
-            ax = axes[idx]
-            ax.plot(
-                daily_species_activity["date"],
-                daily_species_activity["count"],
-                color=colors_species[idx],
-                linewidth=2,
-                marker="o",
-                markersize=4,
-            )
-            ax.fill_between(
-                daily_species_activity["date"],
-                daily_species_activity["count"],
-                alpha=0.3,
-                color=colors_species[idx],
-            )
-
-            ax.set_title(
-                f"{species.capitalize()} Activity (n={len(species_data)})",
-                fontweight="bold",
-            )
-            ax.set_xlabel("Date", fontsize=10)
-            ax.set_ylabel("Detections", fontsize=10)
-            ax.grid(True, alpha=0.3)
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-            ax.tick_params(axis="x", rotation=45)
-
-        # Hide unused subplots
-        for idx in range(len(top_species), len(axes)):
-            axes[idx].set_visible(False)
-
-        plt.suptitle(
-            "Individual Species Activity Timelines",
-            fontsize=16,
-            fontweight="bold",
-            y=1.00,
-        )
-        plt.tight_layout()
-        plt.savefig(
-            output_dir / "11_individual_species_timelines.png",
-            dpi=300,
-            bbox_inches="tight",
-        )
-        plt.savefig(
-            output_dir / "11_individual_species_timelines.svg", bbox_inches="tight"
-        )
-        print("✓ Saved: 11_individual_species_timelines.png + .svg")
+        print("✓ Saved: 10_individual_species_timelines.png + .svg")
         plt.close()
 
 # ============================================================================
-# 12. SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
+# 11. SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
 # ============================================================================
 print("\n" + "=" * 70)
 print("SUNRISE/SUNSET ANALYSIS")
