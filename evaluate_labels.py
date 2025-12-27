@@ -40,9 +40,19 @@ output_dir = script_dir / "docs" / "diagrams"
 
 # Delete old visualizations directory and recreate it
 if output_dir.exists():
-    shutil.rmtree(output_dir)
-    print(f"Cleared old visualizations from {output_dir}")
-output_dir.mkdir(exist_ok=True)
+    print(f"Clearing old visualizations from {output_dir}")
+    try:
+        # Remove directory tree, ignoring errors for read-only files
+        shutil.rmtree(
+            output_dir,
+            ignore_errors=False,
+            onerror=lambda func, path, exc: (os.chmod(path, 0o777), func(path)),
+        )
+        print("✓ Cleared old visualizations")
+    except Exception as e:
+        print(f"⚠ Warning: Could not fully clear old visualizations: {e}")
+        # Try to continue anyway
+output_dir.mkdir(parents=True, exist_ok=True)
 
 # Location for sunrise/sunset calculations
 # Renningen, Baden-Württemberg, Germany
