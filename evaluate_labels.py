@@ -22,6 +22,7 @@ import os
 import shutil
 from pathlib import Path
 
+import matplotlib.cm as cm
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
@@ -600,7 +601,7 @@ if len(df_valid) > 0:
 
         # Add value labels on bars
         for i, (bar, val) in enumerate(zip(bars, averages)):
-            max_avg = float(max(averages)) if averages else 1.0
+            max_avg = float(np.max(averages)) if len(averages) > 0 else 1.0
             ax2.text(
                 bar.get_x() + bar.get_width() / 2,
                 val + max_avg * 0.02,
@@ -901,16 +902,16 @@ if len(df_temp) > 0:
 
         bp = ax5.boxplot(
             [df_temp[df_temp["month"] == m]["temperature_celsius"] for m in months],
-            tick_labels=[f"{m:02d}" for m in months],
+            labels=[f"{m:02d}" for m in months],
             patch_artist=True,
             showfliers=False,
         )
 
         # Color boxes by temperature gradient
-        coolwarm_cmap = plt.get_cmap("coolwarm")
+        coolwarm_cmap = cm.get_cmap("coolwarm")
         colors = coolwarm_cmap(np.linspace(0, 1, len(months)))
         for patch, color in zip(bp["boxes"], colors):
-            patch.set_facecolor(color)
+            patch.set_facecolor(color)  # type: ignore
             patch.set_alpha(0.7)
 
         ax5.set_xlabel("Month", fontsize=11)
@@ -1097,15 +1098,15 @@ if len(df_temp) > 0:
 
                 bp = ax5.boxplot(
                     monthly_data,
-                    tick_labels=[f"{m:02d}" for m in months],
+                    labels=[f"{m:02d}" for m in months],
                     patch_artist=True,
                     showfliers=False,
                 )
 
-                coolwarm_cmap = plt.get_cmap("coolwarm")
+                coolwarm_cmap = cm.get_cmap("coolwarm")
                 colors = coolwarm_cmap(np.linspace(0, 1, len(months)))
                 for patch, color in zip(bp["boxes"], colors):
-                    patch.set_facecolor(color)
+                    patch.set_facecolor(color)  # type: ignore
                     patch.set_alpha(0.7)
 
                 ax5.set_xlabel("Month", fontsize=10)
@@ -1238,7 +1239,10 @@ if len(df_valid) > 0:
         markersize=4,
     )
     ax.fill_between(
-        daily_activity["date"], daily_activity["count"], alpha=0.3, color="steelblue"
+        daily_activity["date"],
+        daily_activity["count"],
+        alpha=0.3,
+        color="steelblue",  # type: ignore
     )
 
     ax.set_title("Wildlife Activity Over Time", fontsize=16, fontweight="bold")
@@ -1275,7 +1279,10 @@ if len(df_valid) > 0:
         markersize=4,
     )
     ax.fill_between(
-        daily_activity["date"], daily_activity["count"], alpha=0.3, color="steelblue"
+        daily_activity["date"],
+        daily_activity["count"],
+        alpha=0.3,
+        color="steelblue",  # type: ignore
     )
 
     ax.set_title("Wildlife Activity Over Time", fontsize=16, fontweight="bold")
@@ -1400,7 +1407,7 @@ if len(df_valid) > 0:
                 daily_species_activity["date"],
                 daily_species_activity["count"],
                 alpha=0.3,
-                color=colors_species[idx],
+                color=colors_species[idx],  # type: ignore
             )
 
             ax.set_title(
@@ -2106,7 +2113,7 @@ if len(df_valid) > 0:
                 sunset_plus_0_5 = sunset_array + 0.5
 
                 # Shade 0.5 hours before sunrise
-                ax_main.fill_betweenx(
+                ax_main.fill_betweenx(  # type: ignore
                     dates_array,
                     sunrise_minus_0_5,
                     sunrise_array,
@@ -2117,7 +2124,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 1.5 hours after sunrise
-                ax_main.fill_betweenx(
+                ax_main.fill_betweenx(  # type: ignore
                     dates_array,
                     sunrise_array,
                     sunrise_plus_1_5,
@@ -2128,7 +2135,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 1.5 hours before sunset
-                ax_main.fill_betweenx(
+                ax_main.fill_betweenx(  # type: ignore
                     dates_array,
                     sunset_minus_1_5,
                     sunset_array,
@@ -2139,7 +2146,7 @@ if len(df_valid) > 0:
                 )
 
                 # Shade 0.5 hours after sunset
-                ax_main.fill_betweenx(
+                ax_main.fill_betweenx(  # type: ignore
                     dates_array,
                     sunset_array,
                     sunset_plus_0_5,
@@ -2368,7 +2375,7 @@ if len(df_valid) > 0:
                     sunset_plus_0_5 = sunset_array + 0.5
 
                     # Shade 0.5 hours before sunrise
-                    ax_main.fill_betweenx(
+                    ax_main.fill_betweenx(  # type: ignore
                         dates_array,
                         sunrise_minus_0_5,
                         sunrise_array,
@@ -2378,7 +2385,7 @@ if len(df_valid) > 0:
                         zorder=5,
                     )
                     # Shade 1.5 hours after sunrise
-                    ax_main.fill_betweenx(
+                    ax_main.fill_betweenx(  # type: ignore
                         dates_array,
                         sunrise_array,
                         sunrise_plus_1_5,
@@ -2388,7 +2395,7 @@ if len(df_valid) > 0:
                         zorder=5,
                     )
                     # Shade 1.5 hours before sunset
-                    ax_main.fill_betweenx(
+                    ax_main.fill_betweenx(  # type: ignore
                         dates_array,
                         sunset_minus_1_5,
                         sunset_array,
@@ -2398,7 +2405,7 @@ if len(df_valid) > 0:
                         zorder=5,
                     )
                     # Shade 0.5 hours after sunset
-                    ax_main.fill_betweenx(
+                    ax_main.fill_betweenx(  # type: ignore
                         dates_array,
                         sunset_array,
                         sunset_plus_0_5,
