@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Process images from Downloads subfolders.
+Process images from subfolders containing DCIM directories.
 Copies originals to DCIM/sendlist and saves downsampled versions to DCIM/sendlist_small.
 """
 
@@ -11,24 +11,24 @@ from pathlib import Path
 from PIL import Image
 
 
-def process_images_in_downloads(downloads_dir, target_width=1920):
+def process_images(base_dir, target_width=1920):
     """
-    Process all images in Downloads subfolders.
+    Process all images in subfolders containing DCIM directories.
 
-    For each subfolder in downloads_dir:
+    For each subfolder in base_dir:
     - Finds all images in <subfolder>/DCIM/*
     - Copies originals to <subfolder>/DCIM/sendlist
     - Saves downsampled versions to <subfolder>/DCIM/sendlist_small
     - Uses lowercase filenames for output
 
     Args:
-        downloads_dir: Path to Downloads directory
+        base_dir: Path to directory containing subfolders with DCIM directories
         target_width: Target width in pixels (height calculated to maintain aspect ratio)
     """
-    downloads_path = Path(downloads_dir)
+    base_path = Path(base_dir)
 
-    if not downloads_path.exists():
-        print(f"Error: {downloads_dir} does not exist")
+    if not base_path.exists():
+        print(f"Error: {base_dir} does not exist")
         return
 
     # Supported image extensions
@@ -36,14 +36,14 @@ def process_images_in_downloads(downloads_dir, target_width=1920):
 
     # Find all subfolders with DCIM directories
     dcim_folders = []
-    for subfolder in downloads_path.iterdir():
+    for subfolder in base_path.iterdir():
         if subfolder.is_dir():
             dcim_path = subfolder / "DCIM"
             if dcim_path.exists() and dcim_path.is_dir():
                 dcim_folders.append((subfolder.name, dcim_path))
 
     if not dcim_folders:
-        print(f"No DCIM folders found in {downloads_dir}")
+        print(f"No DCIM folders found in {base_dir}")
         return
 
     print(f"Found {len(dcim_folders)} DCIM folder(s)")
@@ -125,6 +125,25 @@ def process_images_in_downloads(downloads_dir, target_width=1920):
 
 
 if __name__ == "__main__":
-    downloads_dir = "/Users/wri2lr/Downloads"
+    import argparse
 
-    process_images_in_downloads(downloads_dir)
+    parser = argparse.ArgumentParser(
+        description="Process images from subfolders with DCIM directories"
+    )
+    parser.add_argument(
+        "folder",
+        nargs="?",
+        default=str(Path.home() / "Downloads"),
+        help="Path to folder containing subfolders with DCIM directories",
+    )
+    parser.add_argument(
+        "-w",
+        "--width",
+        type=int,
+        default=1920,
+        help="Target width in pixels (default: 1920)",
+    )
+
+    args = parser.parse_args()
+
+    process_images(args.folder, args.width)
