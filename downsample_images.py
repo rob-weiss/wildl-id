@@ -117,9 +117,18 @@ def process_images(base_dir, target_width=1920):
                             (target_width, target_height), Image.Resampling.LANCZOS
                         )
 
-                    # Save downsampled version with lower quality for smaller file size
+                    # Save downsampled version with optimizations:
+                    # - Strip EXIF metadata (exif=None)
+                    # - Progressive JPEG for better compression
+                    # - Quality 80 (good balance)
                     downsampled_output = sendlist_small_dir / output_filename
-                    img.save(downsampled_output, quality=85, optimize=True)
+                    img.save(
+                        downsampled_output,
+                        quality=80,
+                        optimize=True,
+                        progressive=True,
+                        exif=b"",
+                    )
 
                 total_processed += 1
 
