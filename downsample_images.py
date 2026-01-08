@@ -100,14 +100,15 @@ def process_images(base_dir, target_width=1920):
                     aspect_ratio = img.height / img.width
                     target_height = int(target_width * aspect_ratio)
 
-                    # Resize image
-                    img = img.resize(
-                        (target_width, target_height), Image.Resampling.LANCZOS
-                    )
+                    # Only resize if image is larger than target
+                    if img.width > target_width:
+                        img = img.resize(
+                            (target_width, target_height), Image.Resampling.LANCZOS
+                        )
 
-                    # Save downsampled version
+                    # Save downsampled version with lower quality for smaller file size
                     downsampled_output = sendlist_small_dir / output_filename
-                    img.save(downsampled_output, quality=95, optimize=True)
+                    img.save(downsampled_output, quality=85, optimize=True)
 
                 print(
                     f"  [{idx}/{len(image_files)}] Processed: {image_file.name} -> {output_filename}"
