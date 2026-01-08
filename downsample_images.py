@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 from PIL import Image
+from tqdm import tqdm
 
 
 def process_images(base_dir, target_width=1920):
@@ -86,9 +87,12 @@ def process_images(base_dir, target_width=1920):
             print(f"  No images found in {dcim_path}")
             continue
 
+        # Sort images by filename
+        image_files.sort(key=lambda x: x.name)
+
         print(f"  Found {len(image_files)} images")
 
-        for idx, image_file in enumerate(image_files, 1):
+        for image_file in tqdm(image_files, desc=f"  {folder_name}", unit="img"):
             # Use lowercase filename for output
             output_filename = image_file.name.lower()
 
@@ -117,13 +121,12 @@ def process_images(base_dir, target_width=1920):
                     downsampled_output = sendlist_small_dir / output_filename
                     img.save(downsampled_output, quality=85, optimize=True)
 
-                print(
-                    f"  [{idx}/{len(image_files)}] Processed: {image_file.name} -> {output_filename}"
-                )
                 total_processed += 1
 
             except Exception as e:
-                print(f"  Error processing {image_file.name}: {e}", file=sys.stderr)
+                tqdm.write(
+                    f"  Error processing {image_file.name}: {e}", file=sys.stderr
+                )
 
         print(f"  Completed {folder_name}: {len(image_files)} images")
 
