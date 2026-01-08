@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib.patches import Rectangle
 from ollama import Client
+from ollama._types import ResponseError
 from tqdm import tqdm
 
 model = "qwen3-vl:235b-a22b-thinking"
@@ -206,15 +207,20 @@ def process_images():
         label_save_path = images_output_dir / f"{location_id}_{image_file}"
         if (location_id, image_file) in processed_images and label_save_path.exists():
             continue
-        with image_path.open("rb") as img_file:
-            image_bytes = img_file.read()
-            img_base64 = base64.b64encode(image_bytes).decode("utf-8")
 
-        response = client.chat(
-            model=model,
-            messages=[{"role": "user", "content": prompt, "images": [img_base64]}],
-            options={"seed": 42, "temperature": 0},
-        )
+        try:
+            with image_path.open("rb") as img_file:
+                image_bytes = img_file.read()
+                img_base64 = base64.b64encode(image_bytes).decode("utf-8")
+
+            response = client.chat(
+                model=model,
+                messages=[{"role": "user", "content": prompt, "images": [img_base64]}],
+                options={"seed": 42, "temperature": 0},
+            )
+        except ResponseError as e:
+            print(f"\nSkipping {location_id}/{image_file}: {e}")
+            continue
 
         img_class = None
         box = None
