@@ -133,19 +133,19 @@ Comprehensive heatmap showing wild boar activity across hour of day and month of
 
 ### 16. Roe Deer - Solunar Analysis
 
-![Roe Deer Solunar Analysis](diagrams/17_roe_deer_solunar_analysis.svg)
+![Roe Deer Solunar Analysis](diagrams/18_roe_deer_solunar_analysis.svg)
 
 Comprehensive solunar period analysis for roe deer, including activity distribution by moon phase, moon illumination, hourly activity heatmap by moon phase, moon position patterns, and statistical correlations with lunar cycles.
 
 ### 17. Wild Boar - Solunar Analysis
 
-![Wild Boar Solunar Analysis](diagrams/18_wild_boar_solunar_analysis.svg)
+![Wild Boar Solunar Analysis](diagrams/19_wild_boar_solunar_analysis.svg)
 
 Comprehensive solunar period analysis for wild boar, including activity distribution by moon phase, moon illumination, hourly activity heatmap by moon phase, moon position patterns, and statistical correlations with lunar cycles.
 
 ### 18. Solunar Comparison
 
-![Solunar Comparison](diagrams/19_solunar_comparison.svg)
+![Solunar Comparison](diagrams/20_solunar_comparison.svg)
 
 Direct comparison of roe deer and wild boar activity patterns relative to moon illumination and moon phases, showing potential differences in lunar sensitivity between species.
 
