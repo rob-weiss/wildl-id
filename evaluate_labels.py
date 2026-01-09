@@ -661,6 +661,7 @@ if len(df_valid) > 0:
 
         try:
             import warnings
+
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 fig.tight_layout()
@@ -954,6 +955,7 @@ Temp-Hour Correlation:
 
             try:
                 import warnings
+
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
                     fig.tight_layout(rect=[0, 0, 1, 0.99])
