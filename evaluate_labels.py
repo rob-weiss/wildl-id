@@ -934,7 +934,10 @@ Temp-Hour Correlation:
                 y=0.998,
             )
 
-            fig.tight_layout(rect=[0, 0, 1, 0.99])
+            try:
+                fig.tight_layout(rect=[0, 0, 1, 0.99])
+            except Exception:
+                pass
             filename = species.lower().replace(" ", "_")
             plt.savefig(
                 output_dir / f"{plot_num:02d}_{filename}_temperature_activity.svg",
@@ -1106,7 +1109,10 @@ if len(df_valid) > 0:
             fontweight="bold",
             y=1.00,
         )
-        fig.tight_layout(rect=[0, 0, 1, 0.98])
+        try:
+            fig.tight_layout(rect=[0, 0, 1, 0.98])
+        except Exception:
+            pass
         plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_individual_species_timelines.svg",
@@ -2033,7 +2039,10 @@ if len(df_valid) > 0:
             fontweight="bold",
             y=0.995,
         )
-        fig.tight_layout(rect=[0, 0, 1, 0.98])
+        try:
+            fig.tight_layout(rect=[0, 0, 1, 0.98])
+        except Exception:
+            pass
         plt.savefig(
             output_dir / f"{plot_num:02d}_solunar_comparison.svg", bbox_inches="tight"
         )
