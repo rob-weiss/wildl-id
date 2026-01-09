@@ -22,12 +22,14 @@ import os
 import shutil
 from pathlib import Path
 
+import ephem
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 from astral import LocationInfo
+from astral.moon import phase
 from astral.sun import sun
 
 # Configuration
@@ -1905,6 +1907,502 @@ if len(df_valid) > 0:
         print("\nNo valid sunrise/sunset data available for analysis")
 else:
     print("\nNo valid timestamp data for sunrise/sunset analysis")
+
+# ============================================================================
+# SOLUNAR ANALYSIS FOR ROE DEER AND WILD BOAR
+# ============================================================================
+print("\n" + "=" * 70)
+print("SOLUNAR PERIOD ANALYSIS")
+print("=" * 70)
+
+if len(df_valid) > 0:
+    print("\nCalculating moon phases and solunar periods...")
+
+    # Set up observer location
+    observer = ephem.Observer()
+    observer.lat = str(LATITUDE)
+    observer.lon = str(LONGITUDE)
+    observer.elevation = 0
+
+    def get_moon_data(timestamp):
+        """Calculate moon phase, illumination, and position for a given timestamp."""
+        try:
+            observer.date = timestamp
+            moon = ephem.Moon(observer)
+
+            # Moon illumination (0-100%)
+            illumination = moon.phase
+
+            # Moon phase (0-28 day cycle, 0=new, 14=full)
+            # Using moon_phase from astral (returns radians, 0=new, π=full)
+            phase_radians = phase(timestamp.date())
+            phase_days = (phase_radians / (2 * np.pi)) * 29.53  # Synodic month
+
+            # Moon altitude (degrees above horizon)
+            altitude = float(moon.alt) * 180 / np.pi
+
+            # Classify moon phase
+            if phase_days < 3.69 or phase_days > 25.84:
+                phase_name = "New Moon"
+            elif 3.69 <= phase_days < 7.38:
+                phase_name = "Waxing Crescent"
+            elif 7.38 <= phase_days < 11.07:
+                phase_name = "First Quarter"
+            elif 11.07 <= phase_days < 14.77:
+                phase_name = "Waxing Gibbous"
+            elif 14.77 <= phase_days < 18.46:
+                phase_name = "Full Moon"
+            elif 18.46 <= phase_days < 22.15:
+                phase_name = "Waning Gibbous"
+            elif 22.15 <= phase_days < 25.84:
+                phase_name = "Last Quarter"
+            else:
+                phase_name = "Waning Crescent"
+
+            # Calculate moonrise and moonset
+            try:
+                observer.date = timestamp.date()
+                moonrise = observer.next_rising(moon).datetime()
+                moonset = observer.next_setting(moon).datetime()
+            except (ephem.AlwaysUpError, ephem.NeverUpError):
+                moonrise = None
+                moonset = None
+
+            return {
+                "illumination": illumination,
+                "phase_days": phase_days,
+                "phase_name": phase_name,
+                "altitude": altitude,
+                "moonrise": moonrise,
+                "moonset": moonset,
+            }
+        except Exception:
+            return {
+                "illumination": np.nan,
+                "phase_days": np.nan,
+                "phase_name": "Unknown",
+                "altitude": np.nan,
+                "moonrise": None,
+                "moonset": None,
+            }
+
+    # Add moon data to dataframe
+    print("Processing moon data for each observation...")
+    moon_data = df_valid["timestamp"].apply(get_moon_data)
+    df_valid["moon_illumination"] = moon_data.apply(lambda x: x["illumination"])
+    df_valid["moon_phase_days"] = moon_data.apply(lambda x: x["phase_days"])
+    df_valid["moon_phase_name"] = moon_data.apply(lambda x: x["phase_name"])
+    df_valid["moon_altitude"] = moon_data.apply(lambda x: x["altitude"])
+
+    # Filter for roe deer and wild boar
+    target_species = ["roe deer", "wild boar"]
+    df_solunar = df_valid[df_valid["class"].isin(target_species)].copy()
+
+    print(f"\nAnalyzing solunar correlations for {len(df_solunar)} observations")
+    print(f"  Roe deer: {len(df_solunar[df_solunar['class'] == 'roe deer'])}")
+    print(f"  Wild boar: {len(df_solunar[df_solunar['class'] == 'wild boar'])}")
+
+    if len(df_solunar) > 0:
+        # Create comprehensive solunar visualization for each species
+        for species in target_species:
+            species_data = df_solunar[df_solunar["class"] == species].copy()
+
+            if len(species_data) < 10:
+                print(f"\nInsufficient data for {species} solunar analysis")
+                continue
+
+            plot_num += 1
+            fig = plt.figure(figsize=(18, 12))
+            gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
+
+            # 1. Activity by Moon Phase (pie chart)
+            ax1 = fig.add_subplot(gs[0, 0])
+            phase_counts = species_data["moon_phase_name"].value_counts()
+            phase_order = [
+                "New Moon",
+                "Waxing Crescent",
+                "First Quarter",
+                "Waxing Gibbous",
+                "Full Moon",
+                "Waning Gibbous",
+                "Last Quarter",
+                "Waning Crescent",
+            ]
+            phase_counts = phase_counts.reindex(
+                [p for p in phase_order if p in phase_counts.index]
+            )
+
+            colors_phase = plt.cm.twilight(np.linspace(0, 1, len(phase_counts)))
+            ax1.pie(
+                phase_counts.values,
+                labels=phase_counts.index,
+                autopct="%1.1f%%",
+                colors=colors_phase,
+                startangle=90,
+            )
+            ax1.set_title(
+                f"Activity Distribution by Moon Phase\n(n={len(species_data)})",
+                fontsize=11,
+                fontweight="bold",
+            )
+
+            # 2. Activity by Moon Illumination
+            ax2 = fig.add_subplot(gs[0, 1])
+            illumination_bins = [0, 25, 50, 75, 100]
+            species_data["illumination_category"] = pd.cut(
+                species_data["moon_illumination"],
+                bins=illumination_bins,
+                labels=["0-25%", "25-50%", "50-75%", "75-100%"],
+            )
+            illumination_counts = (
+                species_data["illumination_category"].value_counts().sort_index()
+            )
+
+            bars = ax2.bar(
+                range(len(illumination_counts)),
+                illumination_counts.values,
+                color=plt.cm.Blues(np.linspace(0.3, 0.9, len(illumination_counts))),
+                edgecolor="black",
+                linewidth=1.5,
+            )
+            ax2.set_xticks(range(len(illumination_counts)))
+            ax2.set_xticklabels(illumination_counts.index, rotation=0)
+            ax2.set_xlabel("Moon Illumination", fontsize=10)
+            ax2.set_ylabel("Number of Detections", fontsize=10)
+            ax2.set_title(
+                "Activity by Moon Illumination", fontsize=11, fontweight="bold"
+            )
+            ax2.grid(axis="y", alpha=0.3)
+
+            # Add value labels
+            for bar in bars:
+                height = bar.get_height()
+                ax2.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    height,
+                    f"{int(height)}",
+                    ha="center",
+                    va="bottom",
+                    fontweight="bold",
+                )
+
+            # 3. Hourly Activity by Moon Phase
+            ax3 = fig.add_subplot(gs[0, 2])
+            phase_hour_pivot = pd.crosstab(
+                species_data["hour"], species_data["moon_phase_name"]
+            )
+            phase_hour_pivot = phase_hour_pivot.reindex(
+                columns=[p for p in phase_order if p in phase_hour_pivot.columns]
+            )
+
+            im = ax3.imshow(
+                phase_hour_pivot.T.values,
+                aspect="auto",
+                cmap="YlOrRd",
+                interpolation="nearest",
+            )
+            ax3.set_yticks(range(len(phase_hour_pivot.columns)))
+            ax3.set_yticklabels(phase_hour_pivot.columns, fontsize=8)
+            ax3.set_xticks(range(0, 24, 4))
+            ax3.set_xticklabels(range(0, 24, 4))
+            ax3.set_xlabel("Hour of Day", fontsize=10)
+            ax3.set_ylabel("Moon Phase", fontsize=10)
+            ax3.set_title(
+                "Activity Heatmap: Hour vs Moon Phase", fontsize=11, fontweight="bold"
+            )
+            plt.colorbar(im, ax=ax3, label="Detections")
+
+            # 4. Moon Illumination vs Hour Scatter
+            ax4 = fig.add_subplot(gs[1, 0])
+            scatter = ax4.scatter(
+                species_data["moon_illumination"],
+                species_data["hour"],
+                c=species_data["hour"],
+                cmap="twilight",
+                alpha=0.5,
+                s=30,
+                edgecolors="black",
+                linewidth=0.5,
+            )
+            ax4.set_xlabel("Moon Illumination (%)", fontsize=10)
+            ax4.set_ylabel("Hour of Day", fontsize=10)
+            ax4.set_title(
+                "Moon Illumination vs Time of Day", fontsize=11, fontweight="bold"
+            )
+            ax4.grid(True, alpha=0.3)
+            ax4.set_yticks(range(0, 24, 4))
+
+            # 5. Moon Phase Timeline
+            ax5 = fig.add_subplot(gs[1, 1])
+            species_data_sorted = species_data.sort_values("timestamp")
+            dates_numeric = mdates.date2num(species_data_sorted["timestamp"])
+            ax5.scatter(
+                dates_numeric,
+                species_data_sorted["moon_phase_days"],
+                c=species_data_sorted["moon_illumination"],
+                cmap="Blues",
+                alpha=0.6,
+                s=20,
+                edgecolors="black",
+                linewidth=0.3,
+            )
+            ax5.axhline(y=0, color="black", linestyle="--", alpha=0.3, label="New Moon")
+            ax5.axhline(
+                y=14.77, color="gold", linestyle="--", alpha=0.5, label="Full Moon"
+            )
+            ax5.set_xlabel("Date", fontsize=10)
+            ax5.set_ylabel("Moon Phase (days in cycle)", fontsize=10)
+            ax5.set_title("Moon Phase Over Time", fontsize=11, fontweight="bold")
+            ax5.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m"))
+            ax5.xaxis.set_major_locator(mdates.AutoDateLocator())
+            plt.setp(ax5.xaxis.get_majorticklabels(), rotation=45, ha="right")
+            ax5.legend(loc="upper right", fontsize=8)
+            ax5.grid(True, alpha=0.3)
+
+            # 6. Moon Altitude Distribution
+            ax6 = fig.add_subplot(gs[1, 2])
+            altitude_bins = np.arange(-90, 91, 15)
+            ax6.hist(
+                species_data["moon_altitude"].dropna(),
+                bins=altitude_bins,
+                color="skyblue",
+                edgecolor="black",
+                alpha=0.7,
+            )
+            ax6.axvline(x=0, color="red", linestyle="--", linewidth=2, label="Horizon")
+            ax6.set_xlabel("Moon Altitude (degrees)", fontsize=10)
+            ax6.set_ylabel("Number of Detections", fontsize=10)
+            ax6.set_title("Activity by Moon Altitude", fontsize=11, fontweight="bold")
+            ax6.legend()
+            ax6.grid(axis="y", alpha=0.3)
+
+            # 7. Statistical Summary
+            ax7 = fig.add_subplot(gs[2, :])
+            ax7.axis("off")
+
+            # Calculate statistics
+            stats_text = f"SOLUNAR CORRELATION STATISTICS - {species.upper()}\n"
+            stats_text += "=" * 80 + "\n\n"
+
+            # Activity by moon phase
+            stats_text += "Activity by Moon Phase:\n"
+            for phase in phase_counts.index:
+                count = phase_counts[phase]
+                pct = (count / len(species_data)) * 100
+                stats_text += f"  {phase:.<25} {count:>5} detections ({pct:>5.1f}%)\n"
+
+            stats_text += "\n"
+
+            # Activity by illumination
+            new_moon_activity = len(
+                species_data[species_data["moon_illumination"] <= 25]
+            )
+            full_moon_activity = len(
+                species_data[species_data["moon_illumination"] >= 75]
+            )
+            stats_text += f"Dark Moon Activity (0-25% illumination): {new_moon_activity} ({100 * new_moon_activity / len(species_data):.1f}%)\n"
+            stats_text += f"Bright Moon Activity (75-100% illumination): {full_moon_activity} ({100 * full_moon_activity / len(species_data):.1f}%)\n"
+
+            stats_text += "\n"
+
+            # Moon position
+            above_horizon = len(species_data[species_data["moon_altitude"] > 0])
+            below_horizon = len(species_data[species_data["moon_altitude"] <= 0])
+            stats_text += f"Activity when Moon Above Horizon: {above_horizon} ({100 * above_horizon / len(species_data):.1f}%)\n"
+            stats_text += f"Activity when Moon Below Horizon: {below_horizon} ({100 * below_horizon / len(species_data):.1f}%)\n"
+
+            stats_text += "\n"
+
+            # Averages
+            stats_text += f"Average Moon Illumination: {species_data['moon_illumination'].mean():.1f}%\n"
+            stats_text += (
+                f"Average Moon Altitude: {species_data['moon_altitude'].mean():.1f}°\n"
+            )
+
+            # Correlation with hour
+            if len(species_data) > 2:
+                corr_illum_hour = (
+                    species_data[["moon_illumination", "hour"]].corr().iloc[0, 1]
+                )
+                stats_text += (
+                    f"Correlation (Moon Illumination vs Hour): {corr_illum_hour:.3f}\n"
+                )
+
+            ax7.text(
+                0.05,
+                0.95,
+                stats_text,
+                transform=ax7.transAxes,
+                fontsize=9,
+                verticalalignment="top",
+                fontfamily="monospace",
+                bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
+            )
+
+            plt.suptitle(
+                f"{species.title()} Activity and Solunar Periods",
+                fontsize=16,
+                fontweight="bold",
+                y=0.995,
+            )
+
+            plt.tight_layout()
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_solunar_analysis.png",
+                dpi=300,
+                bbox_inches="tight",
+            )
+            plt.savefig(
+                output_dir
+                / f"{plot_num:02d}_{species.replace(' ', '_')}_solunar_analysis.svg",
+                bbox_inches="tight",
+            )
+            print(
+                f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_solunar_analysis.png + .svg"
+            )
+            plt.close()
+
+        # Create a combined comparison plot
+        plot_num += 1
+        fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+        for idx, species in enumerate(target_species):
+            species_data = df_solunar[df_solunar["class"] == species].copy()
+
+            if len(species_data) < 10:
+                continue
+
+            # Moon illumination distribution
+            ax = axes[idx, 0]
+            ax.hist(
+                species_data["moon_illumination"],
+                bins=20,
+                color="steelblue",
+                edgecolor="black",
+                alpha=0.7,
+            )
+            ax.axvline(
+                x=species_data["moon_illumination"].mean(),
+                color="red",
+                linestyle="--",
+                linewidth=2,
+                label=f"Mean: {species_data['moon_illumination'].mean():.1f}%",
+            )
+            ax.set_xlabel("Moon Illumination (%)", fontsize=11)
+            ax.set_ylabel("Number of Detections", fontsize=11)
+            ax.set_title(
+                f"{species.title()} - Moon Illumination Distribution",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax.legend()
+            ax.grid(axis="y", alpha=0.3)
+
+            # Activity by moon phase
+            ax = axes[idx, 1]
+            phase_counts = species_data["moon_phase_name"].value_counts()
+            phase_order = [
+                "New Moon",
+                "Waxing Crescent",
+                "First Quarter",
+                "Waxing Gibbous",
+                "Full Moon",
+                "Waning Gibbous",
+                "Last Quarter",
+                "Waning Crescent",
+            ]
+            phase_counts = phase_counts.reindex(
+                [p for p in phase_order if p in phase_counts.index]
+            )
+
+            bars = ax.bar(
+                range(len(phase_counts)),
+                phase_counts.values,
+                color=plt.cm.twilight(np.linspace(0, 1, len(phase_counts))),
+                edgecolor="black",
+                linewidth=1.5,
+            )
+            ax.set_xticks(range(len(phase_counts)))
+            ax.set_xticklabels(phase_counts.index, rotation=45, ha="right", fontsize=9)
+            ax.set_ylabel("Number of Detections", fontsize=11)
+            ax.set_title(
+                f"{species.title()} - Activity by Moon Phase",
+                fontsize=12,
+                fontweight="bold",
+            )
+            ax.grid(axis="y", alpha=0.3)
+
+            # Add value labels
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    height,
+                    f"{int(height)}",
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    fontweight="bold",
+                )
+
+        plt.suptitle(
+            "Solunar Period Comparison: Roe Deer vs Wild Boar",
+            fontsize=16,
+            fontweight="bold",
+            y=0.995,
+        )
+        plt.tight_layout()
+        plt.savefig(
+            output_dir / f"{plot_num:02d}_solunar_comparison.png",
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.savefig(
+            output_dir / f"{plot_num:02d}_solunar_comparison.svg", bbox_inches="tight"
+        )
+        print(f"✓ Saved: {plot_num:02d}_solunar_comparison.png + .svg")
+        plt.close()
+
+        # Print summary statistics
+        print("\n" + "=" * 70)
+        print("SOLUNAR CORRELATION SUMMARY")
+        print("=" * 70)
+        for species in target_species:
+            species_data = df_solunar[df_solunar["class"] == species].copy()
+            if len(species_data) > 0:
+                print(f"\n{species.upper()}:")
+                print(f"  Total detections: {len(species_data)}")
+                print(
+                    f"  Mean moon illumination: {species_data['moon_illumination'].mean():.1f}%"
+                )
+                print(
+                    f"  Most active moon phase: {species_data['moon_phase_name'].mode().values[0] if len(species_data['moon_phase_name'].mode()) > 0 else 'N/A'}"
+                )
+
+                new_moon_pct = (
+                    100
+                    * len(species_data[species_data["moon_illumination"] <= 25])
+                    / len(species_data)
+                )
+                full_moon_pct = (
+                    100
+                    * len(species_data[species_data["moon_illumination"] >= 75])
+                    / len(species_data)
+                )
+                print(f"  Activity during dark moon (0-25%): {new_moon_pct:.1f}%")
+                print(f"  Activity during bright moon (75-100%): {full_moon_pct:.1f}%")
+
+                above_horizon_pct = (
+                    100
+                    * len(species_data[species_data["moon_altitude"] > 0])
+                    / len(species_data)
+                )
+                print(f"  Activity when moon above horizon: {above_horizon_pct:.1f}%")
+    else:
+        print("\nNo data available for roe deer or wild boar")
+else:
+    print("\nNo valid timestamp data for solunar analysis")
 
 # ============================================================================
 # SUMMARY STATISTICS
