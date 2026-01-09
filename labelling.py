@@ -65,10 +65,10 @@ prompt = (
     "There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
     "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
     "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
-    "There is a battery symbol in on the left hand side of the temperature value. Inside the symbol there is a percentage value or up to four bars indicating the remaining battery level of the camera.\n"
+    "There is a battery symbol on the left hand side of the temperature value. Inside the symbol there is either a percentage value or up to four bars indicating the remaining battery level of the camera.\n"
     "If you can read the battery percentage value or count the bars, add it as an additional key 'battery_level' with value in percent (0-100).\n"
     "That is, if there are four bars, assume 100%, three bars 75%, two bars 50%, one bar 25%, and no bars 0%.\n"
-    "Respond only with the JSON object, nothing else."
+    "Respond only with the JSON object, nothing else.\n"
 )
 
 # Collect results in a list
@@ -183,6 +183,10 @@ def process_images():
     processed_images = set()
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path)
+        # Add battery_level column if it doesn't exist
+        if "battery_level" not in existing_df.columns:
+            existing_df["battery_level"] = None
+            existing_df.to_csv(csv_path, index=False)
         # Create unique key from location_id and image_file
         processed_images = set(
             zip(existing_df["location_id"], existing_df["image_file"])
