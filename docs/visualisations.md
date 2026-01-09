@@ -2,6 +2,31 @@
 
 Wildlife activity patterns and analysis visualisations.
 
+## Table of Contents
+
+- [Visualisations](#visualisations)
+  - [Table of Contents](#table-of-contents)
+  - [Species Distribution](#species-distribution)
+    - [01. Species Distribution](#01-species-distribution)
+  - [Activity Patterns](#activity-patterns)
+    - [02. Species Activity Patterns](#02-species-activity-patterns)
+  - [Environmental Factors](#environmental-factors)
+    - [03. Lighting Analysis](#03-lighting-analysis)
+    - [04. Location Comparison](#04-location-comparison)
+    - [05. Baiting Effect Analysis](#05-baiting-effect-analysis)
+    - [06. Roe Deer - Temperature Activity](#06-roe-deer---temperature-activity)
+    - [07. Wild Boar - Temperature Activity](#07-wild-boar---temperature-activity)
+  - [Crepuscular Activity Analysis](#crepuscular-activity-analysis)
+    - [08. Roe Deer - Sunset Activity Scatter](#08-roe-deer---sunset-activity-scatter)
+    - [09. Wild Boar - Sunset Activity Scatter](#09-wild-boar---sunset-activity-scatter)
+    - [10. Roe Deer - Sunrise Activity Scatter](#10-roe-deer---sunrise-activity-scatter)
+    - [11. Wild Boar - Sunrise Activity Scatter](#11-wild-boar---sunrise-activity-scatter)
+    - [12. Roe Deer - Monthly Sunset Patterns](#12-roe-deer---monthly-sunset-patterns)
+    - [13. Wild Boar - Monthly Sunset Patterns](#13-wild-boar---monthly-sunset-patterns)
+    - [14. Roe Deer - Daily and Yearly Activity Pattern](#14-roe-deer---daily-and-yearly-activity-pattern)
+    - [15. Wild Boar - Daily and Yearly Activity Pattern](#15-wild-boar---daily-and-yearly-activity-pattern)
+  - [Summary Statistics](#summary-statistics)
+
 ## Species Distribution
 
 ### 01. Species Distribution
