@@ -663,7 +663,7 @@ if len(df_valid) > 0:
             fontweight="bold",
         )
 
-        plt.tight_layout()
+        fig.tight_layout()
         plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_baiting_effect_analysis.png",
@@ -955,6 +955,7 @@ Temp-Hour Correlation:
                 y=0.998,
             )
 
+            fig.tight_layout(rect=[0, 0, 1, 0.99])
             filename = species.lower().replace(" ", "_")
             plt.savefig(
                 output_dir / f"{plot_num:02d}_{filename}_temperature_activity.png",
@@ -1136,7 +1137,7 @@ if len(df_valid) > 0:
             fontweight="bold",
             y=1.00,
         )
-        plt.tight_layout()
+        fig.tight_layout(rect=[0, 0, 1, 0.98])
         plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_individual_species_timelines.png",
@@ -1595,7 +1596,7 @@ if len(df_valid) > 0:
                 ax.legend(loc="upper right")
                 ax.grid(axis="y", alpha=0.3)
 
-            plt.tight_layout()
+            fig.tight_layout()
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.png",
@@ -2012,7 +2013,7 @@ if len(df_valid) > 0:
                 continue
 
             plot_num += 1
-            fig = plt.figure(figsize=(18, 12))
+            fig = plt.figure(figsize=(18, 12), constrained_layout=True)
             gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
 
             # 1. Activity by Moon Phase (pie chart)
@@ -2246,7 +2247,6 @@ if len(df_valid) > 0:
                 y=0.995,
             )
 
-            plt.tight_layout()
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_solunar_analysis.png",
@@ -2346,13 +2346,13 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
-        plt.suptitle(
+        fig.suptitle(
             "Solunar Period Comparison: Roe Deer vs Wild Boar",
             fontsize=16,
             fontweight="bold",
             y=0.995,
         )
-        plt.tight_layout()
+        fig.tight_layout(rect=[0, 0, 1, 0.98])
         plt.savefig(
             output_dir / f"{plot_num:02d}_solunar_comparison.png",
             dpi=300,
