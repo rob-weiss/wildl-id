@@ -660,7 +660,10 @@ if len(df_valid) > 0:
         )
 
         try:
-            fig.tight_layout()
+            import warnings
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                fig.tight_layout()
         except Exception:
             pass
         plot_num += 1
@@ -950,7 +953,10 @@ Temp-Hour Correlation:
             )
 
             try:
-                fig.tight_layout(rect=[0, 0, 1, 0.99])
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    fig.tight_layout(rect=[0, 0, 1, 0.99])
             except Exception:
                 pass
             filename = species.lower().replace(" ", "_")
