@@ -128,7 +128,7 @@ plt.rcParams["figure.figsize"] = (14, 8)
 plt.rcParams["font.size"] = 10
 
 # ============================================================================
-# 1. SPECIES DISTRIBUTION
+# SPECIES DISTRIBUTION
 # ============================================================================
 print("\n" + "=" * 70)
 print("SPECIES DISTRIBUTION")
@@ -261,7 +261,7 @@ print(f"✓ Saved: {plot_num:02d}_species_activity_patterns.svg")
 plt.close()
 
 # ============================================================================
-# 5. LIGHTING CONDITIONS
+# LIGHTING CONDITIONS
 # ============================================================================
 print("\n" + "=" * 70)
 print("LIGHTING CONDITIONS ANALYSIS")
@@ -321,7 +321,7 @@ print(f"✓ Saved: {plot_num:02d}_lighting_analysis.svg")
 plt.close()
 
 # ============================================================================
-# 6. LOCATION COMPARISON
+# LOCATION COMPARISON
 # ============================================================================
 print("\n" + "=" * 70)
 print("LOCATION COMPARISON")
@@ -399,7 +399,7 @@ print(f"✓ Saved: {plot_num:02d}_location_comparison.svg")
 plt.close()
 
 # ============================================================================
-# 7. BAITING EFFECT ANALYSIS (Human Activity vs Roe Deer and Wild Boar)
+# BAITING EFFECT ANALYSIS (Human Activity vs Roe Deer and Wild Boar)
 # ============================================================================
 print("\n" + "=" * 70)
 print("BAITING EFFECT ANALYSIS (ROE DEER & WILD BOAR)")
@@ -952,7 +952,7 @@ else:
     print("\nNo temperature data available")
 
 # ============================================================================
-# 9. TIMELINE VIEW
+# TIMELINE VIEW
 # ============================================================================
 print("\n" + "=" * 70)
 print("ACTIVITY TIMELINE")
@@ -1122,7 +1122,7 @@ if len(df_valid) > 0:
         plt.close()
 
 # ============================================================================
-# 11. SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
+# SUNRISE/SUNSET ANALYSIS FOR ROE DEER AND WILD BOAR
 # ============================================================================
 print("\n" + "=" * 70)
 print("SUNRISE/SUNSET ANALYSIS")

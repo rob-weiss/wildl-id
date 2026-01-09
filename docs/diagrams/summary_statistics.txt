@@ -1,8 +1,8 @@
 WILDLIFE CAMERA ACTIVITY ANALYSIS
 ======================================================================
 
-Total Images: 6721
-Images with Timestamps: 6721
+Total Images: 6724
+Images with Timestamps: 6724
 Unique Species: 14
 Unique Locations: 9
 Date Range: 2025-02-16 to 2026-01-07
@@ -15,7 +15,7 @@ SPECIES COUNTS:
 class
 roe deer      5133
 wild boar      592
-fox            256
+fox            259
 human          236
 hare           233
 badger         103
@@ -36,7 +36,7 @@ Heliossitz      3173
 Sauenburg        600
 Alusitz          584
 Waldböckchen     539
-Brunftplatz      508
+Brunftplatz      511
 Sandweg          436
 Suhle            416
 Kirschensitz     246
