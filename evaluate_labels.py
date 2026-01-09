@@ -198,7 +198,10 @@ ax2.pie(
 )
 ax2.set_title("Species Distribution - Percentages", fontsize=14, fontweight="bold")
 
-plt.tight_layout()
+try:
+    plt.tight_layout()
+except Exception:
+    pass
 plot_num += 1
 plt.savefig(
     output_dir / f"{plot_num:02d}_species_distribution.svg", bbox_inches="tight"
@@ -252,7 +255,10 @@ for idx in range(len(top_species), len(axes)):
     axes[idx].set_visible(False)
 
 plt.suptitle("Activity Patterns by Species", fontsize=16, fontweight="bold", y=1.00)
-plt.tight_layout()
+try:
+    plt.tight_layout()
+except Exception:
+    pass
 plot_num += 1
 plt.savefig(
     output_dir / f"{plot_num:02d}_species_activity_patterns.svg", bbox_inches="tight"
@@ -314,7 +320,10 @@ ax2.tick_params(axis="x", rotation=45)
 ax2.legend(title="Lighting", loc="upper right")
 ax2.grid(axis="y", alpha=0.3)
 
-plt.tight_layout()
+try:
+    plt.tight_layout()
+except Exception:
+    pass
 plot_num += 1
 plt.savefig(output_dir / f"{plot_num:02d}_lighting_analysis.svg", bbox_inches="tight")
 print(f"✓ Saved: {plot_num:02d}_lighting_analysis.svg")
@@ -392,7 +401,10 @@ for i, location in enumerate(location_species_grouped.index):
         fontsize=10,
     )
 
-plt.tight_layout()
+try:
+    plt.tight_layout()
+except Exception:
+    pass
 plot_num += 1
 plt.savefig(output_dir / f"{plot_num:02d}_location_comparison.svg", bbox_inches="tight")
 print(f"✓ Saved: {plot_num:02d}_location_comparison.svg")
@@ -647,7 +659,10 @@ if len(df_valid) > 0:
             fontweight="bold",
         )
 
-        fig.tight_layout()
+        try:
+            fig.tight_layout()
+        except Exception:
+            pass
         plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_baiting_effect_analysis.svg",
@@ -1043,7 +1058,10 @@ if len(df_valid) > 0:
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         plt.xticks(rotation=45, ha="right")
 
-        plt.tight_layout()
+        try:
+            plt.tight_layout()
+        except Exception:
+            pass
         plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_species_activity_timeline.svg",
@@ -1554,7 +1572,10 @@ if len(df_valid) > 0:
                 ax.legend(loc="upper right")
                 ax.grid(axis="y", alpha=0.3)
 
-            fig.tight_layout()
+            try:
+                fig.tight_layout()
+            except Exception:
+                pass
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.svg",
