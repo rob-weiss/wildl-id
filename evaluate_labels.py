@@ -1400,7 +1400,7 @@ if len(df_valid) > 0:
                 # Distribution on the right
                 ax_dist.hist(
                     species_data["hours_from_sunset"],
-                    bins=30,
+                    bins=60,
                     orientation="horizontal",
                     color="steelblue",
                     alpha=0.5,
@@ -1532,7 +1532,7 @@ if len(df_valid) > 0:
             # Distribution on the right
             ax_dist.hist(
                 species_data["hours_from_sunrise"],
-                bins=30,
+                bins=60,
                 orientation="horizontal",
                 color="steelblue",
                 alpha=0.5,
