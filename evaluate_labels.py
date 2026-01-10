@@ -909,8 +909,6 @@ if len(df_temp) > 0:
         species_data = df_temp[df_temp["class"] == species].copy()
 
         if len(species_data) >= 10:  # Only create plot if sufficient data
-            plot_num += 1
-
             fig = plt.figure(figsize=(16, 10))
             gs = fig.add_gridspec(3, 3, hspace=0.35, wspace=0.35)
 
@@ -1141,6 +1139,7 @@ Temp-Hour Correlation:
             except Exception:
                 pass
             filename = species.lower().replace(" ", "_")
+            plot_num += 1
             plt.savefig(
                 output_dir / f"{plot_num:02d}_{filename}_temperature_activity.svg",
                 bbox_inches="tight",
@@ -1154,50 +1153,10 @@ else:
     print("\nNo temperature data available")
 
 # ============================================================================
-# TIMELINE VIEW
+# INDIVIDUAL SPECIES TIMELINES
 # ============================================================================
 print("\n" + "=" * 70)
-print("ACTIVITY TIMELINE")
-print("=" * 70)
-
-if len(df_valid) > 0:
-    fig, ax = plt.subplots(figsize=(16, 6))
-
-    # Daily activity over time
-    daily_activity = df_valid.groupby("date").size().reset_index(name="count")
-    daily_activity["date"] = pd.to_datetime(daily_activity["date"])
-    daily_activity = daily_activity.sort_values("date")
-
-    ax.plot(
-        daily_activity["date"],
-        daily_activity["count"],
-        color="steelblue",
-        linewidth=2,
-        marker="o",
-        markersize=4,
-    )
-    ax.fill_between(
-        daily_activity["date"],
-        daily_activity["count"],
-        alpha=0.3,
-        color="steelblue",  # type: ignore
-    )
-
-    ax.set_title("Wildlife Activity Over Time", fontsize=16, fontweight="bold")
-    ax.set_xlabel("Date", fontsize=12)
-    ax.set_ylabel("Number of Detections", fontsize=12)
-    ax.grid(True, alpha=0.3)
-
-    # Format x-axis
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-    ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-    plt.xticks(rotation=45, ha="right")
-
-# ============================================================================
-# SPECIES ACTIVITY TIMELINE
-# ============================================================================
-print("\n" + "=" * 70)
-print("SPECIES ACTIVITY TIMELINE")
+print("INDIVIDUAL SPECIES TIMELINES")
 print("=" * 70)
 
 if len(df_valid) > 0:
@@ -1205,59 +1164,10 @@ if len(df_valid) > 0:
     top_species = species_counts[species_counts.index != "none"].head(8).index.tolist()
 
     if len(top_species) > 0:
-        fig, ax = plt.subplots(figsize=(16, 8))
-
         # Prepare color palette
         colors_species = sns.color_palette("husl", len(top_species))
 
-        # Plot each species over time
-        for idx, species in enumerate(top_species):
-            species_data = df_valid[df_valid["class"] == species]
-            daily_species_activity = (
-                species_data.groupby("date").size().reset_index(name="count")
-            )
-            daily_species_activity["date"] = pd.to_datetime(
-                daily_species_activity["date"]
-            )
-            daily_species_activity = daily_species_activity.sort_values("date")
-
-            ax.plot(
-                daily_species_activity["date"],
-                daily_species_activity["count"],
-                color=colors_species[idx],
-                linewidth=2,
-                marker="o",
-                markersize=3,
-                label=f"{species.capitalize()} (n={len(species_data)})",
-                alpha=0.8,
-            )
-
-        ax.set_title(
-            "Wildlife Activity Over Time by Species", fontsize=16, fontweight="bold"
-        )
-        ax.set_xlabel("Date", fontsize=12)
-        ax.set_ylabel("Number of Detections", fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc="best", framealpha=0.9)
-
-        # Format x-axis
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-        plt.xticks(rotation=45, ha="right")
-
-        try:
-            plt.tight_layout()
-        except Exception:
-            pass
-        plot_num += 1
-        plt.savefig(
-            output_dir / f"{plot_num:02d}_species_activity_timeline.svg",
-            bbox_inches="tight",
-        )
-        print(f"✓ Saved: {plot_num:02d}_species_activity_timeline.svg")
-        plt.close()
-
-        # Also create individual timeline plots for each species
+        # Create individual timeline plots for each species
         n_species = len(top_species)
         n_cols = 2
         n_rows = (n_species + 1) // 2
@@ -1524,6 +1434,7 @@ if len(df_valid) > 0:
                     fontweight="bold",
                 )
 
+                plot_num += 1
                 plt.savefig(
                     output_dir
                     / f"{plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.svg",
@@ -1533,7 +1444,6 @@ if len(df_valid) > 0:
                     f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunset_activity_scatter.svg"
                 )
                 plt.close()
-                plot_num += 1
 
         # ========== Activity relative to sunrise throughout the year ==========
         for species in target_species:
@@ -1652,6 +1562,7 @@ if len(df_valid) > 0:
                 fontweight="bold",
             )
 
+            plot_num += 1
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.svg",
@@ -1661,7 +1572,6 @@ if len(df_valid) > 0:
                 f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_sunrise_activity_scatter.svg"
             )
             plt.close()
-            plot_num += 1
 
         # ========== Seasonal patterns ==========
         for species in target_species:
@@ -1763,6 +1673,7 @@ if len(df_valid) > 0:
                 fig.tight_layout()
             except Exception:
                 pass
+            plot_num += 1
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.svg",
@@ -1772,7 +1683,6 @@ if len(df_valid) > 0:
                 f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_monthly_sunset_patterns.svg"
             )
             plt.close()
-            plot_num += 1
 
         # ========== PLOTS 19-21: Daily activity pattern over the year with sunset line ==========
         # Use gridspec to add marginal distributions
@@ -2030,6 +1940,7 @@ if len(df_valid) > 0:
             )
 
             # Save individual figure
+            plot_num += 1
             plt.savefig(
                 output_dir
                 / f"{plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.svg",
@@ -2039,7 +1950,6 @@ if len(df_valid) > 0:
                 f"✓ Saved: {plot_num:02d}_{species.replace(' ', '_')}_daily_yearly_activity_pattern.svg"
             )
             plt.close()
-            plot_num += 1
 
         # Print statistics
         print("\nSunrise/Sunset Activity Statistics:")
@@ -2159,7 +2069,6 @@ if len(df_valid) > 0:
 
     if len(df_solunar) > 0:
         # Create a combined comparison plot
-        plot_num += 1
         fig, axes = plt.subplots(2, 2, figsize=(16, 10))
 
         for idx, species in enumerate(target_species):
@@ -2251,6 +2160,7 @@ if len(df_valid) > 0:
             fig.tight_layout(rect=[0, 0, 1, 0.98])
         except Exception:
             pass
+        plot_num += 1
         plt.savefig(
             output_dir / f"{plot_num:02d}_solunar_comparison.svg", bbox_inches="tight"
         )
