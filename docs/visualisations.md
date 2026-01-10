@@ -21,9 +21,7 @@ Wildlife activity patterns and analysis visualisations.
     - [Individual Species Timelines](#individual-species-timelines)
   - [Crepuscular Activity Analysis](#crepuscular-activity-analysis)
     - [Roe Deer - Sunset Activity Scatter](#roe-deer---sunset-activity-scatter)
-    - [Wild Boar - Sunset Activity Scatter](#wild-boar---sunset-activity-scatter)
     - [Roe Deer - Sunrise Activity Scatter](#roe-deer---sunrise-activity-scatter)
-    - [Wild Boar - Sunrise Activity Scatter](#wild-boar---sunrise-activity-scatter)
     - [Roe Deer - Monthly Sunset Patterns](#roe-deer---monthly-sunset-patterns)
     - [Wild Boar - Monthly Sunset Patterns](#wild-boar---monthly-sunset-patterns)
     - [Roe Deer - Daily and Yearly Activity Pattern](#roe-deer---daily-and-yearly-activity-pattern)
@@ -102,45 +100,33 @@ Separate timeline views for top 8 species, showing their individual temporal act
 
 Scatter plot showing roe deer activity relative to sunset times throughout the year, with distribution histogram.
 
-### Wild Boar - Sunset Activity Scatter
-
-![Wild Boar Sunset Activity Scatter](diagrams/11_wild_boar_sunset_activity_scatter.svg)
-
-Scatter plot showing wild boar activity relative to sunset times throughout the year, with distribution histogram.
-
 ### Roe Deer - Sunrise Activity Scatter
 
-![Roe Deer Sunrise Activity Scatter](diagrams/12_roe_deer_sunrise_activity_scatter.svg)
+![Roe Deer Sunrise Activity Scatter](diagrams/11_roe_deer_sunrise_activity_scatter.svg)
 
 Scatter plot showing roe deer activity relative to sunrise times throughout the year, with distribution histogram.
 
-### Wild Boar - Sunrise Activity Scatter
-
-![Wild Boar Sunrise Activity Scatter](diagrams/13_wild_boar_sunrise_activity_scatter.svg)
-
-Scatter plot showing wild boar activity relative to sunrise times throughout the year, with distribution histogram.
-
 ### Roe Deer - Monthly Sunset Patterns
 
-![Roe Deer Monthly Sunset Patterns](diagrams/14_roe_deer_monthly_sunset_patterns.svg)
+![Roe Deer Monthly Sunset Patterns](diagrams/12_roe_deer_monthly_sunset_patterns.svg)
 
 Monthly variation in roe deer activity patterns relative to sunset, showing seasonal trends.
 
 ### Wild Boar - Monthly Sunset Patterns
 
-![Wild Boar Monthly Sunset Patterns](diagrams/15_wild_boar_monthly_sunset_patterns.svg)
+![Wild Boar Monthly Sunset Patterns](diagrams/13_wild_boar_monthly_sunset_patterns.svg)
 
 Monthly variation in wild boar activity patterns relative to sunset, showing seasonal trends.
 
 ### Roe Deer - Daily and Yearly Activity Pattern
 
-![Roe Deer Daily Yearly Activity Pattern](diagrams/16_roe_deer_daily_yearly_activity_pattern.svg)
+![Roe Deer Daily Yearly Activity Pattern](diagrams/14_roe_deer_daily_yearly_activity_pattern.svg)
 
 Comprehensive heatmap showing roe deer activity across hour of day and month of year (last 12 months).
 
 ### Wild Boar - Daily and Yearly Activity Pattern
 
-![Wild Boar Daily Yearly Activity Pattern](diagrams/17_wild_boar_daily_yearly_activity_pattern.svg)
+![Wild Boar Daily Yearly Activity Pattern](diagrams/15_wild_boar_daily_yearly_activity_pattern.svg)
 
 Comprehensive heatmap showing wild boar activity across hour of day and month of year (last 12 months).
 
@@ -148,7 +134,7 @@ Comprehensive heatmap showing wild boar activity across hour of day and month of
 
 ### Solunar Comparison
 
-![Solunar Comparison](diagrams/18_solunar_comparison.svg)
+![Solunar Comparison](diagrams/16_solunar_comparison.svg)
 
 Direct comparison of roe deer and wild boar activity patterns relative to moon illumination and moon phases, showing potential differences in lunar sensitivity between species.
 

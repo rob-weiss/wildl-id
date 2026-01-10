@@ -1333,7 +1333,8 @@ if len(df_valid) > 0:
             print(f"Found {len(df_target)} sightings of roe deer and wild boar")
 
             # ========== Activity relative to sunset throughout the year ==========
-            for species in target_species:
+            # Only generate scatter plots for roe deer
+            for species in [s for s in target_species if s == "roe deer"]:
                 species_data = df_target[df_target["class"] == species]
                 if len(species_data) == 0:
                     continue
@@ -1465,7 +1466,8 @@ if len(df_valid) > 0:
                 plt.close()
 
         # ========== Activity relative to sunrise throughout the year ==========
-        for species in target_species:
+        # Only generate scatter plots for roe deer
+        for species in [s for s in target_species if s == "roe deer"]:
             species_data = df_target[df_target["class"] == species]
             if len(species_data) == 0:
                 continue
