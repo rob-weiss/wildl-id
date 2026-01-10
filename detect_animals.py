@@ -34,7 +34,7 @@ from tqdm import tqdm
 from ultralytics import YOLO
 
 # Configuration
-image_dir = Path("/Users/wri2lr/Downloads/SEND_DIR")
+image_dir = Path("/Users/wri2lr/Downloads")
 model_name = "yolov8x"  # Use yolov8x for best accuracy, or yolov8n for fastest speed
 
 # Map COCO classes to wildlife categories
