@@ -1187,20 +1187,38 @@ if len(df_valid) > 0:
             )
             daily_species_activity = daily_species_activity.sort_values("date")
 
+            # Calculate moving average (7-day window)
+            window_size = 7
+            daily_species_activity["moving_avg"] = (
+                daily_species_activity["count"]
+                .rolling(window=window_size, center=True, min_periods=1)
+                .mean()
+            )
+
             ax = axes[idx]
+
+            # Stem plot for daily counts
+            markerline, stemlines, baseline = ax.stem(
+                daily_species_activity["date"],
+                daily_species_activity["count"],
+                linefmt=colors_species[idx],
+                markerfmt="o",
+                basefmt=" ",
+            )
+            markerline.set_markerfacecolor(colors_species[idx])
+            markerline.set_markeredgecolor(colors_species[idx])
+            markerline.set_markersize(4)
+            stemlines.set_linewidth(1.5)
+            stemlines.set_alpha(0.6)
+
+            # Add moving average line
             ax.plot(
                 daily_species_activity["date"],
-                daily_species_activity["count"],
-                color=colors_species[idx],
+                daily_species_activity["moving_avg"],
+                color="darkred",
                 linewidth=2,
-                marker="o",
-                markersize=4,
-            )
-            ax.fill_between(
-                daily_species_activity["date"],
-                daily_species_activity["count"],
-                alpha=0.3,
-                color=colors_species[idx],  # type: ignore
+                label=f"{window_size}-day moving avg",
+                alpha=0.8,
             )
 
             ax.set_title(
@@ -1209,6 +1227,7 @@ if len(df_valid) > 0:
             )
             ax.set_xlabel("Date", fontsize=10)
             ax.set_ylabel("Detections", fontsize=10)
+            ax.legend(loc="upper right", fontsize=8)
             ax.grid(True, alpha=0.3)
             ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
             ax.xaxis.set_major_locator(mdates.AutoDateLocator())
