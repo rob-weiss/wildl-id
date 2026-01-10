@@ -17,6 +17,8 @@ Dependencies:
 - pandas
 - opencv-python
 
+pip install ultralytics torch torchvision opencv-python pandas matplotlib pillow
+
 Usage:
     python detect_animals.py
 """
