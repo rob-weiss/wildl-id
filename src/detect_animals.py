@@ -239,7 +239,12 @@ def detect_lighting(image_path):
 
 
 def show_image_with_detection(
-    image_path, image_file, img_class, box=None, save_path=None
+    image_path,
+    image_file,
+    img_class,
+    box=None,
+    save_path=None,
+    classification_info=None,
 ):
     """Display an image with its predicted class and bounding box.
 
@@ -255,12 +260,23 @@ def show_image_with_detection(
         Bounding box in YOLO format [x_center, y_center, width, height].
     save_path : Path, optional
         Path to save the annotated image.
+    classification_info : dict, optional
+        Additional classification information to display.
     """
     img = mpimg.imread(str(image_path))
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.imshow(img)
     ax.axis("off")
-    ax.set_title(f"{image_file}\nclass: {img_class}")
+
+    # Build title with classification details
+    title = f"{image_file}\nclass: {img_class}"
+    if classification_info:
+        species = classification_info.get("species")
+        conf = classification_info.get("confidence")
+        if species and conf is not None:
+            title += f"\nclassified as: {species} ({conf:.2%})"
+
+    ax.set_title(title)
 
     # Draw bounding box if present
     if box is not None and isinstance(box, list) and len(box) == 4:
@@ -313,11 +329,18 @@ def process_images_with_pytorch_wildlife():
             classification_model = pw_classification.DeepfauneClassifier(
                 device=device, class_name_lang="en"
             )
-            print("Classification model loaded successfully")
+            print("✓ Classification model loaded successfully")
         except Exception as e:
-            print(f"Warning: Could not load classification model: {e}")
+            print(f"✗ ERROR: Could not load classification model: {e}")
+            import traceback
+
+            traceback.print_exc()
             print("Continuing with detection only...")
             classification_model = None
+
+    if classification_model is None:
+        print("WARNING: Classification is disabled or failed to load!")
+        print("You will only see 'animal', 'human', 'vehicle', or 'none' as classes.")
 
     # Create output directories
     classifier_suffix = "_classified" if use_classification else ""
@@ -393,6 +416,7 @@ def process_images_with_pytorch_wildlife():
         box = None
         confidence = 0.0
         classification_confidence = None
+        classified_species = None  # Store the actual classified species
 
         if detection_result and "detections" in detection_result:
             detections = detection_result["detections"]
@@ -445,10 +469,12 @@ def process_images_with_pytorch_wildlife():
                     and classification_model is not None
                     and bbox is not None
                 ):
+                    print(f"  Classifying animal in {image_file}...")
                     # Crop the detected animal
                     cropped_img = crop_detection(image_path, bbox)
 
                     if cropped_img is not None:
+                        print(f"    Cropped image size: {cropped_img.size}")
                         try:
                             # Run classification on the cropped image
                             classification_result = (
@@ -457,34 +483,52 @@ def process_images_with_pytorch_wildlife():
                                 )
                             )
 
-                            # Get top prediction
-                            if classification_result and len(classification_result) > 0:
-                                top_prediction = classification_result[0]
-                                classifier_class = top_prediction.get(
+                            print(f"    Classification result: {classification_result}")
+
+                            # Get top prediction - classification_result is already a dict, not a list!
+                            if classification_result and isinstance(
+                                classification_result, dict
+                            ):
+                                classifier_class = classification_result.get(
                                     "prediction", "unknown"
                                 )
-                                classification_confidence = top_prediction.get(
+                                classification_confidence = classification_result.get(
                                     "confidence", 0.0
                                 )
 
-                                # Only use classification if confidence is above threshold
-                                if (
-                                    classification_confidence
-                                    >= classification_threshold
-                                ):
-                                    img_class = map_classifier_to_wildlife(
-                                        classifier_class
-                                    )
-                                else:
-                                    img_class = (
-                                        "animal"  # Generic animal if low confidence
+                                print(
+                                    f"    Classifier says: {classifier_class} "
+                                    f"(confidence: {classification_confidence:.2%})"
+                                )
+
+                                # Map the classifier output to our categories
+                                classified_species = map_classifier_to_wildlife(
+                                    classifier_class
+                                )
+
+                                print(f"    Mapped to: {classified_species}")
+
+                                # Always use the classified species, even if confidence is low
+                                # This way users can see what the model thinks it is
+                                img_class = classified_species
+
+                                # Add a note if confidence was low
+                                if classification_confidence < classification_threshold:
+                                    print(
+                                        f"    WARNING: Low confidence ({classification_confidence:.2%}) "
+                                        f"classification: {classified_species}"
                                     )
                             else:
+                                print("    No classification result returned")
                                 img_class = "animal"
                         except Exception as e:
-                            print(f"\nClassification error for {image_file}: {e}")
+                            print(f"    Classification error: {e}")
+                            import traceback
+
+                            traceback.print_exc()
                             img_class = "animal"
                     else:
+                        print("    Failed to crop image")
                         img_class = "animal"
                 elif megadetector_class == "person":
                     img_class = "human"
@@ -521,8 +565,22 @@ def process_images_with_pytorch_wildlife():
 
         # Save annotated image
         label_save_path = images_output_dir / f"{location_id}_{image_file}"
+
+        # Prepare classification info for display
+        classification_info = None
+        if classified_species and classification_confidence is not None:
+            classification_info = {
+                "species": classified_species,
+                "confidence": classification_confidence,
+            }
+
         show_image_with_detection(
-            image_path, image_file, img_class, box=box, save_path=label_save_path
+            image_path,
+            image_file,
+            img_class,
+            box=box,
+            save_path=label_save_path,
+            classification_info=classification_info,
         )
 
         # Convert to parquet every 100 images
