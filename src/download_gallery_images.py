@@ -18,33 +18,54 @@ def get_current_carousel_image():
         tell current tab of front window
             do JavaScript "
                 (function() {
-                    // Find the currently visible/active carousel image
+                    // Find the currently visible/active carousel image - prefer the most centered one
                     const allImages = Array.from(document.querySelectorAll('img'))
                         .filter(img => {
                             const src = img.src || '';
                             if (!src.includes('media.secacam.com/getImage')) return false;
                             if (img.naturalWidth < 1000 || img.naturalHeight < 500) return false;
                             
-                            // Check if image is actually visible on screen
+                            // Must be actually visible with reasonable size
                             const rect = img.getBoundingClientRect();
-                            const isVisible = rect.width > 0 && rect.height > 0 && 
-                                            rect.top < window.innerHeight && 
-                                            rect.bottom > 0 &&
-                                            rect.left < window.innerWidth && 
-                                            rect.right > 0;
+                            return rect.width > 500 && rect.height > 500;
+                        })
+                        .map(img => {
+                            const rect = img.getBoundingClientRect();
+                            // Calculate how centered the image is
+                            const centerX = rect.left + rect.width / 2;
+                            const centerY = rect.top + rect.height / 2;
+                            const viewportCenterX = window.innerWidth / 2;
+                            const viewportCenterY = window.innerHeight / 2;
+                            const distanceFromCenter = Math.sqrt(
+                                Math.pow(centerX - viewportCenterX, 2) + 
+                                Math.pow(centerY - viewportCenterY, 2)
+                            );
                             
-                            return isVisible;
+                            // Also check for active indicators
+                            const parent = img.closest('[class*=active], [class*=current], [class*=selected], [aria-current]');
+                            const hasActiveClass = parent !== null;
+                            const zIndex = parseInt(window.getComputedStyle(img).zIndex) || 0;
+                            
+                            return {
+                                img: img,
+                                distanceFromCenter: distanceFromCenter,
+                                hasActiveClass: hasActiveClass,
+                                zIndex: zIndex,
+                                rect: rect
+                            };
                         })
                         .sort((a, b) => {
-                            // Prefer images that are more centered on screen
-                            const rectA = a.getBoundingClientRect();
-                            const rectB = b.getBoundingClientRect();
-                            const centerA = Math.abs(rectA.top + rectA.height/2 - window.innerHeight/2);
-                            const centerB = Math.abs(rectB.top + rectB.height/2 - window.innerHeight/2);
-                            return centerA - centerB;
+                            // Prioritize: active class > higher z-index > more centered
+                            if (a.hasActiveClass !== b.hasActiveClass) {
+                                return b.hasActiveClass ? 1 : -1;
+                            }
+                            if (Math.abs(a.zIndex - b.zIndex) > 0) {
+                                return b.zIndex - a.zIndex;
+                            }
+                            return a.distanceFromCenter - b.distanceFromCenter;
                         });
                     
-                    let mainImg = allImages.length > 0 ? allImages[0] : null;
+                    let mainImg = allImages.length > 0 ? allImages[0].img : null;
                     
                     if (!mainImg) {
                         // Fallback: Find any large visible image
@@ -69,17 +90,46 @@ def get_current_carousel_image():
                         const alt = mainImg.getAttribute('alt');
                         const title = mainImg.getAttribute('title');
                         
-                        // Clean up filename - avoid 'undefined' or empty strings
                         let filename = '';
+                        let cameraName = '';
+                        
+                        // Try to get camera name from alt/title/nearby text
                         if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
-                            filename = alt.trim();
+                            cameraName = alt.trim();
                         } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
-                            filename = title.trim();
+                            cameraName = title.trim();
                         } else {
-                            // Extract from parent element or use timestamp
-                            const parent = mainImg.closest('[data-testid], [class*=modal], [class*=viewer], [class*=carousel]');
-                            const dataId = parent ? parent.getAttribute('data-testid') || parent.className : '';
-                            filename = dataId ? 'image_' + dataId.replace(/[^a-zA-Z0-9]/g, '_') : 'image_' + Date.now();
+                            // Look for figcaption
+                            const figure = mainImg.closest('figure');
+                            if (figure) {
+                                const caption = figure.querySelector('figcaption');
+                                if (caption && caption.textContent.trim()) {
+                                    cameraName = caption.textContent.trim();
+                                }
+                            }
+                            
+                            // Look for nearby headings
+                            if (!cameraName) {
+                                const parent = mainImg.closest('[class*=slide], [class*=item], [class*=modal], [class*=viewer]');
+                                if (parent) {
+                                    const heading = parent.querySelector('h1, h2, h3, h4, h5, h6, p, span[class*=title], div[class*=title]');
+                                    if (heading && heading.textContent.trim() && heading.textContent.trim().length < 100) {
+                                        cameraName = heading.textContent.trim();
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Always use URL param as unique identifier
+                        const paramIndex = url.indexOf('/param/');
+                        if (paramIndex !== -1) {
+                            const paramStart = paramIndex + 7;
+                            const paramEnd = url.indexOf('/', paramStart);
+                            const param = paramEnd === -1 ? url.substring(paramStart) : url.substring(paramStart, paramEnd);
+                            const shortParam = param.substring(0, 50);
+                            filename = cameraName ? cameraName + '_' + shortParam : 'secacam_' + shortParam;
+                        } else {
+                            filename = cameraName ? cameraName + '_' + Date.now() : 'image_' + Date.now();
                         }
                         
                         return JSON.stringify({
@@ -156,52 +206,14 @@ def click_next_in_carousel():
     applescript = """
     tell application "Safari"
         tell current tab of front window
-            set jsClickResult to do JavaScript "
-                (function() {
-                    // Find visible buttons with SVG icons or arrows
-                    const allButtons = Array.from(document.querySelectorAll('button, [role=button], a'));
-                    
-                    for (const btn of allButtons) {
-                        const rect = btn.getBoundingClientRect();
-                        if (rect.width === 0 || rect.height === 0) continue;
-                        
-                        // Look for right arrow indicators
-                        const innerHTML = btn.innerHTML || '';
-                        const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
-                        const text = (btn.textContent || '').toLowerCase();
-                        const classes = (btn.className || '').toLowerCase();
-                        
-                        // Skip if it's a previous/back button
-                        if (ariaLabel.includes('prev') || ariaLabel.includes('back') ||
-                            text.includes('prev') || text.includes('back') ||
-                            classes.includes('prev') || classes.includes('back')) {
-                            continue;
-                        }
-                        
-                        // Look for next indicators - be very permissive
-                        const hasRightArrow = innerHTML.includes('→') || innerHTML.includes('›') || innerHTML.includes('⟩') ||
-                                            innerHTML.includes('&#8250') || innerHTML.includes('&gt;');
-                        const hasArrowSVG = innerHTML.includes('arrow') || innerHTML.includes('chevron') ||
-                                          innerHTML.includes('M12') || innerHTML.includes('M8 4') ||
-                                          innerHTML.includes('path d=');
-                        const isNext = ariaLabel.includes('next') || text.includes('next') ||
-                                     classes.includes('next') || classes.includes('right') ||
-                                     hasRightArrow || hasArrowSVG;
-                        
-                        if (isNext && !classes.includes('left')) {
-                            try {
-                                btn.click();
-                                return 'clicked';
-                            } catch(e) {
-                                console.log('Click failed:', e);
-                            }
-                        }
-                    }
-                    
-                    // Fallback: try arrow key on various elements
-                    const targets = [document.activeElement, document.body, document, window];
-                    for (const target of targets) {
+            do JavaScript "(function() {
+                // Use keyboard navigation only - clicking buttons can close the carousel
+                const carouselElements = document.querySelectorAll('[class*=carousel], [class*=slider], [class*=gallery], [class*=modal], [class*=lightbox], [role=dialog]');
+                
+                for (const elem of carouselElements) {
+                    if (elem.offsetParent !== null) {
                         try {
+                            elem.focus();
                             const event = new KeyboardEvent('keydown', {
                                 key: 'ArrowRight',
                                 keyCode: 39,
@@ -210,14 +222,28 @@ def click_next_in_carousel():
                                 bubbles: true,
                                 cancelable: true
                             });
-                            target.dispatchEvent(event);
+                            elem.dispatchEvent(event);
+                            break;
                         } catch(e) {}
                     }
-                    return 'key_pressed';
-                })();
-            "
+                }
+                
+                // Also dispatch to document and body
+                const evt = new KeyboardEvent('keydown', {
+                    key: 'ArrowRight',
+                    keyCode: 39,
+                    code: 'ArrowRight',
+                    which: 39,
+                    bubbles: true,
+                    cancelable: true
+                });
+                document.dispatchEvent(evt);
+                document.body.dispatchEvent(evt);
+                
+                return 'key_pressed';
+            })();"
+            
             delay 1.5
-            return jsClickResult
         end tell
     end tell
     """
@@ -231,10 +257,8 @@ def click_next_in_carousel():
         if result.stderr:
             print(f"  Debug: Click error '{result.stderr.strip()[:100]}'")
 
-        return result.returncode == 0 and result.stdout.strip() in [
-            "clicked",
-            "key_pressed",
-        ]
+        # Always return True for keyboard events since we can't easily detect if they worked
+        return result.returncode == 0
     except:
         return False
 
@@ -402,17 +426,33 @@ def main():
 
         # Move to next image
         print("  → Next...")
+        prev_url = img_url
+        prev_filename = original_filename
+
         if not click_next_in_carousel():
             print("  ⓘ Could not navigate to next image - end of carousel")
             break
 
-        # Wait longer for the new image to load
+        # Wait for the new image to load
         print("  ⏳ Waiting for new image to load...")
-        time.sleep(2.0)
+        time.sleep(1.5)
 
         # Verify we got a different image
         next_img_data = get_current_carousel_image()
-        if next_img_data and next_img_data.get("url") == img_url:
+        if not next_img_data:
+            print("  ⓘ No image found after navigation - carousel may have closed")
+            break
+
+        next_url = next_img_data.get("url", "")
+        next_filename = next_img_data.get("filename", "")
+
+        print(
+            f"  Debug: URL match={next_url == prev_url}, Filename match={next_filename == prev_filename}"
+        )
+        print(f"  Debug: Prev='{prev_filename}', Next='{next_filename}'")
+
+        # Compare both URL and filename to detect if we actually moved
+        if next_url == prev_url and next_filename == prev_filename:
             print("  ⓘ Same image detected after navigation - reached end of carousel")
             break
 
