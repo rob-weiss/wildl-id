@@ -71,19 +71,24 @@ def get_current_carousel_image():
                         
                         // Clean up filename - avoid 'undefined' or empty strings
                         let filename = '';
-                        if (alt && alt !== 'undefined' && alt.trim()) {
-                            filename = alt;
-                        } else if (title && title !== 'undefined' && title.trim()) {
-                            filename = title;
+                        if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
+                            filename = alt.trim();
+                        } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
+                            filename = title.trim();
                         } else {
-                            filename = 'image_' + Date.now();
+                            // Extract from parent element or use timestamp
+                            const parent = mainImg.closest('[data-testid], [class*=modal], [class*=viewer], [class*=carousel]');
+                            const dataId = parent ? parent.getAttribute('data-testid') || parent.className : '';
+                            filename = dataId ? 'image_' + dataId.replace(/[^a-zA-Z0-9]/g, '_') : 'image_' + Date.now();
                         }
                         
                         return JSON.stringify({
                             url: url,
                             filename: filename,
                             width: mainImg.naturalWidth,
-                            height: mainImg.naturalHeight
+                            height: mainImg.naturalHeight,
+                            debug_alt: mainImg.getAttribute('alt'),
+                            debug_title: mainImg.getAttribute('title')
                         });
                     } else {
                         const allImgs = Array.from(document.querySelectorAll('img'));
@@ -132,6 +137,13 @@ def get_current_carousel_image():
                             f"    {i}. {img.get('width')}x{img.get('height')} - {img.get('src', '')[:60]}"
                         )
                 return None
+
+            # Debug output for filename
+            if data.get("debug_alt") is not None:
+                print(f"  Debug: Raw alt='{data.get('debug_alt')}'")
+            if data.get("debug_title") is not None:
+                print(f"  Debug: Raw title='{data.get('debug_title')}'")
+
             return data
         return None
     except Exception as e:
@@ -144,10 +156,10 @@ def click_next_in_carousel():
     applescript = """
     tell application "Safari"
         tell current tab of front window
-            do JavaScript "
+            set jsClickResult to do JavaScript "
                 (function() {
                     // Find visible buttons with SVG icons or arrows
-                    const allButtons = Array.from(document.querySelectorAll('button, [role=button]'));
+                    const allButtons = Array.from(document.querySelectorAll('button, [role=button], a'));
                     
                     for (const btn of allButtons) {
                         const rect = btn.getBoundingClientRect();
@@ -157,42 +169,55 @@ def click_next_in_carousel():
                         const innerHTML = btn.innerHTML || '';
                         const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
                         const text = (btn.textContent || '').toLowerCase();
+                        const classes = (btn.className || '').toLowerCase();
                         
-                        // Skip if it's a previous button
+                        // Skip if it's a previous/back button
                         if (ariaLabel.includes('prev') || ariaLabel.includes('back') ||
-                            text.includes('prev') || text.includes('back')) {
+                            text.includes('prev') || text.includes('back') ||
+                            classes.includes('prev') || classes.includes('back')) {
                             continue;
                         }
                         
-                        // Look for next indicators
-                        const isNext = ariaLabel.includes('next') || 
-                                      innerHTML.includes('arrow') && innerHTML.includes('right') ||
-                                      innerHTML.includes('chevron') && innerHTML.includes('right') ||
-                                      innerHTML.includes('M12') || // Common SVG path for arrows
-                                      innerHTML.includes('M8 4') ||
-                                      btn.className.includes('next');
+                        // Look for next indicators - be very permissive
+                        const hasRightArrow = innerHTML.includes('→') || innerHTML.includes('›') || innerHTML.includes('⟩') ||
+                                            innerHTML.includes('&#8250') || innerHTML.includes('&gt;');
+                        const hasArrowSVG = innerHTML.includes('arrow') || innerHTML.includes('chevron') ||
+                                          innerHTML.includes('M12') || innerHTML.includes('M8 4') ||
+                                          innerHTML.includes('path d=');
+                        const isNext = ariaLabel.includes('next') || text.includes('next') ||
+                                     classes.includes('next') || classes.includes('right') ||
+                                     hasRightArrow || hasArrowSVG;
                         
-                        if (isNext) {
-                            btn.click();
-                            return 'clicked';
+                        if (isNext && !classes.includes('left')) {
+                            try {
+                                btn.click();
+                                return 'clicked';
+                            } catch(e) {
+                                console.log('Click failed:', e);
+                            }
                         }
                     }
                     
-                    // Fallback: try arrow key
-                    const event = new KeyboardEvent('keydown', {
-                        key: 'ArrowRight',
-                        keyCode: 39,
-                        code: 'ArrowRight',
-                        bubbles: true,
-                        cancelable: true
-                    });
-                    document.body.dispatchEvent(event);
-                    document.dispatchEvent(event);
-                    window.dispatchEvent(event);
+                    // Fallback: try arrow key on various elements
+                    const targets = [document.activeElement, document.body, document, window];
+                    for (const target of targets) {
+                        try {
+                            const event = new KeyboardEvent('keydown', {
+                                key: 'ArrowRight',
+                                keyCode: 39,
+                                code: 'ArrowRight',
+                                which: 39,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            target.dispatchEvent(event);
+                        } catch(e) {}
+                    }
                     return 'key_pressed';
                 })();
             "
             delay 1.5
+            return jsClickResult
         end tell
     end tell
     """
@@ -201,6 +226,11 @@ def click_next_in_carousel():
         result = subprocess.run(
             ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
         )
+
+        print(f"  Debug: Click returned '{result.stdout.strip()}'")
+        if result.stderr:
+            print(f"  Debug: Click error '{result.stderr.strip()[:100]}'")
+
         return result.returncode == 0 and result.stdout.strip() in [
             "clicked",
             "key_pressed",
@@ -376,8 +406,17 @@ def main():
             print("  ⓘ Could not navigate to next image - end of carousel")
             break
 
+        # Wait longer for the new image to load
+        print("  ⏳ Waiting for new image to load...")
+        time.sleep(2.0)
+
+        # Verify we got a different image
+        next_img_data = get_current_carousel_image()
+        if next_img_data and next_img_data.get("url") == img_url:
+            print("  ⓘ Same image detected after navigation - reached end of carousel")
+            break
+
         image_index += 1
-        time.sleep(0.5)
 
     # Summary
     print(f"\n{'=' * 60}")
