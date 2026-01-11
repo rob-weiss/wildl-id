@@ -1,432 +1,14 @@
 #!/usr/bin/env python3
 """
-Download images from ZEISS Secacam gallery automatically.
-This script uses AppleScript to get data from Safari's logged-in session.
+Download images from ZEISS Secacam gallery carousel.
+This script assumes the carousel is already open in Safari.
 """
 
 import json
-import os
 import re
 import subprocess
 import urllib.request
 from pathlib import Path
-from urllib.parse import urlparse
-
-
-def get_safari_page_content():
-    """Get the HTML content of the current Safari tab using AppleScript."""
-    applescript = """
-    tell application "Safari"
-        if (count of windows) = 0 then
-            return "ERROR: No Safari windows open"
-        end if
-        
-        set currentURL to URL of current tab of front window
-        
-        -- Execute JavaScript to get page HTML
-        tell current tab of front window
-            set pageHTML to do JavaScript "document.documentElement.outerHTML"
-        end tell
-        
-        return pageHTML
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
-        )
-
-        if result.returncode == 0:
-            return result.stdout
-        else:
-            print(f"❌ AppleScript error: {result.stderr}")
-            return None
-    except Exception as e:
-        print(f"❌ Error running AppleScript: {e}")
-        return None
-
-
-def navigate_to_gallery():
-    """Navigate to the gallery page from wherever we are."""
-    applescript = """
-    tell application "Safari"
-        tell current tab of front window
-            -- First check current URL
-            set currentURL to do JavaScript "window.location.href"
-            
-            if currentURL contains "gallery" then
-                return "already_on_gallery"
-            end if
-            
-            -- Try to find and click Gallery link/button
-            set jsCode to "
-                // Look for Gallery link or button
-                let found = false;
-                
-                // Try direct selectors first
-                const galleryLink = document.querySelector('a[href*=gallery], a[href*=\\\\/gallery]');
-                if (galleryLink) {
-                    galleryLink.click();
-                    found = true;
-                }
-                
-                // If not found, search through all links and buttons
-                if (!found) {
-                    const allElements = document.querySelectorAll('a, button, [role=button], nav *');
-                    for (const el of allElements) {
-                        const text = el.textContent.trim().toLowerCase();
-                        const ariaLabel = el.getAttribute('aria-label') || '';
-                        if (text === 'gallery' || text === 'galerie' || ariaLabel.toLowerCase().includes('gallery')) {
-                            el.click();
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                
-                // Last resort: try to navigate directly
-                if (!found) {
-                    const currentUrl = window.location.href;
-                    const baseUrl = currentUrl.split('/').slice(0, 3).join('/');
-                    const lang = currentUrl.includes('/en/') ? 'en' : 'de';
-                    window.location.href = baseUrl + '/' + lang + '/gallery';
-                    found = true;
-                }
-                
-                found ? 'clicked' : 'not_found';
-            "
-            
-            set result to do JavaScript jsCode
-            return result
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
-        )
-
-        if result.returncode == 0:
-            output = result.stdout.strip()
-            if "already_on_gallery" in output:
-                return "already"
-            elif "clicked" in output:
-                return "navigated"
-        return "failed"
-    except Exception as e:
-        print(f"⚠ Navigation error: {e}")
-        return "failed"
-
-
-def get_camera_buttons():
-    """Get all camera/album buttons from the current Safari page."""
-    applescript = """
-    tell application "Safari"
-        tell current tab of front window
-            set jsCode to "
-                JSON.stringify(
-                    Array.from(document.querySelectorAll('button, a, [role=button], div[onclick]'))
-                        .filter(btn => {
-                            const text = btn.textContent.trim();
-                            const hasValidLength = text.length >= 3 && text.length <= 50;
-                            // Exclude navigation and common UI elements
-                            const excludeWords = ['login', 'logout', 'back', 'next', 'close', 'menu', 'settings', 
-                                                 'dashboard', 'gallery', 'profile', 'account', 'help', 'support',
-                                                 'home', 'cancel', 'ok', 'yes', 'no', 'save', 'edit', 'delete'];
-                            const notCommon = !excludeWords.includes(text.toLowerCase());
-                            const isVisible = btn.offsetParent !== null;
-                            // Only include if it doesn't look like it navigates to another page
-                            const isNotNavigation = !btn.href || btn.href.includes('gallery');
-                            return hasValidLength && notCommon && isVisible && isNotNavigation;
-                        })
-                        .map(btn => ({
-                            text: btn.textContent.trim(),
-                            selector: btn.id ? '#' + btn.id : 
-                                     btn.className ? '.' + btn.className.split(' ').join('.') :
-                                     btn.tagName.toLowerCase()
-                        }))
-                )
-            "
-            
-            set jsonData to do JavaScript jsCode
-            return jsonData
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
-        )
-
-        if result.returncode == 0:
-            return json.loads(result.stdout.strip())
-        return []
-    except:
-        return []
-
-
-def click_camera_button(button_text):
-    """Click a camera/album button by its text content."""
-    # Escape single quotes in button text
-    safe_text = button_text.replace("'", "\\'")
-
-    applescript = f"""
-    tell application "Safari"
-        activate
-        delay 0.5
-        
-        tell current tab of front window
-            -- Try to click using multiple methods
-            set jsCodeClick to "
-                const allButtons = Array.from(document.querySelectorAll('button, a, [role=button], div[onclick]'));
-                const targetButton = allButtons.find(btn => btn.textContent.trim() === '{safe_text}' && btn.offsetParent !== null);
-                
-                if (targetButton) {{
-                    // Scroll into view first
-                    targetButton.scrollIntoView({{ behavior: 'auto', block: 'center' }});
-                    
-                    // Try multiple click methods
-                    try {{
-                        // Method 1: Direct click
-                        targetButton.click();
-                    }} catch(e1) {{
-                        try {{
-                            // Method 2: Dispatch mouse event
-                            const event = new MouseEvent('click', {{
-                                view: window,
-                                bubbles: true,
-                                cancelable: true
-                            }});
-                            targetButton.dispatchEvent(event);
-                        }} catch(e2) {{
-                            // Method 3: If it has onclick, call it
-                            if (targetButton.onclick) {{
-                                targetButton.onclick();
-                            }}
-                        }}
-                    }}
-                    'clicked';
-                }} else {{
-                    'not_found';
-                }}
-            "
-            
-            set clickResult to do JavaScript jsCodeClick
-            delay 1.5
-            return clickResult
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=15
-        )
-
-        if result.returncode == 0 and "clicked" in result.stdout:
-            return True
-        return False
-    except:
-        return False
-
-
-def get_safari_image_urls():
-    """Extract all image URLs and camera/album info from the current Safari page using JavaScript."""
-    applescript = """
-    tell application "Safari"
-        if (count of windows) = 0 then
-            return "ERROR: No Safari windows open"
-        end if
-        
-        tell current tab of front window
-            -- JavaScript to extract all image URLs and album info
-            set jsCode to "
-                JSON.stringify({
-                    images: Array.from(document.querySelectorAll('img')).map(img => ({
-                        src: img.src,
-                        alt: img.alt || '',
-                        title: img.title || '',
-                        parent: img.closest('[data-album], [data-camera], section, article')?.textContent?.trim().split('\\\\n')[0] || ''
-                    })),
-                    backgrounds: Array.from(document.querySelectorAll('*')).map(el => {
-                        const bg = window.getComputedStyle(el).backgroundImage;
-                        const match = bg.match(/url\\\\(['\\\"]?([^'\\\"]+)['\\\"]?\\\\)/);
-                        return match ? match[2] : null;
-                    }).filter(url => url && url.startsWith('http')),
-                    links: Array.from(document.querySelectorAll('a[href*=jpg], a[href*=jpeg], a[href*=png], a[href*=webp]')).map(a => a.href),
-                    currentURL: window.location.href,
-                    albumName: document.querySelector('h1, h2, .album-name, .camera-name, [class*=album], [class*=camera]')?.textContent?.trim() || 
-                               document.title.split('|')[0].trim() ||
-                               'Unknown',
-                    availableAlbums: Array.from(document.querySelectorAll('button, a')).map(el => el.textContent.trim()).filter(text => text && text.length > 2 && text.length < 50)
-                })
-            "
-            
-            set jsonData to do JavaScript jsCode
-            return jsonData
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=15
-        )
-
-        if result.returncode == 0:
-            data = json.loads(result.stdout.strip())
-            return data
-        else:
-            print(f"❌ AppleScript error: {result.stderr}")
-            return None
-    except Exception as e:
-        print(f"❌ Error extracting image URLs: {e}")
-        return None
-
-
-def download_with_safari(url, filepath):
-    """Download a file using Safari's session via AppleScript."""
-    # AppleScript to download using Safari's session
-    applescript = f"""
-    tell application "Safari"
-        tell current tab of front window
-            set jsCode to "
-                fetch('{url}')
-                    .then(r => r.blob())
-                    .then(blob => {{
-                        const reader = new FileReader();
-                        reader.onload = () => {{
-                            const base64 = reader.result.split(',')[1];
-                            document.body.setAttribute('data-download-result', base64);
-                        }};
-                        reader.readAsDataURL(blob);
-                    }})
-                    .catch(e => {{
-                        document.body.setAttribute('data-download-error', e.toString());
-                    }});
-                'downloading';
-            "
-            
-            do JavaScript jsCode
-            
-            -- Wait for download to complete
-            delay 2
-            
-            set resultJS to "document.body.getAttribute('data-download-result') || document.body.getAttribute('data-download-error') || 'pending'"
-            set downloadResult to do JavaScript resultJS
-            
-            return downloadResult
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=30
-        )
-
-        if result.returncode == 0 and result.stdout.strip() not in [
-            "pending",
-            "downloading",
-            "",
-        ]:
-            # Check if it's an error
-            if "error" in result.stdout.lower():
-                return False
-
-            # Decode base64 and save
-            import base64
-
-            try:
-                image_data = base64.b64decode(result.stdout.strip())
-                with open(filepath, "wb") as f:
-                    f.write(image_data)
-                return True
-            except:
-                return False
-        return False
-    except Exception as e:
-        print(f"  ⚠ Safari download failed: {e}")
-        return False
-
-
-def click_first_thumbnail():
-    """Click the first thumbnail in the gallery to open the carousel."""
-    applescript = """
-    tell application "Safari"
-        activate
-        delay 0.3
-        
-        tell current tab of front window
-            set jsCode to "
-                // Find all gallery thumbnails with multiple strategies
-                let thumbnails = [];
-                
-                // Strategy 1: Look for gallery-specific classes/containers
-                const galleryContainers = document.querySelectorAll('[class*=gallery], [class*=grid], [class*=image], [id*=gallery], [id*=grid]');
-                for (const container of galleryContainers) {
-                    const imgs = Array.from(container.querySelectorAll('img')).filter(img => {
-                        const src = img.src || '';
-                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'loading'];
-                        const isUIElement = skip.some(s => src.toLowerCase().includes(s));
-                        const isVisible = img.offsetParent !== null;
-                        const hasReasonableSize = img.width > 50 && img.height > 50;
-                        return !isUIElement && isVisible && hasReasonableSize;
-                    });
-                    thumbnails.push(...imgs);
-                }
-                
-                // Strategy 2: If no thumbnails found, try all images
-                if (thumbnails.length === 0) {
-                    thumbnails = Array.from(document.querySelectorAll('img')).filter(img => {
-                        const src = img.src || '';
-                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'loading'];
-                        const isUIElement = skip.some(s => src.toLowerCase().includes(s));
-                        const isVisible = img.offsetParent !== null;
-                        const hasReasonableSize = img.width > 80 && img.height > 80;
-                        return !isUIElement && isVisible && hasReasonableSize;
-                    });
-                }
-                
-                if (thumbnails.length > 0) {
-                    const first = thumbnails[0];
-                    first.scrollIntoView({ behavior: 'auto', block: 'center' });
-                    
-                    // Try clicking with multiple methods
-                    const clickTarget = first.closest('a, button, [onclick], [role=button], div[class*=card], div[class*=item]') || first;
-                    
-                    // Method 1: Direct click
-                    try {
-                        clickTarget.click();
-                    } catch(e1) {
-                        // Method 2: Mouse event
-                        try {
-                            const event = new MouseEvent('click', {
-                                view: window,
-                                bubbles: true,
-                                cancelable: true
-                            });
-                            clickTarget.dispatchEvent(event);
-                        } catch(e2) {
-                            // Method 3: Try clicking the image itself
-                            first.click();
-                        }
-                    }
-                    
-        end tell
-    end tell
-    """
-
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=15
-        )
-        return result.returncode == 0 and "clicked" in result.stdout
-    except:
-        return False
 
 
 def get_current_carousel_image():
@@ -435,57 +17,61 @@ def get_current_carousel_image():
     tell application "Safari"
         tell current tab of front window
             set jsCode to "
-                // Look for the full-resolution image in the carousel
-                const selectors = [
-                    '[class*=carousel] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    '[class*=modal] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    '[class*=lightbox] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    '[id*=carousel] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    '[id*=modal] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    '[role=dialog] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
-                    'img[src*=original]', 'img[src*=full]', 'img[src*=large]'
-                ];
+                // Find large gallery images from media.secacam.com
+                const allImages = Array.from(document.querySelectorAll('img'))
+                    .filter(img => {
+                        const src = img.src || '';
+                        const isGalleryImage = src.includes('media.secacam.com/getImage');
+                        const isLarge = img.naturalWidth > 1000 && img.naturalHeight > 500;
+                        return isGalleryImage && isLarge;
+                    })
+                    .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
                 
-                let fullResImg = null;
-                for (const sel of selectors) {
-                    const img = document.querySelector(sel);
-                    if (img && img.src && img.src.startsWith('http') && img.naturalWidth > 500) {
-                        fullResImg = img;
-                        break;
-                    }
-                }
+                let mainImg = allImages.length > 0 ? allImages[0] : null;
                 
-                // Fallback: get the largest visible image
-                if (!fullResImg) {
-                    const allImages = Array.from(document.querySelectorAll('img'))
+                // Fallback: Find any large image
+                if (!mainImg) {
+                    const largeImages = Array.from(document.querySelectorAll('img'))
                         .filter(img => {
-                            const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'thumb'];
-                            const isUI = skip.some(s => (img.src || '').toLowerCase().includes(s));
-                            return !isUI && img.offsetParent !== null && img.src.startsWith('http');
+                            const src = img.src || '';
+                            const skip = ['ic_', 'icon', 'logo', 'svg'];
+                            const isUI = skip.some(s => src.toLowerCase().includes(s));
+                            return !isUI && img.naturalWidth > 1000 && img.naturalHeight > 500;
                         })
                         .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
-                    fullResImg = allImages[0];
+                    
+                    mainImg = largeImages.length > 0 ? largeImages[0] : null;
                 }
                 
-                if (fullResImg) {
-                    // Try to extract original filename from URL or data attributes
-                    const url = fullResImg.src;
-                    const urlParts = url.split('/');
-                    const urlFilename = urlParts[urlParts.length - 1].split('?')[0];
+                if (mainImg) {
+                    const url = mainImg.src;
+                    const alt = mainImg.getAttribute('alt') || '';
+                    const title = mainImg.getAttribute('title') || '';
                     
-                    // Look for data attributes with filename
-                    const dataFilename = fullResImg.getAttribute('data-filename') || 
-                                        fullResImg.getAttribute('data-name') ||
-                                        fullResImg.closest('[data-filename]')?.getAttribute('data-filename');
+                    let filename = alt || title || 'image_' + Date.now();
                     
                     JSON.stringify({
                         url: url,
-                        filename: dataFilename || urlFilename,
-                        width: fullResImg.naturalWidth,
-                        height: fullResImg.naturalHeight
+                        filename: filename,
+                        width: mainImg.naturalWidth,
+                        height: mainImg.naturalHeight
                     });
                 } else {
-                    'not_found';
+                    const allImgs = Array.from(document.querySelectorAll('img'));
+                    const imgInfo = allImgs.slice(0, 5).map(i => ({
+                        src: i.src?.substring(0, 80),
+                        width: i.naturalWidth,
+                        height: i.naturalHeight,
+                        alt: i.alt
+                    }));
+                    
+                    JSON.stringify({
+                        error: 'not_found',
+                        totalImages: allImgs.length,
+                        largeImages: allImgs.filter(i => i.naturalWidth > 1000).length,
+                        mediaImages: allImgs.filter(i => i.src?.includes('media.secacam.com')).length,
+                        sampleImages: imgInfo
+                    });
                 }
             "
             
@@ -500,29 +86,42 @@ def get_current_carousel_image():
             ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
         )
 
-        if result.returncode == 0 and result.stdout.strip() != "not_found":
-            return json.loads(result.stdout.strip())
+        if result.returncode == 0:
+            data = json.loads(result.stdout.strip())
+            if "error" in data:
+                print(f"  Debug: Found {data.get('totalImages', 0)} total images")
+                print(f"  Debug: {data.get('largeImages', 0)} large images (>1000px)")
+                print(
+                    f"  Debug: {data.get('mediaImages', 0)} images from media.secacam.com"
+                )
+                if data.get("sampleImages"):
+                    print("  Debug: Sample images:")
+                    for i, img in enumerate(data.get("sampleImages", [])[:3], 1):
+                        print(
+                            f"    {i}. {img.get('width')}x{img.get('height')} - {img.get('src', '')[:60]}"
+                        )
+                return None
+            return data
         return None
-    except:
+    except Exception as e:
+        print(f"  Error: {e}")
         return None
 
 
 def click_next_in_carousel():
-    """Click the 'next' button in the carousel to go to the next image."""
+    """Click the 'next' button in the carousel."""
     applescript = """
     tell application "Safari"
         tell current tab of front window
             set jsCode to "
-                // Look for next button with various selectors
+                // Look for next button
                 const nextSelectors = [
                     'button[aria-label*=next]', 'button[aria-label*=Next]',
                     '[class*=next]:not([class*=prev])', 
                     '[class*=arrow-right]', '[class*=arrowright]',
-                    '[class*=arrow][class*=right]', '[class*=forward]',
-                    'button[class*=right]:not([class*=left])', 
-                    '[data-action*=next]', '.carousel-control-next', 
-                    '.slick-next', 'button:has(svg[class*=right])',
-                    '[title*=next]', '[title*=Next]',
+                    'button[class*=right]:not([class*=left])',
+                    '[data-action*=next]', 
+                    'button:has(svg[class*=right])',
                     'button:has([class*=chevron-right])',
                     'button:has([class*=arrow-right])'
                 ];
@@ -537,7 +136,6 @@ def click_next_in_carousel():
                                 const classes = (btn.className || '').toLowerCase();
                                 const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
                                 
-                                // Make sure it's for next/forward, not prev/back
                                 const isPrev = text.includes('prev') || text.includes('back') || 
                                              classes.includes('prev') || classes.includes('back') ||
                                              aria.includes('prev') || aria.includes('back');
@@ -553,10 +151,10 @@ def click_next_in_carousel():
                 }
                 
                 if (nextBtn) {
-                    // Try multiple click methods
                     try {
                         nextBtn.click();
-                    } catch(e1) {
+                        'clicked';
+                    } catch(e) {
                         try {
                             const event = new MouseEvent('click', {
                                 view: window,
@@ -564,9 +162,11 @@ def click_next_in_carousel():
                                 cancelable: true
                             });
                             nextBtn.dispatchEvent(event);
-                        } catch(e2) { }
+                            'clicked';
+                        } catch(e2) {
+                            'error';
+                        }
                     }
-                    'clicked';
                 } else {
                     // Try arrow key as fallback
                     document.dispatchEvent(new KeyboardEvent('keydown', { 
@@ -598,188 +198,98 @@ def click_next_in_carousel():
         return False
 
 
-def close_carousel():
-    """Close the carousel/modal/lightbox."""
-    applescript = """
+def download_with_safari(url, filepath):
+    """Download a file using Safari's session."""
+    applescript = f"""
     tell application "Safari"
         tell current tab of front window
             set jsCode to "
-                // Try various methods to close the carousel
-                const closeSelectors = [
-                    '[class*=close]', '[aria-label*=close]', '[aria-label*=Close]',
-                    'button[class*=close]', '[data-dismiss]', '.modal-close',
-                    '[class*=overlay]', '[class*=backdrop]'
-                ];
-                
-                let closed = false;
-                for (const sel of closeSelectors) {
-                    const closeBtn = document.querySelector(sel);
-                    if (closeBtn && closeBtn.offsetParent !== null) {
-                        closeBtn.click();
-                        closed = true;
-                        break;
-                    }
-                }
-                
-                // Try Escape key
-                if (!closed) {
-                    document.dispatchEvent(new KeyboardEvent('keydown', { 
-                        key: 'Escape', 
-                        code: 'Escape', 
-                        keyCode: 27,
-                        bubbles: true
-                    }));
-                    closed = true;
-                }
-                
-                closed ? 'closed' : 'attempted';
+                fetch('{url}')
+                    .then(r => r.blob())
+                    .then(blob => {{
+                        const reader = new FileReader();
+                        reader.onload = () => {{
+                            const base64 = reader.result.split(',')[1];
+                            document.body.setAttribute('data-download-result', base64);
+                        }};
+                        reader.readAsDataURL(blob);
+                    }})
+                    .catch(e => {{
+                        document.body.setAttribute('data-download-error', e.toString());
+                    }});
+                'downloading';
             "
             
             do JavaScript jsCode
+            delay 2
+            
+            set resultJS to "document.body.getAttribute('data-download-result') || document.body.getAttribute('data-download-error') || 'pending'"
+            set downloadResult to do JavaScript resultJS
+            
+            return downloadResult
         end tell
     end tell
     """
 
     try:
-        subprocess.run(
-            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=5
+        result = subprocess.run(
+            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=30
         )
-    except:
-        pass
 
+        if result.returncode == 0 and result.stdout.strip() not in [
+            "pending",
+            "downloading",
+            "",
+        ]:
+            if "error" in result.stdout.lower():
+                return False
 
-def download_gallery_images(download_dir, camera_name=None):
-    """
-    Download all images from the ZEISS Secacam gallery using Safari's current session.
+            import base64
 
-    Args:
-        download_dir: Directory to save images
-        camera_name: Name of the camera/album (optional, will be detected if not provided)
-    """
-
-    # Create download directory if it doesn't exist
-    download_path = Path(download_dir)
-    download_path.mkdir(parents=True, exist_ok=True)
-
-    print("✓ Using gallery view to download all camera images")
-    print(f"✓ Saving to: {download_path}")
-
-    # Get image data from Safari
-    data = get_safari_image_urls()
-
-    if not data:
-        print("❌ Failed to extract data from Safari.")
-        print("Make sure Safari is open with the gallery page loaded.")
-        return False
-
-    current_url = data.get("currentURL", "")
-    print(f"✓ Current page: {current_url}")
-
-    if "gallery" not in current_url.lower():
-        print("⚠ Warning: Current Safari page doesn't appear to be the gallery.")
-        proceed = input("Continue anyway? (y/n): ").strip().lower()
-        if proceed != "y":
-            return False
-
-    # Collect all image URLs
-    found_images = set()
-
-    # Add img src URLs
-    for img_data in data.get("images", []):
-        if isinstance(img_data, dict):
-            url = img_data.get("src", "")
-        else:
-            url = img_data
-        if url and url.startswith("http"):
-            found_images.add(url)
-
-    # Add background image URLs
-    for url in data.get("backgrounds", []):
-        if url:
-            found_images.add(url)
-
-    # Add linked images
-    for url in data.get("links", []):
-        if url:
-            found_images.add(url)
-
-    # Also parse HTML for additional patterns
-    page_html = get_safari_page_content()
-    if page_html:
-        # Look for __NEXT_DATA__
-        next_data_match = re.search(
-            r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', page_html, re.DOTALL
-        )
-        if next_data_match:
             try:
-                next_data = json.loads(next_data_match.group(1))
-                print("✓ Found Next.js data, parsing...")
-                extract_images_from_json(next_data, found_images, current_url)
-            except json.JSONDecodeError:
-                pass
-
-        # Look for other patterns
-        patterns = [
-            r'"(https://[^"]+\.(?:jpg|jpeg|png|gif|webp)[^"]*)"',
-            r"'(https://[^']+\.(?:jpg|jpeg|png|gif|webp)[^']*)'",
-        ]
-        for pattern in patterns:
-            matches = re.findall(pattern, page_html, re.IGNORECASE)
-            found_images.update(matches)
-
-    # Filter out UI elements
-    filtered_images = [
-        url
-        for url in found_images
-        if not any(
-            skip in url.lower()
-            for skip in ["bg_", "ic_", "logo", "icon", "button", "avatar"]
-        )
-    ]
-
-    if not filtered_images:
-        print("❌ No gallery images found.")
-        print(
-            f"   Found {len(found_images)} total images, but all appear to be UI elements."
-        )
-        print(
-            "\nTIP: Make sure you've scrolled through the gallery to load all images."
-        )
-
-        # Show available albums/cameras
-        available = data.get("availableAlbums", [])
-        if available:
-            unique_albums = sorted(
-                set([a for a in available if len(a) > 3 and len(a) < 30])
-            )[:10]
-            if unique_albums:
-                print("\nDetected camera/album buttons:")
-                for alb in unique_albums:
-                    print(f"  - {alb}")
-                print(
-                    "\nClick on a camera button to view its images, then run this script again."
-                )
-
+                image_data = base64.b64decode(result.stdout.strip())
+                with open(filepath, "wb") as f:
+                    f.write(image_data)
+                return True
+            except:
+                return False
+        return False
+    except:
         return False
 
-    print("\n🎯 Downloading images from carousel...")
-    print("💡 Make sure the carousel is open before running this script!")
 
-    # Download images by navigating through carousel
+def main():
+    """Main function."""
+    print("ZEISS Secacam Gallery Carousel Downloader")
+    print("=" * 60)
+    print("💡 Make sure the carousel is already open in Safari!")
+    print()
+
+    # Set download directory
+    download_dir = Path("/Users/wri2lr/Downloads/ZEISS_Secacam_Gallery_Images")
+    download_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"✓ Download directory: {download_dir}")
+    print()
+
     downloaded = 0
+    skipped = 0
     failed = 0
     image_index = 1
 
     import time
 
+    print("Starting download from carousel...")
+    print("=" * 60)
+
     while True:
-        print(f"\n[Image {image_index}] Extracting image data...")
+        print(f"\n[Image {image_index}]")
 
         # Get current image info
         img_data = get_current_carousel_image()
 
         if not img_data:
-            print("  ✗ Could not get image data (might be end of carousel)")
+            print("  ✗ Could not get image data - end of carousel or no image found")
             break
 
         img_url = img_data.get("url")
@@ -787,22 +297,26 @@ def download_gallery_images(download_dir, camera_name=None):
         width = img_data.get("width", 0)
         height = img_data.get("height", 0)
 
-        print(f"  Original filename: {original_filename}")
-        print(f"  Dimensions: {width}x{height}px")
+        print(f"  Filename: {original_filename}")
+        print(f"  Size: {width}x{height}px")
 
         # Extract camera name from filename (format: "Camera Name - timestamp.jpg")
         camera_folder_name = "Unknown"
         if " - " in original_filename:
             camera_folder_name = original_filename.split(" - ")[0].strip()
-            # Sanitize camera name for folder
-            camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
+
+        # Sanitize camera name for folder
+        camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
 
         # Create camera-specific subfolder
-        camera_path = download_path / camera_folder_name
+        camera_path = download_dir / camera_folder_name
         camera_path.mkdir(parents=True, exist_ok=True)
 
-        # Sanitize full filename
+        # Sanitize filename and ensure .jpg extension
         safe_filename = re.sub(r'[<>:"/\\|?*]', "_", original_filename)
+        # Add .jpg extension if not present
+        if not safe_filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+            safe_filename += ".jpg"
         filepath = camera_path / safe_filename
 
         print(f"  Camera: {camera_folder_name}")
@@ -810,13 +324,19 @@ def download_gallery_images(download_dir, camera_name=None):
         # Check if already downloaded
         if filepath.exists():
             existing_size = filepath.stat().st_size / 1024
-            print(f"  ⊘ Already exists ({existing_size:.1f} KB) - stopping here")
+            print(f"  ⊘ Already exists ({existing_size:.1f} KB)")
+            print(f"\n{'=' * 60}")
+            print("✓ Found existing file - stopping here!")
+            print(
+                "  This file was already downloaded, assuming all newer images are also downloaded."
+            )
+            skipped += 1
             break
 
         print("  ⬇ Downloading...")
 
         try:
-            # Try downloading with Safari first (uses authenticated session)
+            # Try downloading with Safari first
             success = download_with_safari(img_url, filepath)
 
             if not success:
@@ -830,7 +350,7 @@ def download_gallery_images(download_dir, camera_name=None):
             if success and filepath.exists():
                 downloaded += 1
                 size_kb = filepath.stat().st_size / 1024
-                print(f"  ✓ Saved: {safe_filename} ({size_kb:.1f} KB)")
+                print(f"  ✓ Saved ({size_kb:.1f} KB)")
             else:
                 failed += 1
                 print("  ✗ Failed to download")
@@ -839,179 +359,24 @@ def download_gallery_images(download_dir, camera_name=None):
             failed += 1
             print(f"  ✗ Error: {e}")
 
-        # Try to go to next image
-        print("  → Navigating to next image...")
+        # Move to next image
+        print("  → Next...")
         if not click_next_in_carousel():
-            print("  ⓘ No more images or couldn't click next")
+            print("  ⓘ Could not navigate to next image - end of carousel")
             break
 
         image_index += 1
-        time.sleep(0.5)  # Brief pause between images
+        time.sleep(0.5)
 
-    # Close carousel when done
-    print("\nClosing carousel...")
-    close_carousel()
-    time.sleep(1)
-
+    # Summary
     print(f"\n{'=' * 60}")
-    print("✓ Download complete!")
+    print("✓ Download Complete!")
     print(f"  Images processed: {image_index}")
-    print(f"  Successfully downloaded: {downloaded}")
+    print(f"  Downloaded: {downloaded}")
+    print(f"  Skipped (existing): {skipped}")
     print(f"  Failed: {failed}")
-    print(f"  Saved to: {download_path}")
-
-    return downloaded > 0
-
-
-def extract_images_from_json(data, image_set, base_url):
-    """Recursively extract image URLs from JSON data."""
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if key in ["src", "url", "image", "thumbnail", "href"] and isinstance(
-                value, str
-            ):
-                if re.match(r".*\.(?:jpg|jpeg|png|gif|webp)", value, re.IGNORECASE):
-                    image_set.add(value)
-            else:
-                extract_images_from_json(value, image_set, base_url)
-    elif isinstance(data, list):
-        for item in data:
-            extract_images_from_json(item, image_set, base_url)
-
-
-def get_filename_from_url(url, index):
-    """Extract or generate a filename from URL."""
-    parsed = urlparse(url)
-    filename = os.path.basename(parsed.path)
-
-    # If no filename in path, try to extract from query parameters
-    if not filename or "." not in filename:
-        # Check for filename in query parameters
-        from urllib.parse import parse_qs
-
-        query_params = parse_qs(parsed.query)
-        for key in ["filename", "file", "name"]:
-            if key in query_params:
-                filename = query_params[key][0]
-                break
-
-    # If still no filename, generate one with index
-    if not filename or "." not in filename:
-        filename = f"image_{index:04d}.jpg"
-
-    # Sanitize filename (keep alphanumeric, dots, dashes, underscores)
-    # But preserve the file extension
-    name_parts = filename.rsplit(".", 1)
-    if len(name_parts) == 2:
-        name, ext = name_parts
-        name = re.sub(r"[^\w\-]", "_", name)
-        filename = f"{name}.{ext}"
-    else:
-        filename = re.sub(r"[^\w\-.]", "_", filename)
-
-    return filename
-
-
-def main():
-    """Main function."""
-    print("ZEISS Secacam Gallery Image Downloader")
+    print(f"  Saved to: {download_dir}")
     print("=" * 60)
-    print("\nThis script uses your active Safari session - no login needed!")
-
-    # Gallery URL
-    gallery_url = "https://secacam-webapp.zeiss.com/en/gallery"
-
-    # Check if Safari is running and open gallery if needed
-    check_and_open_safari = f'''
-    tell application "Safari"
-        if not running then
-            activate
-            delay 1
-        end if
-        
-        -- Check if gallery page is already open in any tab
-        set galleryOpen to false
-        repeat with w in windows
-            repeat with t in tabs of w
-                if URL of t contains "secacam-webapp.zeiss.com" then
-                    set galleryOpen to true
-                    set current tab of window 1 to t
-                    set index of w to 1
-                    exit repeat
-                end if
-            end repeat
-            if galleryOpen then exit repeat
-        end repeat
-        
-        -- If not open, create new tab with gallery URL
-        if not galleryOpen then
-            if (count of windows) = 0 then
-                make new document with properties {{URL:"{gallery_url}"}}
-            else
-                tell front window
-                    set current tab to (make new tab with properties {{URL:"{gallery_url}"}})
-                end tell
-            end if
-            delay 3
-        end if
-        
-        activate
-        return "opened"
-    end tell
-    '''
-
-    print("\nChecking Safari...")
-    try:
-        result = subprocess.run(
-            ["osascript", "-e", check_and_open_safari],
-            capture_output=True,
-            text=True,
-            timeout=15,
-        )
-        if result.returncode == 0:
-            print("✓ Safari is ready with Secacam gallery")
-        else:
-            print("⚠ Could not open Safari automatically")
-            print("   Please open Safari and navigate to:")
-            print(f"   {gallery_url}")
-            return
-    except Exception as e:
-        print(f"⚠ Error opening Safari: {e}")
-        print(f"   Please manually open: {gallery_url}")
-        return
-
-    # Set download directory
-    download_dir = "/Users/wri2lr/Downloads/Secacam_Gallery_Images"
-
-    print(f"Download directory: {download_dir}")
-
-    # Navigate to Gallery page first
-    print("\n" + "=" * 60)
-    print("Navigating to Gallery page...")
-    print("=" * 60)
-
-    nav_result = navigate_to_gallery()
-
-    if nav_result == "already":
-        print("✓ Already on Gallery page")
-    elif nav_result == "navigated":
-        print("✓ Successfully navigated to Gallery")
-        import time
-
-        time.sleep(3)  # Wait for gallery page to fully load
-    else:
-        print("❌ Failed to navigate to Gallery page")
-        print(
-            "   Please manually click on 'Gallery' in Safari and run the script again."
-        )
-        return
-
-    # Download from gallery (will automatically organize by camera name from filenames)
-    print("\n" + "=" * 60)
-    print("Downloading images from gallery...")
-    print("=" * 60 + "\n")
-
-    download_gallery_images(download_dir)
 
 
 if __name__ == "__main__":
