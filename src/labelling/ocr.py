@@ -5,7 +5,7 @@ ocr = OCRProcessor(model_name="llama3.2-vision:11b")
 
 # Test with an image (replace with your image path)
 result = ocr.process_image(
-    image_path="/Users/wri2lr/Pictures/Wildkamera/Alusitz/DCIM/100SEC3/ZCEU0071.JPG",
+    image_path="/Users/wri2lr/repos/wildl-id/data/Alu Sitz/Alu Sitz_2025-11-11_04-45-00_72c13c12d21390f7.jpg",
     format_type="text",
     custom_prompt="There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
     "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
@@ -16,4 +16,20 @@ result = ocr.process_image(
     "Respond only with the JSON object, nothing else.\n",
     language="eng",
 )
-print(result)
+
+print("Raw result:", result)
+
+# Parse the JSON string
+import json
+import re
+
+# Extract JSON from the response (model may add extra text)
+json_match = re.search(r"\{.*\}", result, re.DOTALL)
+if json_match:
+    json_str = json_match.group(0)
+    result = json.loads(json_str)
+else:
+    # Fallback: try to parse as-is
+    result = json.loads(result)
+
+print("Parsed result:", result)
