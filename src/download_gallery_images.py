@@ -426,7 +426,7 @@ def main():
             return timedelta(weeks=1), False
 
     time_delta, stop_on_existing = parse_time_range(DOWNLOAD_RANGE)
-    cutoff_date = datetime.now() - time_delta
+    cutoff_date = datetime.now() - time_delta + timedelta(days=1)
 
     print(f"📅 Download range: {DOWNLOAD_RANGE}")
     print(f"   Cutoff date: {cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}")
