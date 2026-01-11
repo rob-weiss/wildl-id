@@ -4,6 +4,7 @@ Download images from ZEISS Secacam gallery carousel.
 This script assumes the carousel is already open in Safari.
 """
 
+import hashlib
 import json
 import re
 import subprocess
@@ -120,21 +121,9 @@ def get_current_carousel_image():
                             }
                         }
                         
-                        // Always use URL param as unique identifier
-                        const paramIndex = url.indexOf('/param/');
-                        if (paramIndex !== -1) {
-                            const paramStart = paramIndex + 7;
-                            const paramEnd = url.indexOf('/', paramStart);
-                            const param = paramEnd === -1 ? url.substring(paramStart) : url.substring(paramStart, paramEnd);
-                            const shortParam = param.substring(0, 50);
-                            filename = cameraName ? cameraName + '_' + shortParam : 'secacam_' + shortParam;
-                        } else {
-                            filename = cameraName ? cameraName + '_' + Date.now() : 'image_' + Date.now();
-                        }
-                        
                         return JSON.stringify({
                             url: url,
-                            filename: filename,
+                            cameraName: cameraName,
                             width: mainImg.naturalWidth,
                             height: mainImg.naturalHeight,
                             debug_alt: mainImg.getAttribute('alt'),
@@ -358,17 +347,22 @@ def main():
             break
 
         img_url = img_data.get("url")
-        original_filename = img_data.get("filename", f"image_{image_index:04d}.jpg")
+        camera_name = img_data.get("cameraName", "").strip()
         width = img_data.get("width", 0)
         height = img_data.get("height", 0)
+
+        # Create hash from URL for unique filename
+        url_hash = hashlib.md5(img_url.encode()).hexdigest()[:16]
+        if camera_name:
+            original_filename = f"{camera_name}_{url_hash}"
+        else:
+            original_filename = f"secacam_{url_hash}"
 
         print(f"  Filename: {original_filename}")
         print(f"  Size: {width}x{height}px")
 
-        # Extract camera name from filename (format: "Camera Name - timestamp.jpg")
-        camera_folder_name = "Unknown"
-        if " - " in original_filename:
-            camera_folder_name = original_filename.split(" - ")[0].strip()
+        # Use camera name for folder organization
+        camera_folder_name = camera_name if camera_name else "Unknown"
 
         # Sanitize camera name for folder
         camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
