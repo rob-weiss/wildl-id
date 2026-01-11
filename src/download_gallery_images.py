@@ -677,7 +677,7 @@ def main():
         return
 
     # Set download directory
-    download_dir = "/Users/wri2lr/Library/CloudStorage/OneDrive-BoschGroup/Pictures/Wildlife Cameras Downloads"
+    download_dir = "/Users/wri2lr/Downloads/Secacam_Gallery_Images"
 
     print(f"Download directory: {download_dir}")
 
