@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 import torch
 from matplotlib.patches import Rectangle
+from ollama_ocr import OCRProcessor
 from PIL import Image
 from PytorchWildlife.models import classification as pw_classification
 from PytorchWildlife.models import detection as pw_detection
@@ -203,6 +204,55 @@ def map_classifier_to_wildlife(classifier_name):
         return "unknown"
 
 
+def extract_metadata_ocr(image_path, ocr_processor):
+    """Extract timestamp, temperature, and battery level from image using OCR.
+
+    Parameters
+    ----------
+    image_path : Path
+        Path to the image file.
+    ocr_processor : OCRProcessor
+        OCR processor instance.
+
+    Returns
+    -------
+    dict
+        Dictionary with 'timestamp', 'temperature_celsius', 'battery_level' keys.
+    """
+    try:
+        result = ocr_processor.process_image(
+            image_path=str(image_path),
+            format_type="json",
+            custom_prompt="There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
+            "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
+            "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
+            "In the gray bar, there is also a rectangular battery symbol somewhere left of the temperature value. Inside the symbol there is either a percentage value with integer multiples of ten or up to four bars indicating the remaining battery level of the camera.\n"
+            "If you can read the battery percentage value or count the bars, add it as an additional key 'battery_level' with value in percent (0-100).\n"
+            "That is, if there are four bars, assume 100%, three bars 75%, two bars 50%, one bar 25%, and no bars 0%.\n"
+            "Respond only with the JSON object, nothing else.\n",
+            language="eng",
+        )
+
+        # Parse result if it's a string
+        if isinstance(result, str):
+            import json
+
+            result = json.loads(result)
+
+        return {
+            "timestamp": result.get("timestamp"),
+            "temperature_celsius": result.get("temperature_celsius"),
+            "battery_level": result.get("battery_level"),
+        }
+    except Exception as e:
+        print(f"    OCR error: {e}")
+        return {
+            "timestamp": None,
+            "temperature_celsius": None,
+            "battery_level": None,
+        }
+
+
 def detect_lighting(image_path):
     """Detect whether image is bright or dark based on average intensity.
 
@@ -245,6 +295,7 @@ def show_image_with_detection(
     box=None,
     save_path=None,
     classification_info=None,
+    metadata=None,
 ):
     """Display an image with its predicted class and bounding box.
 
@@ -262,6 +313,8 @@ def show_image_with_detection(
         Path to save the annotated image.
     classification_info : dict, optional
         Additional classification information to display.
+    metadata : dict, optional
+        OCR metadata (timestamp, temperature, battery) to display.
     """
     img = mpimg.imread(str(image_path))
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -275,6 +328,15 @@ def show_image_with_detection(
         conf = classification_info.get("confidence")
         if species and conf is not None:
             title += f"\nclassified as: {species} ({conf:.2%})"
+
+    # Add metadata info
+    if metadata:
+        if metadata.get("timestamp"):
+            title += f"\ntimestamp: {metadata['timestamp']}"
+        if metadata.get("temperature_celsius") is not None:
+            title += f"\ntemp: {metadata['temperature_celsius']}°C"
+        if metadata.get("battery_level") is not None:
+            title += f"\nbattery: {metadata['battery_level']}%"
 
     ax.set_title(title)
 
@@ -309,6 +371,11 @@ def process_images_with_pytorch_wildlife():
     if torch.backends.mps.is_available():
         device = "mps"
     print(f"Using device: {device}")
+
+    # Initialize OCR processor
+    print("Initializing OCR processor...")
+    ocr_processor = OCRProcessor(model_name="llama3.2-vision:11b")
+    print("✓ OCR processor initialized")
 
     # Load MegaDetector model
     print(f"Loading {model_version} {model_name} model...")
@@ -547,6 +614,10 @@ def process_images_with_pytorch_wildlife():
         # Detect lighting
         lighting = detect_lighting(image_path)
 
+        # Extract metadata using OCR
+        print("  Extracting metadata via OCR...")
+        metadata = extract_metadata_ocr(image_path, ocr_processor)
+
         result_dict = {
             "location_id": location_id,
             "image_file": image_file,
@@ -555,6 +626,9 @@ def process_images_with_pytorch_wildlife():
             "lighting": lighting,
             "confidence": confidence,
             "classification_confidence": classification_confidence,
+            "timestamp": metadata["timestamp"],
+            "temperature_celsius": metadata["temperature_celsius"],
+            "battery_level": metadata["battery_level"],
         }
         results.append(result_dict)
 
@@ -581,6 +655,7 @@ def process_images_with_pytorch_wildlife():
             box=box,
             save_path=label_save_path,
             classification_info=classification_info,
+            metadata=metadata,
         )
 
         # Convert to parquet every 100 images
