@@ -730,6 +730,13 @@ def main():
         "close",
         "cancel",
         "reload",
+        "cameras",
+        "contacts",
+        "shop",
+        "language",
+        "other",
+        "sign out",
+        "sign in",
     }
 
     # More strict filtering for camera buttons
@@ -738,25 +745,36 @@ def main():
         text = btn["text"]
         if not text or text.lower() in skip_albums:
             continue
-        
+
         # Length check
         if len(text) < 3 or len(text) > 30:
             continue
-        
+
         # Must start with uppercase OR be all uppercase
         if not (text[0].isupper() or text.isupper()):
             continue
-        
+
         # Skip if it contains common UI words
-        ui_words = ["click", "view", "show", "hide", "more", "less", "new", "add", "remove", "filter"]
+        ui_words = [
+            "click",
+            "view",
+            "show",
+            "hide",
+            "more",
+            "less",
+            "new",
+            "add",
+            "remove",
+            "filter",
+        ]
         if any(word in text.lower() for word in ui_words):
             continue
-        
+
         # Skip if it's mostly numbers or special characters
         alpha_chars = sum(c.isalpha() for c in text)
         if alpha_chars < len(text) * 0.5:
             continue
-        
+
         camera_buttons.append(btn)
 
     if not camera_buttons:
