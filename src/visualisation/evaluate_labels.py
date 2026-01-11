@@ -34,7 +34,7 @@ from astral.sun import sun
 
 # Configuration
 model = "qwen3-vl:235b-a22b-thinking"
-image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
+image_dir = Path(__file__).parent.parent.parent / "data"
 labels_dir = image_dir / f"labels_{model}"
 # Put visualizations in docs/diagrams
 script_dir = Path(__file__).parent
