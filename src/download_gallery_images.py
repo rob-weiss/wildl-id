@@ -9,6 +9,7 @@ import json
 import re
 import subprocess
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 
@@ -416,13 +417,24 @@ def main():
         if timestamp:
             print(f"  Timestamp: {timestamp}")
 
+        # Convert timestamp to ISO format
+        iso_timestamp = None
+        if timestamp:
+            try:
+                # Parse format like "01/11/2026 09:53 AM"
+                dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
+                # Convert to ISO format suitable for filename: YYYY-MM-DD_HH-MM-SS
+                iso_timestamp = dt.strftime("%Y-%m-%d_%H-%M-%S")
+            except ValueError:
+                # If parsing fails, use sanitized original
+                iso_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
+
         # Create hash from URL for unique filename
         url_hash = hashlib.md5(img_url.encode()).hexdigest()[:16]
 
         # Build filename with camera name and timestamp
-        if camera_name and timestamp:
-            safe_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
-            original_filename = f"{camera_name}_{safe_timestamp}_{url_hash}"
+        if camera_name and iso_timestamp:
+            original_filename = f"{camera_name}_{iso_timestamp}_{url_hash}"
         elif camera_name:
             original_filename = f"{camera_name}_{url_hash}"
         else:
