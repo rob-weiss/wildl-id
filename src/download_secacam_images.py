@@ -106,7 +106,7 @@ def extract_timestamp_from_url(url: str) -> str:
     return None
 
 
-def generate_filename_from_url(url: str, index: int) -> str:
+def generate_filename_from_url(url: str) -> str:
     """Generate a consistent filename from URL."""
     # Try to extract timestamp
     timestamp = extract_timestamp_from_url(url)
@@ -117,7 +117,7 @@ def generate_filename_from_url(url: str, index: int) -> str:
     if timestamp:
         return f"{timestamp}_{url_hash}.jpg"
     else:
-        return f"image_{index:04d}_{url_hash}.jpg"
+        return f"{url_hash}.jpg"
 
 
 def download_image(url: str, output_path: Path) -> bool:
@@ -167,7 +167,7 @@ def download_all_images(urls: List[Dict]):
         url = item["url"]
 
         # Generate filename from URL
-        filename = generate_filename_from_url(url, i)
+        filename = generate_filename_from_url(url)
         output_path = OUTPUT_DIR / filename
 
         # Skip if already exists
