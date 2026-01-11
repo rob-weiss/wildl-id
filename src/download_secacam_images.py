@@ -34,13 +34,13 @@ OUTPUT_DIR = Path.home() / "SecacamImages"
 
 
 def extract_urls_from_realm_db() -> List[Dict]:
-    """Extract image URLs from the Realm database using strings command."""
+    """Extract image URLs and metadata from the Realm database using strings command."""
     if not REALM_DB or not REALM_DB.exists():
         print("Realm database not found")
         return []
 
     print(f"Reading Realm database: {REALM_DB}")
-    print("Extracting URLs using strings command...")
+    print("Extracting URLs and metadata using strings command...")
 
     try:
         # Use strings command to extract URLs from the binary Realm database
@@ -52,16 +52,45 @@ def extract_urls_from_realm_db() -> List[Dict]:
             print(f"Error running strings command: {result.stderr}")
             return []
 
-        # Find all image URLs
+        # Find all image URLs with context
+        lines = result.stdout.split("\n")
         urls = []
         url_pattern = r'https://media\.secacam\.com/getImage/param/[^\s"&<>]+'
-
-        for line in result.stdout.split("\n"):
+        
+        # Look for potential camera IDs or location info
+        camera_id_pattern = r'\b[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}\b'
+        serial_pattern = r'\bSEC[0-9]+-[WR][0-9]+-[0-9]+\b'
+        
+        for i, line in enumerate(lines):
             matches = re.findall(url_pattern, line)
             for url in matches:
-                # Clean up the URL (remove any trailing characters)
+                # Clean up the URL
                 url = url.rstrip('"&<>')
-                urls.append({"url": url, "source": "realm_db"})
+                
+                # Try to find associated metadata in nearby lines
+                camera_id = None
+                serial = None
+                
+                # Check surrounding lines for metadata (within 5 lines before/after)
+                for j in range(max(0, i-5), min(len(lines), i+6)):
+                    context_line = lines[j]
+                    
+                    # Look for camera IDs
+                    camera_matches = re.findall(camera_id_pattern, context_line)
+                    if camera_matches:
+                        camera_id = camera_matches[0]
+                    
+                    # Look for serial numbers
+                    serial_matches = re.findall(serial_pattern, context_line)
+                    if serial_matches:
+                        serial = serial_matches[0]
+                
+                urls.append({
+                    "url": url,
+                    "camera_id": camera_id,
+                    "serial": serial,
+                    "source": "realm_db"
+                })
 
         # Deduplicate URLs
         unique_urls = []
@@ -73,6 +102,21 @@ def extract_urls_from_realm_db() -> List[Dict]:
                 unique_urls.append(item)
 
         print(f"Found {len(unique_urls)} unique image URLs in Realm database")
+        
+        # Print camera info summary
+        cameras = set()
+        serials = set()
+        for item in unique_urls:
+            if item.get("camera_id"):
+                cameras.add(item["camera_id"])
+            if item.get("serial"):
+                serials.add(item["serial"])
+        
+        if cameras:
+            print(f"Found {len(cameras)} camera ID(s): {', '.join(sorted(cameras)[:3])}{'...' if len(cameras) > 3 else ''}")
+        if serials:
+            print(f"Found {len(serials)} serial number(s): {', '.join(sorted(serials))}")
+        
         return unique_urls
 
     except subprocess.TimeoutExpired:
@@ -106,18 +150,28 @@ def extract_timestamp_from_url(url: str) -> str:
     return None
 
 
-def generate_filename_from_url(url: str) -> str:
-    """Generate a consistent filename from URL."""
+def generate_filename_from_url(url: str, camera_info: Dict = None) -> str:
+    """Generate a consistent filename from URL and camera metadata."""
     # Try to extract timestamp
     timestamp = extract_timestamp_from_url(url)
 
     # Create a short hash of the URL for uniqueness
     url_hash = hashlib.md5(url.encode()).hexdigest()[:8]
 
+    # Add camera serial if available
+    prefix = ""
+    if camera_info:
+        serial = camera_info.get("serial")
+        if serial:
+            # Extract just the last part of the serial (e.g., "0062026" from "SEC5-W100-0062026")
+            serial_parts = serial.split("-")
+            if len(serial_parts) >= 2:
+                prefix = f"{serial_parts[0]}_{serial_parts[-1]}_"
+    
     if timestamp:
-        return f"{timestamp}_{url_hash}.jpg"
+        return f"{prefix}{timestamp}_{url_hash}.jpg"
     else:
-        return f"{url_hash}.jpg"
+        return f"{prefix}{url_hash}.jpg"
 
 
 def download_image(url: str, output_path: Path) -> bool:
@@ -166,8 +220,8 @@ def download_all_images(urls: List[Dict]):
     for i, item in enumerate(urls, 1):
         url = item["url"]
 
-        # Generate filename from URL
-        filename = generate_filename_from_url(url)
+        # Generate filename from URL and metadata
+        filename = generate_filename_from_url(url, item)
         output_path = OUTPUT_DIR / filename
 
         # Skip if already exists
