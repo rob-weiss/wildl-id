@@ -127,7 +127,7 @@ def get_camera_buttons():
         tell current tab of front window
             set jsCode to "
                 JSON.stringify(
-                    Array.from(document.querySelectorAll('button, a'))
+                    Array.from(document.querySelectorAll('button, a, [role=button]'))
                         .filter(btn => {
                             const text = btn.textContent.trim();
                             const hasValidLength = text.length >= 3 && text.length <= 50;
@@ -179,27 +179,41 @@ def click_camera_button(button_text):
         delay 0.5
         
         tell current tab of front window
-            set jsCode to "
-                const buttons = Array.from(document.querySelectorAll('button, a'));
+            -- First scroll the button into view
+            set jsCodeScroll to "
+                const buttons = Array.from(document.querySelectorAll('button, a, [role=button]'));
                 const targetButton = buttons.find(btn => btn.textContent.trim() === '{safe_text}');
                 if (targetButton) {{
-                    // Scroll button into view first
-                    targetButton.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-                    
-                    // Wait a bit for scroll, then click
-                    setTimeout(() => {{
-                        targetButton.click();
-                    }}, 500);
-                    
+                    targetButton.scrollIntoView({{ behavior: 'auto', block: 'center' }});
+                    'found';
+                }} else {{
+                    'not_found';
+                }}
+            "
+            
+            set scrollResult to do JavaScript jsCodeScroll
+            
+            if scrollResult is "not_found" then
+                return "not_found"
+            end if
+            
+            delay 0.5
+            
+            -- Now click the button
+            set jsCodeClick to "
+                const buttons = Array.from(document.querySelectorAll('button, a, [role=button]'));
+                const targetButton = buttons.find(btn => btn.textContent.trim() === '{safe_text}');
+                if (targetButton) {{
+                    targetButton.click();
                     'clicked';
                 }} else {{
                     'not_found';
                 }}
             "
             
-            set result to do JavaScript jsCode
+            set clickResult to do JavaScript jsCodeClick
             delay 1
-            return result
+            return clickResult
         end tell
     end tell
     """
