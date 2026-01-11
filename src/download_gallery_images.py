@@ -16,67 +16,63 @@ def get_current_carousel_image():
     applescript = """
     tell application "Safari"
         tell current tab of front window
-            set jsCode to "
-                // Find large gallery images from media.secacam.com
-                const allImages = Array.from(document.querySelectorAll('img'))
-                    .filter(img => {
-                        const src = img.src || '';
-                        const isGalleryImage = src.includes('media.secacam.com/getImage');
-                        const isLarge = img.naturalWidth > 1000 && img.naturalHeight > 500;
-                        return isGalleryImage && isLarge;
-                    })
-                    .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
-                
-                let mainImg = allImages.length > 0 ? allImages[0] : null;
-                
-                // Fallback: Find any large image
-                if (!mainImg) {
-                    const largeImages = Array.from(document.querySelectorAll('img'))
+            do JavaScript "
+                (function() {
+                    const allImages = Array.from(document.querySelectorAll('img'))
                         .filter(img => {
                             const src = img.src || '';
-                            const skip = ['ic_', 'icon', 'logo', 'svg'];
-                            const isUI = skip.some(s => src.toLowerCase().includes(s));
-                            return !isUI && img.naturalWidth > 1000 && img.naturalHeight > 500;
+                            const isGalleryImage = src.includes('media.secacam.com/getImage');
+                            const isLarge = img.naturalWidth > 1000 && img.naturalHeight > 500;
+                            return isGalleryImage && isLarge;
                         })
                         .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
                     
-                    mainImg = largeImages.length > 0 ? largeImages[0] : null;
-                }
-                
-                if (mainImg) {
-                    const url = mainImg.src;
-                    const alt = mainImg.getAttribute('alt') || '';
-                    const title = mainImg.getAttribute('title') || '';
+                    let mainImg = allImages.length > 0 ? allImages[0] : null;
                     
-                    let filename = alt || title || 'image_' + Date.now();
+                    if (!mainImg) {
+                        const largeImages = Array.from(document.querySelectorAll('img'))
+                            .filter(img => {
+                                const src = img.src || '';
+                                const skip = ['ic_', 'icon', 'logo', 'svg'];
+                                const isUI = skip.some(s => src.toLowerCase().includes(s));
+                                return !isUI && img.naturalWidth > 1000 && img.naturalHeight > 500;
+                            })
+                            .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
+                        
+                        mainImg = largeImages.length > 0 ? largeImages[0] : null;
+                    }
                     
-                    JSON.stringify({
-                        url: url,
-                        filename: filename,
-                        width: mainImg.naturalWidth,
-                        height: mainImg.naturalHeight
-                    });
-                } else {
-                    const allImgs = Array.from(document.querySelectorAll('img'));
-                    const imgInfo = allImgs.slice(0, 5).map(i => ({
-                        src: i.src?.substring(0, 80),
-                        width: i.naturalWidth,
-                        height: i.naturalHeight,
-                        alt: i.alt
-                    }));
-                    
-                    JSON.stringify({
-                        error: 'not_found',
-                        totalImages: allImgs.length,
-                        largeImages: allImgs.filter(i => i.naturalWidth > 1000).length,
-                        mediaImages: allImgs.filter(i => i.src?.includes('media.secacam.com')).length,
-                        sampleImages: imgInfo
-                    });
-                }
+                    if (mainImg) {
+                        const url = mainImg.src;
+                        const alt = mainImg.getAttribute('alt') || '';
+                        const title = mainImg.getAttribute('title') || '';
+                        let filename = alt || title || 'image_' + Date.now();
+                        
+                        return JSON.stringify({
+                            url: url,
+                            filename: filename,
+                            width: mainImg.naturalWidth,
+                            height: mainImg.naturalHeight
+                        });
+                    } else {
+                        const allImgs = Array.from(document.querySelectorAll('img'));
+                        const imgInfo = allImgs.slice(0, 5).map(i => ({
+                            src: (i.src || '').substring(0, 80),
+                            width: i.naturalWidth,
+                            height: i.naturalHeight,
+                            alt: i.alt || ''
+                        }));
+                        
+                        return JSON.stringify({
+                            error: 'not_found',
+                            totalImages: allImgs.length,
+                            largeImages: allImgs.filter(i => i.naturalWidth > 1000).length,
+                            mediaImages: allImgs.filter(i => (i.src || '').includes('media.secacam.com')).length,
+                            sampleImages: imgInfo
+                        });
+                    }
+                })()
             "
-            
-            set result to do JavaScript jsCode
-            return result
         end tell
     end tell
     """
@@ -86,7 +82,11 @@ def get_current_carousel_image():
             ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
         )
 
-        if result.returncode == 0:
+        print(f"  Debug: returncode={result.returncode}")
+        print(f"  Debug: stdout='{result.stdout.strip()[:200]}'")
+        print(f"  Debug: stderr='{result.stderr.strip()[:200]}'")
+
+        if result.returncode == 0 and result.stdout.strip():
             data = json.loads(result.stdout.strip())
             if "error" in data:
                 print(f"  Debug: Found {data.get('totalImages', 0)} total images")
