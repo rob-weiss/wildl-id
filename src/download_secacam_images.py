@@ -8,9 +8,7 @@ Requirements:
 
 import hashlib
 import json
-import os
 import re
-import sqlite3
 import subprocess
 from pathlib import Path
 from typing import Dict, List
@@ -22,8 +20,7 @@ import requests
 CONTAINER_PATH = Path(
     "/Users/wri2lr/Library/Containers/4225BDAD-C278-4C1E-81B0-726B325A096D/Data"
 )
-CACHE_DB = CONTAINER_PATH / "Library/Caches/de.zeiss.cop.caledonia/Cache.db"
-FS_CACHE_DIR = CONTAINER_PATH / "Library/Caches/de.zeiss.cop.caledonia/fsCachedData"
+
 DOCUMENTS_DIR = CONTAINER_PATH / "Documents"
 
 # Find the realm database file
@@ -34,68 +31,6 @@ for file in DOCUMENTS_DIR.glob("user_*_realm.realm"):
 
 # Output directory
 OUTPUT_DIR = Path.home() / "SecacamImages"
-
-
-def extract_urls_from_cache_db() -> List[Dict]:
-    """Extract image URLs from the Cache.db SQLite database."""
-    print(f"Reading Cache.db: {CACHE_DB}")
-
-    if not CACHE_DB.exists():
-        print(f"Cache.db not found at {CACHE_DB}")
-        return []
-
-    urls = []
-    conn = sqlite3.connect(str(CACHE_DB))
-    cursor = conn.cursor()
-
-    try:
-        # Get all cached image URLs with their file references
-        query = """
-        SELECT 
-            r.entry_ID,
-            r.request_key as url,
-            r.time_stamp,
-            hex(d.receiver_data) as file_uuid_hex,
-            d.isDataOnFS
-        FROM cfurl_cache_response r 
-        JOIN cfurl_cache_receiver_data d ON r.entry_ID = d.entry_ID 
-        WHERE r.request_key LIKE '%getImage%'
-        ORDER BY r.time_stamp DESC
-        """
-
-        cursor.execute(query)
-        rows = cursor.fetchall()
-
-        for row in rows:
-            entry_id, url, timestamp, file_uuid_hex, is_on_fs = row
-
-            # Decode the UUID from hex
-            file_uuid = None
-            if file_uuid_hex:
-                try:
-                    file_uuid = bytes.fromhex(file_uuid_hex).decode("utf-8")
-                except:
-                    pass
-
-            urls.append(
-                {
-                    "entry_id": entry_id,
-                    "url": url,
-                    "timestamp": timestamp,
-                    "file_uuid": file_uuid,
-                    "is_on_fs": is_on_fs,
-                    "source": "cache_db",
-                }
-            )
-
-        print(f"Found {len(urls)} image URLs in Cache.db")
-
-    except sqlite3.Error as e:
-        print(f"SQLite error: {e}")
-    finally:
-        conn.close()
-
-    return urls
 
 
 def extract_urls_from_realm_db() -> List[Dict]:
@@ -146,31 +81,6 @@ def extract_urls_from_realm_db() -> List[Dict]:
     except Exception as e:
         print(f"Error reading Realm database: {e}")
         return []
-
-
-def copy_cached_files():
-    """Copy currently cached files from fsCachedData."""
-    print(f"\nCopying cached files from: {FS_CACHE_DIR}")
-
-    if not FS_CACHE_DIR.exists():
-        print("fsCachedData directory not found")
-        return
-
-    cached_dir = OUTPUT_DIR / "cached_files"
-    cached_dir.mkdir(parents=True, exist_ok=True)
-
-    copied = 0
-    for file in FS_CACHE_DIR.iterdir():
-        if file.is_file():
-            # Check if it's an image
-            result = os.popen(f'file -b "{file}"').read()
-            if "JPEG" in result or "PNG" in result:
-                # Copy with .jpg extension
-                dest = cached_dir / f"{file.name}.jpg"
-                os.system(f'cp "{file}" "{dest}"')
-                copied += 1
-
-    print(f"Copied {copied} cached image files to {cached_dir}")
 
 
 def extract_timestamp_from_url(url: str) -> str:
@@ -287,25 +197,8 @@ def main():
     print("Zeiss Secacam Image Extractor")
     print("=" * 60)
 
-    # Step 1: Copy currently cached files
-    copy_cached_files()
-
-    # Step 2: Extract URLs from Cache.db
-    cache_urls = extract_urls_from_cache_db()
-
-    # Step 3: Extract URLs from Realm database
-    realm_urls = extract_urls_from_realm_db()
-
-    # Step 4: Combine and deduplicate URLs
-    all_urls = cache_urls + realm_urls
-    unique_urls = []
-    seen_urls = set()
-
-    for item in all_urls:
-        url = item["url"]
-        if url not in seen_urls:
-            seen_urls.add(url)
-            unique_urls.append(item)
+    # Extract all URLs from Realm database
+    unique_urls = extract_urls_from_realm_db()
 
     print(f"\nTotal unique URLs found: {len(unique_urls)}")
 
@@ -317,7 +210,7 @@ def main():
         print("  3. Images are only stored temporarily in the cache")
         return
 
-    # Step 5: Download all images (skipping existing ones)
+    # Step 4: Download all images (skipping existing ones)
     download_all_images(unique_urls)
 
 
