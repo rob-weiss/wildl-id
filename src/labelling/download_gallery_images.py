@@ -9,7 +9,7 @@ import json
 import re
 import subprocess
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 
@@ -375,7 +375,7 @@ def main():
 
     # Configuration: How far back to download
     # Examples: "1w", "2m", "3d", "one week back", "two months back", "0" (max 6 months)
-    DOWNLOAD_RANGE = "2w"  # Change this to control download range
+    DOWNLOAD_RANGE = "6m"  # Change this to control download range
 
     # Parse the download range
     def parse_time_range(range_str):
