@@ -56,41 +56,45 @@ def extract_urls_from_realm_db() -> List[Dict]:
         lines = result.stdout.split("\n")
         urls = []
         url_pattern = r'https://media\.secacam\.com/getImage/param/[^\s"&<>]+'
-        
+
         # Look for potential camera IDs or location info
-        camera_id_pattern = r'\b[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}\b'
-        serial_pattern = r'\bSEC[0-9]+-[WR][0-9]+-[0-9]+\b'
-        
+        camera_id_pattern = (
+            r"\b[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}\b"
+        )
+        serial_pattern = r"\bSEC[0-9]+-[WR][0-9]+-[0-9]+\b"
+
         for i, line in enumerate(lines):
             matches = re.findall(url_pattern, line)
             for url in matches:
                 # Clean up the URL
                 url = url.rstrip('"&<>')
-                
+
                 # Try to find associated metadata in nearby lines
                 camera_id = None
                 serial = None
-                
+
                 # Check surrounding lines for metadata (within 5 lines before/after)
-                for j in range(max(0, i-5), min(len(lines), i+6)):
+                for j in range(max(0, i - 5), min(len(lines), i + 6)):
                     context_line = lines[j]
-                    
+
                     # Look for camera IDs
                     camera_matches = re.findall(camera_id_pattern, context_line)
                     if camera_matches:
                         camera_id = camera_matches[0]
-                    
+
                     # Look for serial numbers
                     serial_matches = re.findall(serial_pattern, context_line)
                     if serial_matches:
                         serial = serial_matches[0]
-                
-                urls.append({
-                    "url": url,
-                    "camera_id": camera_id,
-                    "serial": serial,
-                    "source": "realm_db"
-                })
+
+                urls.append(
+                    {
+                        "url": url,
+                        "camera_id": camera_id,
+                        "serial": serial,
+                        "source": "realm_db",
+                    }
+                )
 
         # Deduplicate URLs
         unique_urls = []
@@ -102,7 +106,7 @@ def extract_urls_from_realm_db() -> List[Dict]:
                 unique_urls.append(item)
 
         print(f"Found {len(unique_urls)} unique image URLs in Realm database")
-        
+
         # Print camera info summary
         cameras = set()
         serials = set()
@@ -111,12 +115,16 @@ def extract_urls_from_realm_db() -> List[Dict]:
                 cameras.add(item["camera_id"])
             if item.get("serial"):
                 serials.add(item["serial"])
-        
+
         if cameras:
-            print(f"Found {len(cameras)} camera ID(s): {', '.join(sorted(cameras)[:3])}{'...' if len(cameras) > 3 else ''}")
+            print(
+                f"Found {len(cameras)} camera ID(s): {', '.join(sorted(cameras)[:3])}{'...' if len(cameras) > 3 else ''}"
+            )
         if serials:
-            print(f"Found {len(serials)} serial number(s): {', '.join(sorted(serials))}")
-        
+            print(
+                f"Found {len(serials)} serial number(s): {', '.join(sorted(serials))}"
+            )
+
         return unique_urls
 
     except subprocess.TimeoutExpired:
@@ -167,7 +175,7 @@ def generate_filename_from_url(url: str, camera_info: Dict = None) -> str:
             serial_parts = serial.split("-")
             if len(serial_parts) >= 2:
                 prefix = f"{serial_parts[0]}_{serial_parts[-1]}_"
-    
+
     if timestamp:
         return f"{prefix}{timestamp}_{url_hash}.jpg"
     else:
