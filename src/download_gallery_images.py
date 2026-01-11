@@ -362,33 +362,60 @@ def click_first_thumbnail():
         
         tell current tab of front window
             set jsCode to "
-                // Find all gallery thumbnails (exclude UI images)
-                const thumbnails = Array.from(document.querySelectorAll('img'))
-                    .filter(img => {
+                // Find all gallery thumbnails with multiple strategies
+                let thumbnails = [];
+                
+                // Strategy 1: Look for gallery-specific classes/containers
+                const galleryContainers = document.querySelectorAll('[class*=gallery], [class*=grid], [class*=image], [id*=gallery], [id*=grid]');
+                for (const container of galleryContainers) {
+                    const imgs = Array.from(container.querySelectorAll('img')).filter(img => {
                         const src = img.src || '';
-                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button'];
+                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'loading'];
                         const isUIElement = skip.some(s => src.toLowerCase().includes(s));
                         const isVisible = img.offsetParent !== null;
                         const hasReasonableSize = img.width > 50 && img.height > 50;
                         return !isUIElement && isVisible && hasReasonableSize;
                     });
+                    thumbnails.push(...imgs);
+                }
+                
+                // Strategy 2: If no thumbnails found, try all images
+                if (thumbnails.length === 0) {
+                    thumbnails = Array.from(document.querySelectorAll('img')).filter(img => {
+                        const src = img.src || '';
+                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'loading'];
+                        const isUIElement = skip.some(s => src.toLowerCase().includes(s));
+                        const isVisible = img.offsetParent !== null;
+                        const hasReasonableSize = img.width > 80 && img.height > 80;
+                        return !isUIElement && isVisible && hasReasonableSize;
+                    });
+                }
                 
                 if (thumbnails.length > 0) {
                     const first = thumbnails[0];
                     first.scrollIntoView({ behavior: 'auto', block: 'center' });
                     
-                    // Try clicking the thumbnail or its parent link
-                    const clickTarget = first.closest('a, button, [onclick], [role=button]') || first;
-                    clickTarget.click();
-                    'clicked';
-                } else {
-                    'not_found';
-                }
-            "
-            
-            set result to do JavaScript jsCode
-            delay 2
-            return result
+                    // Try clicking with multiple methods
+                    const clickTarget = first.closest('a, button, [onclick], [role=button], div[class*=card], div[class*=item]') || first;
+                    
+                    // Method 1: Direct click
+                    try {
+                        clickTarget.click();
+                    } catch(e1) {
+                        // Method 2: Mouse event
+                        try {
+                            const event = new MouseEvent('click', {
+                                view: window,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            clickTarget.dispatchEvent(event);
+                        } catch(e2) {
+                            // Method 3: Try clicking the image itself
+                            first.click();
+                        }
+                    }
+                    
         end tell
     end tell
     """
