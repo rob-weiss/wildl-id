@@ -373,6 +373,68 @@ def main():
     print("💡 Make sure the carousel is already open in Safari!")
     print()
 
+    # Configuration: How far back to download
+    # Examples: "1w", "2m", "3d", "one week back", "two months back", "0" (max 6 months)
+    DOWNLOAD_RANGE = "2w"  # Change this to control download range
+
+    # Parse the download range
+    def parse_time_range(range_str):
+        """Parse time range string and return timedelta."""
+        if not range_str or range_str == "0":
+            # 0 means download up to 6 months back, stop on first existing
+            from datetime import timedelta
+
+            return timedelta(days=180), True  # (timedelta, stop_on_existing)
+
+        # Normalize the string
+        range_str = range_str.lower().strip()
+
+        # Try to extract number and unit
+        import re
+
+        # Match patterns like "1w", "2 weeks", "3 days back", "one month back"
+        match = re.search(
+            r"(\d+|one|two|three|four|five|six)\s*([dwmy]|day|week|month|year)",
+            range_str,
+        )
+
+        if not match:
+            print(f"⚠ Could not parse range '{range_str}', using 1 week")
+            from datetime import timedelta
+
+            return timedelta(weeks=1), False
+
+        # Convert word numbers to integers
+        word_to_num = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6}
+        num_str = match.group(1)
+        num = word_to_num.get(num_str, int(num_str))
+
+        # Get unit
+        unit = match.group(2)[0]  # First letter: d, w, m, y
+
+        from datetime import timedelta
+
+        if unit == "d":
+            return timedelta(days=num), False
+        elif unit == "w":
+            return timedelta(weeks=num), False
+        elif unit == "m":
+            return timedelta(days=num * 30), False  # Approximate month
+        elif unit == "y":
+            return timedelta(days=num * 365), False  # Approximate year
+        else:
+            return timedelta(weeks=1), False
+
+    time_delta, stop_on_existing = parse_time_range(DOWNLOAD_RANGE)
+    cutoff_date = datetime.now() - time_delta
+
+    print(f"📅 Download range: {DOWNLOAD_RANGE}")
+    print(f"   Cutoff date: {cutoff_date.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(
+        f"   Mode: {'Stop on first existing file' if stop_on_existing else 'Skip existing, continue to cutoff'}"
+    )
+    print()
+
     # Set download directory
     download_dir = Path("/Users/wri2lr/Downloads/ZEISS_Secacam_Gallery_Images")
     download_dir.mkdir(parents=True, exist_ok=True)
@@ -417,17 +479,28 @@ def main():
         if timestamp:
             print(f"  Timestamp: {timestamp}")
 
-        # Convert timestamp to ISO format
+        # Convert timestamp to ISO format and check against cutoff
         iso_timestamp = None
+        image_date = None
         if timestamp:
             try:
                 # Parse format like "01/11/2026 09:53 AM"
                 dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
+                image_date = dt
                 # Convert to ISO format suitable for filename: YYYY-MM-DD_HH-MM-SS
                 iso_timestamp = dt.strftime("%Y-%m-%d_%H-%M-%S")
             except ValueError:
                 # If parsing fails, use sanitized original
                 iso_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
+
+        # Check if image is older than cutoff date
+        if image_date and image_date < cutoff_date:
+            print(
+                f"  ⏸ Image date {image_date.strftime('%Y-%m-%d')} is before cutoff {cutoff_date.strftime('%Y-%m-%d')}"
+            )
+            print(f"\n{'=' * 60}")
+            print("✓ Reached cutoff date - stopping download")
+            break
 
         # Create hash from URL for unique filename
         url_hash = hashlib.md5(img_url.encode()).hexdigest()[:16]
@@ -464,39 +537,48 @@ def main():
         if filepath.exists():
             existing_size = filepath.stat().st_size / 1024
             print(f"  ⊘ Already exists ({existing_size:.1f} KB)")
-            print(f"\n{'=' * 60}")
-            print("✓ Found existing file - stopping here!")
-            print(
-                "  This file was already downloaded, assuming all newer images are also downloaded."
-            )
             skipped += 1
-            break
 
-        print("  ⬇ Downloading...")
-
-        try:
-            # Try downloading with Safari first
-            success = download_with_safari(img_url, filepath)
-
-            if not success:
-                # Fallback to direct download
-                try:
-                    urllib.request.urlretrieve(img_url, filepath)
-                    success = True
-                except:
-                    success = False
-
-            if success and filepath.exists():
-                downloaded += 1
-                size_kb = filepath.stat().st_size / 1024
-                print(f"  ✓ Saved ({size_kb:.1f} KB)")
+            if stop_on_existing:
+                # Mode: Stop on first existing file (for downloading latest only)
+                print(f"\n{'=' * 60}")
+                print("✓ Found existing file - stopping here!")
+                print(
+                    "  This file was already downloaded, assuming all newer images are also downloaded."
+                )
+                break
             else:
-                failed += 1
-                print("  ✗ Failed to download")
+                # Mode: Skip existing and continue (for ensuring completeness to date)
+                print("  → Skipping, continuing to next image...")
+                # Don't download, just move to next
+                pass  # Continue to navigation below
 
-        except Exception as e:
-            failed += 1
-            print(f"  ✗ Error: {e}")
+        if not filepath.exists():
+            print("  ⬇ Downloading...")
+
+            try:
+                # Try downloading with Safari first
+                success = download_with_safari(img_url, filepath)
+
+                if not success:
+                    # Fallback to direct download
+                    try:
+                        urllib.request.urlretrieve(img_url, filepath)
+                        success = True
+                    except:
+                        success = False
+
+                if success and filepath.exists():
+                    downloaded += 1
+                    size_kb = filepath.stat().st_size / 1024
+                    print(f"  ✓ Saved ({size_kb:.1f} KB)")
+                else:
+                    failed += 1
+                    print("  ✗ Failed to download")
+
+            except Exception as e:
+                failed += 1
+                print(f"  ✗ Error: {e}")
 
         # Move to next image
         print("  → Next...")
