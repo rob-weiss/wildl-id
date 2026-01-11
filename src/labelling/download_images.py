@@ -436,7 +436,7 @@ def main():
     print()
 
     # Set download directory
-    download_dir = Path("/Users/wri2lr/Downloads/ZEISS_Secacam_Gallery_Images")
+    download_dir = Path(__file__).parent.parent.parent / "data"
     download_dir.mkdir(parents=True, exist_ok=True)
 
     print(f"✓ Download directory: {download_dir}")
