@@ -16,7 +16,7 @@ Dependencies:
 - opencv-python
 - matplotlib
 
-pip install PytorchWildlife torch pandas opencv-python matplotlib pillow lightning omegaconf
+pip install PytorchWildlife torch pandas opencv-python matplotlib pillow lightning omegaconf pyarrow
 
 Usage:
     python detect_animals.py
