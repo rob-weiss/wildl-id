@@ -353,6 +353,249 @@ def download_with_safari(url, filepath):
         return False
 
 
+def click_first_thumbnail():
+    """Click the first thumbnail in the gallery to open the carousel."""
+    applescript = """
+    tell application "Safari"
+        activate
+        delay 0.3
+        
+        tell current tab of front window
+            set jsCode to "
+                // Find all gallery thumbnails (exclude UI images)
+                const thumbnails = Array.from(document.querySelectorAll('img'))
+                    .filter(img => {
+                        const src = img.src || '';
+                        const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button'];
+                        const isUIElement = skip.some(s => src.toLowerCase().includes(s));
+                        const isVisible = img.offsetParent !== null;
+                        const hasReasonableSize = img.width > 50 && img.height > 50;
+                        return !isUIElement && isVisible && hasReasonableSize;
+                    });
+                
+                if (thumbnails.length > 0) {
+                    const first = thumbnails[0];
+                    first.scrollIntoView({ behavior: 'auto', block: 'center' });
+                    
+                    // Try clicking the thumbnail or its parent link
+                    const clickTarget = first.closest('a, button, [onclick], [role=button]') || first;
+                    clickTarget.click();
+                    'clicked';
+                } else {
+                    'not_found';
+                }
+            "
+            
+            set result to do JavaScript jsCode
+            delay 2
+            return result
+        end tell
+    end tell
+    """
+
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=15
+        )
+        return result.returncode == 0 and "clicked" in result.stdout
+    except:
+        return False
+
+
+def get_current_carousel_image():
+    """Get the current full-resolution image URL and original filename from the carousel."""
+    applescript = """
+    tell application "Safari"
+        tell current tab of front window
+            set jsCode to "
+                // Look for the full-resolution image in the carousel
+                const selectors = [
+                    '[class*=carousel] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    '[class*=modal] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    '[class*=lightbox] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    '[id*=carousel] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    '[id*=modal] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    '[role=dialog] img:not([src*=thumb]):not([src*=icon]):not([src*=logo])',
+                    'img[src*=original]', 'img[src*=full]', 'img[src*=large]'
+                ];
+                
+                let fullResImg = null;
+                for (const sel of selectors) {
+                    const img = document.querySelector(sel);
+                    if (img && img.src && img.src.startsWith('http') && img.naturalWidth > 500) {
+                        fullResImg = img;
+                        break;
+                    }
+                }
+                
+                // Fallback: get the largest visible image
+                if (!fullResImg) {
+                    const allImages = Array.from(document.querySelectorAll('img'))
+                        .filter(img => {
+                            const skip = ['logo', 'icon', 'avatar', 'bg_', 'ic_', 'button', 'thumb'];
+                            const isUI = skip.some(s => (img.src || '').toLowerCase().includes(s));
+                            return !isUI && img.offsetParent !== null && img.src.startsWith('http');
+                        })
+                        .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
+                    fullResImg = allImages[0];
+                }
+                
+                if (fullResImg) {
+                    // Try to extract original filename from URL or data attributes
+                    const url = fullResImg.src;
+                    const urlParts = url.split('/');
+                    const urlFilename = urlParts[urlParts.length - 1].split('?')[0];
+                    
+                    // Look for data attributes with filename
+                    const dataFilename = fullResImg.getAttribute('data-filename') || 
+                                        fullResImg.getAttribute('data-name') ||
+                                        fullResImg.closest('[data-filename]')?.getAttribute('data-filename');
+                    
+                    JSON.stringify({
+                        url: url,
+                        filename: dataFilename || urlFilename,
+                        width: fullResImg.naturalWidth,
+                        height: fullResImg.naturalHeight
+                    });
+                } else {
+                    'not_found';
+                }
+            "
+            
+            set result to do JavaScript jsCode
+            return result
+        end tell
+    end tell
+    """
+
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
+        )
+
+        if result.returncode == 0 and result.stdout.strip() != "not_found":
+            return json.loads(result.stdout.strip())
+        return None
+    except:
+        return None
+
+
+def click_next_in_carousel():
+    """Click the 'next' button in the carousel to go to the next image."""
+    applescript = """
+    tell application "Safari"
+        tell current tab of front window
+            set jsCode to "
+                // Look for next button with various selectors
+                const nextSelectors = [
+                    '[class*=next]', '[aria-label*=next]', '[aria-label*=Next]',
+                    '[class*=arrow][class*=right]', '[class*=forward]',
+                    'button[class*=right]', '[data-action*=next]',
+                    '.carousel-control-next', '.slick-next',
+                    '[title*=next]', '[title*=Next]'
+                ];
+                
+                let nextBtn = null;
+                for (const sel of nextSelectors) {
+                    const btn = document.querySelector(sel);
+                    if (btn && btn.offsetParent !== null) {
+                        // Make sure it's not a 'previous' button
+                        const text = btn.textContent.toLowerCase();
+                        const classes = btn.className.toLowerCase();
+                        const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                        
+                        if (!text.includes('prev') && !classes.includes('prev') && !aria.includes('prev')) {
+                            nextBtn = btn;
+                            break;
+                        }
+                    }
+                }
+                
+                // Try keyboard shortcut as fallback
+                if (nextBtn) {
+                    nextBtn.click();
+                    'clicked';
+                } else {
+                    // Try arrow key
+                    document.dispatchEvent(new KeyboardEvent('keydown', { 
+                        key: 'ArrowRight', 
+                        code: 'ArrowRight', 
+                        keyCode: 39,
+                        bubbles: true
+                    }));
+                    'key_pressed';
+                }
+            "
+            
+            set result to do JavaScript jsCode
+            delay 1.5
+            return result
+        end tell
+    end tell
+    """
+
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=10
+        )
+        return result.returncode == 0 and result.stdout.strip() in [
+            "clicked",
+            "key_pressed",
+        ]
+    except:
+        return False
+
+
+def close_carousel():
+    """Close the carousel/modal/lightbox."""
+    applescript = """
+    tell application "Safari"
+        tell current tab of front window
+            set jsCode to "
+                // Try various methods to close the carousel
+                const closeSelectors = [
+                    '[class*=close]', '[aria-label*=close]', '[aria-label*=Close]',
+                    'button[class*=close]', '[data-dismiss]', '.modal-close',
+                    '[class*=overlay]', '[class*=backdrop]'
+                ];
+                
+                let closed = false;
+                for (const sel of closeSelectors) {
+                    const closeBtn = document.querySelector(sel);
+                    if (closeBtn && closeBtn.offsetParent !== null) {
+                        closeBtn.click();
+                        closed = true;
+                        break;
+                    }
+                }
+                
+                // Try Escape key
+                if (!closed) {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { 
+                        key: 'Escape', 
+                        code: 'Escape', 
+                        keyCode: 27,
+                        bubbles: true
+                    }));
+                    closed = true;
+                }
+                
+                closed ? 'closed' : 'attempted';
+            "
+            
+            do JavaScript jsCode
+        end tell
+    end tell
+    """
+
+    try:
+        subprocess.run(
+            ["osascript", "-e", applescript], capture_output=True, text=True, timeout=5
+        )
+    except:
+        pass
+
+
 def download_gallery_images(download_dir, camera_name=None):
     """
     Download all images from the ZEISS Secacam gallery using Safari's current session.
@@ -485,29 +728,60 @@ def download_gallery_images(download_dir, camera_name=None):
 
         return False
 
-    print(f"\n✓ Found {len(filtered_images)} gallery images")
+    print(f"\n✓ Found {len(filtered_images)} gallery thumbnails")
+    print("\n🎯 Using carousel navigation to download full-resolution images...")
 
-    # Download each image
+    # Click first thumbnail to open carousel
+    print("\nOpening carousel...")
+    if not click_first_thumbnail():
+        print("❌ Could not open carousel by clicking first thumbnail")
+        return False
+
+    print("✓ Carousel opened")
+
+    # Download images by navigating through carousel
     downloaded = 0
     failed = 0
+    image_index = 1
 
-    for idx, img_url in enumerate(filtered_images, 1):
-        filename = get_filename_from_url(img_url, idx)
-        filepath = album_path / filename
+    import time
 
-        # Skip if already downloaded
+    while True:
+        print(f"\n[Image {image_index}] Extracting image data...")
+
+        # Get current image info
+        img_data = get_current_carousel_image()
+
+        if not img_data:
+            print("  ✗ Could not get image data (might be end of carousel)")
+            break
+
+        img_url = img_data.get("url")
+        original_filename = img_data.get("filename", f"image_{image_index:04d}.jpg")
+        width = img_data.get("width", 0)
+        height = img_data.get("height", 0)
+
+        # Sanitize filename
+        original_filename = re.sub(r'[<>:"/\\|?*]', "_", original_filename)
+        filepath = album_path / original_filename
+
+        print(f"  Original filename: {original_filename}")
+        print(f"  Dimensions: {width}x{height}px")
+
+        # Check if already downloaded
         if filepath.exists():
-            print(f"⊘ [{idx}/{len(filtered_images)}] Already exists: {filename}")
-            continue
+            existing_size = filepath.stat().st_size / 1024
+            print(f"  ⊘ Already exists ({existing_size:.1f} KB) - stopping here")
+            break
 
-        print(f"⬇ [{idx}/{len(filtered_images)}] Downloading: {filename}")
+        print("  ⬇ Downloading...")
 
         try:
             # Try downloading with Safari first (uses authenticated session)
             success = download_with_safari(img_url, filepath)
 
             if not success:
-                # Fallback to direct download (may work for public images)
+                # Fallback to direct download
                 try:
                     urllib.request.urlretrieve(img_url, filepath)
                     success = True
@@ -517,7 +791,7 @@ def download_gallery_images(download_dir, camera_name=None):
             if success and filepath.exists():
                 downloaded += 1
                 size_kb = filepath.stat().st_size / 1024
-                print(f"  ✓ Saved: {filename} ({size_kb:.1f} KB)")
+                print(f"  ✓ Saved: {original_filename} ({size_kb:.1f} KB)")
             else:
                 failed += 1
                 print("  ✗ Failed to download")
@@ -526,9 +800,23 @@ def download_gallery_images(download_dir, camera_name=None):
             failed += 1
             print(f"  ✗ Error: {e}")
 
+        # Try to go to next image
+        print("  → Navigating to next image...")
+        if not click_next_in_carousel():
+            print("  ⓘ No more images or couldn't click next")
+            break
+
+        image_index += 1
+        time.sleep(0.5)  # Brief pause between images
+
+    # Close carousel when done
+    print("\nClosing carousel...")
+    close_carousel()
+    time.sleep(1)
+
     print(f"\n{'=' * 60}")
     print(f"✓ Download complete for album: {album_name}")
-    print(f"  Total images found: {len(filtered_images)}")
+    print(f"  Images processed: {image_index}")
     print(f"  Successfully downloaded: {downloaded}")
     print(f"  Failed: {failed}")
     print(f"  Saved to: {album_path}")
