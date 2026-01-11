@@ -38,7 +38,7 @@ from PytorchWildlife.models import detection as pw_detection
 from tqdm import tqdm
 
 # Configuration
-image_dir = Path("/Users/wri2lr/Downloads")
+image_dir = Path("/Users/wri2lr/Downloads/ZEISS_Secacam_Gallery_Images")
 # MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
 # MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
 model_version = "MegaDetectorV6"
