@@ -222,7 +222,7 @@ def extract_metadata_ocr(image_path, ocr_processor):
     try:
         result = ocr_processor.process_image(
             image_path=str(image_path),
-            format_type="json",
+            format_type="text",
             custom_prompt="There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
             "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
             "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
@@ -233,10 +233,16 @@ def extract_metadata_ocr(image_path, ocr_processor):
             language="eng",
         )
 
-        # Parse result if it's a string
-        if isinstance(result, str):
-            import json
+        # Parse result - extract JSON from response (model may add extra text)
+        import json
+        import re
 
+        json_match = re.search(r"\{.*\}", result, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(0)
+            result = json.loads(json_str)
+        else:
+            # Fallback: try to parse as-is
             result = json.loads(result)
 
         return {
@@ -449,6 +455,32 @@ def process_images_with_pytorch_wildlife():
     processed_images = set()
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path)
+
+        # Define expected columns with default values
+        expected_columns = {
+            "location_id": "",
+            "image_file": "",
+            "class": "none",
+            "box": None,
+            "lighting": "unknown",
+            "confidence": 0.0,
+            "classification_confidence": None,
+            "timestamp": None,
+            "temperature_celsius": None,
+            "battery_level": None,
+        }
+
+        # Add missing columns with default values
+        for col, default_value in expected_columns.items():
+            if col not in existing_df.columns:
+                print(
+                    f"Adding missing column '{col}' with default value: {default_value}"
+                )
+                existing_df[col] = default_value
+
+        # Save the updated CSV with all columns
+        existing_df.to_csv(csv_path, index=False)
+
         processed_images = set(
             zip(existing_df["location_id"], existing_df["image_file"])
         )
