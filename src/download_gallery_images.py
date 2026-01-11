@@ -515,35 +515,60 @@ def click_next_in_carousel():
             set jsCode to "
                 // Look for next button with various selectors
                 const nextSelectors = [
-                    '[class*=next]', '[aria-label*=next]', '[aria-label*=Next]',
+                    'button[aria-label*=next]', 'button[aria-label*=Next]',
+                    '[class*=next]:not([class*=prev])', 
+                    '[class*=arrow-right]', '[class*=arrowright]',
                     '[class*=arrow][class*=right]', '[class*=forward]',
-                    'button[class*=right]', '[data-action*=next]',
-                    '.carousel-control-next', '.slick-next',
-                    '[title*=next]', '[title*=Next]'
+                    'button[class*=right]:not([class*=left])', 
+                    '[data-action*=next]', '.carousel-control-next', 
+                    '.slick-next', 'button:has(svg[class*=right])',
+                    '[title*=next]', '[title*=Next]',
+                    'button:has([class*=chevron-right])',
+                    'button:has([class*=arrow-right])'
                 ];
                 
                 let nextBtn = null;
                 for (const sel of nextSelectors) {
-                    const btn = document.querySelector(sel);
-                    if (btn && btn.offsetParent !== null) {
-                        // Make sure it's not a 'previous' button
-                        const text = btn.textContent.toLowerCase();
-                        const classes = btn.className.toLowerCase();
-                        const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-                        
-                        if (!text.includes('prev') && !classes.includes('prev') && !aria.includes('prev')) {
-                            nextBtn = btn;
-                            break;
+                    try {
+                        const btns = document.querySelectorAll(sel);
+                        for (const btn of btns) {
+                            if (btn.offsetParent !== null) {
+                                const text = btn.textContent.toLowerCase();
+                                const classes = (btn.className || '').toLowerCase();
+                                const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                                
+                                // Make sure it's for next/forward, not prev/back
+                                const isPrev = text.includes('prev') || text.includes('back') || 
+                                             classes.includes('prev') || classes.includes('back') ||
+                                             aria.includes('prev') || aria.includes('back');
+                                
+                                if (!isPrev) {
+                                    nextBtn = btn;
+                                    break;
+                                }
+                            }
                         }
-                    }
+                        if (nextBtn) break;
+                    } catch(e) { continue; }
                 }
                 
-                // Try keyboard shortcut as fallback
                 if (nextBtn) {
-                    nextBtn.click();
+                    // Try multiple click methods
+                    try {
+                        nextBtn.click();
+                    } catch(e1) {
+                        try {
+                            const event = new MouseEvent('click', {
+                                view: window,
+                                bubbles: true,
+                                cancelable: true
+                            });
+                            nextBtn.dispatchEvent(event);
+                        } catch(e2) { }
+                    }
                     'clicked';
                 } else {
-                    // Try arrow key
+                    // Try arrow key as fallback
                     document.dispatchEvent(new KeyboardEvent('keydown', { 
                         key: 'ArrowRight', 
                         code: 'ArrowRight', 
@@ -737,16 +762,8 @@ def download_gallery_images(download_dir, camera_name=None):
 
         return False
 
-    print(f"\n✓ Found {len(filtered_images)} gallery thumbnails")
-    print("\n🎯 Using carousel navigation to download full-resolution images...")
-
-    # Click first thumbnail to open carousel
-    print("\nOpening carousel...")
-    if not click_first_thumbnail():
-        print("❌ Could not open carousel by clicking first thumbnail")
-        return False
-
-    print("✓ Carousel opened")
+    print("\n🎯 Downloading images from carousel...")
+    print("💡 Make sure the carousel is open before running this script!")
 
     # Download images by navigating through carousel
     downloaded = 0
@@ -842,33 +859,6 @@ def download_gallery_images(download_dir, camera_name=None):
     print(f"  Successfully downloaded: {downloaded}")
     print(f"  Failed: {failed}")
     print(f"  Saved to: {download_path}")
-    print(f"  Images processed: {image_index}")
-    print(f"  Successfully downloaded: {downloaded}")
-    print(f"  Failed: {failed}")
-    print(f"  Saved to: {album_path}")
-
-    # Show available albums for next download
-    available = data.get("availableAlbums", [])
-    if available:
-        unique_albums = sorted(
-            set([a for a in available if 3 < len(a) < 30 and a != album_name])
-        )[:10]
-        if unique_albums:
-            print(f"\n{'=' * 60}")
-            print("Other detected cameras/albums:")
-            for alb in unique_albums:
-                if (
-                    any(
-                        keyword in alb.lower()
-                        for keyword in ["kirschensitz", "sauenburg", "camera", "album"]
-                    )
-                    or alb[0].isupper()
-                ):
-                    print(f"  - {alb}")
-            print("\nTo download another camera's images:")
-            print("1. Click the camera button in Safari")
-            print("2. Wait for images to load")
-            print("3. Run this script again")
 
     return downloaded > 0
 
