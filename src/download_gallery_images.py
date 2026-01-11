@@ -609,7 +609,8 @@ def download_gallery_images(download_dir, camera_name=None):
     download_path = Path(download_dir)
     download_path.mkdir(parents=True, exist_ok=True)
 
-    print("Extracting image URLs from Safari...")
+    print("✓ Using gallery view to download all camera images")
+    print(f"✓ Saving to: {download_path}")
 
     # Get image data from Safari
     data = get_safari_image_urls()
@@ -620,26 +621,7 @@ def download_gallery_images(download_dir, camera_name=None):
         return False
 
     current_url = data.get("currentURL", "")
-
-    # Use provided camera name or try to detect it
-    if camera_name:
-        album_name = camera_name
-    else:
-        album_name = data.get("albumName", "Unknown")
-
-    # Sanitize album name for use as folder name
-    album_name = re.sub(r'[<>:"/\\|?*]', "_", album_name)
-    album_name = album_name.strip()
-    if not album_name or album_name == "Unknown":
-        album_name = "Gallery"
-
-    # Create subfolder for this camera/album
-    album_path = download_path / album_name
-    album_path.mkdir(parents=True, exist_ok=True)
-
     print(f"✓ Current page: {current_url}")
-    print(f"✓ Album/Camera: {album_name}")
-    print(f"✓ Saving to: {album_path}")
 
     if "gallery" not in current_url.lower():
         print("⚠ Warning: Current Safari page doesn't appear to be the gallery.")
@@ -761,12 +743,25 @@ def download_gallery_images(download_dir, camera_name=None):
         width = img_data.get("width", 0)
         height = img_data.get("height", 0)
 
-        # Sanitize filename
-        original_filename = re.sub(r'[<>:"/\\|?*]', "_", original_filename)
-        filepath = album_path / original_filename
-
         print(f"  Original filename: {original_filename}")
         print(f"  Dimensions: {width}x{height}px")
+
+        # Extract camera name from filename (format: "Camera Name - timestamp.jpg")
+        camera_folder_name = "Unknown"
+        if " - " in original_filename:
+            camera_folder_name = original_filename.split(" - ")[0].strip()
+            # Sanitize camera name for folder
+            camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
+
+        # Create camera-specific subfolder
+        camera_path = download_path / camera_folder_name
+        camera_path.mkdir(parents=True, exist_ok=True)
+
+        # Sanitize full filename
+        safe_filename = re.sub(r'[<>:"/\\|?*]', "_", original_filename)
+        filepath = camera_path / safe_filename
+
+        print(f"  Camera: {camera_folder_name}")
 
         # Check if already downloaded
         if filepath.exists():
@@ -791,7 +786,7 @@ def download_gallery_images(download_dir, camera_name=None):
             if success and filepath.exists():
                 downloaded += 1
                 size_kb = filepath.stat().st_size / 1024
-                print(f"  ✓ Saved: {original_filename} ({size_kb:.1f} KB)")
+                print(f"  ✓ Saved: {safe_filename} ({size_kb:.1f} KB)")
             else:
                 failed += 1
                 print("  ✗ Failed to download")
@@ -815,7 +810,11 @@ def download_gallery_images(download_dir, camera_name=None):
     time.sleep(1)
 
     print(f"\n{'=' * 60}")
-    print(f"✓ Download complete for album: {album_name}")
+    print("✓ Download complete!")
+    print(f"  Images processed: {image_index}")
+    print(f"  Successfully downloaded: {downloaded}")
+    print(f"  Failed: {failed}")
+    print(f"  Saved to: {download_path}")
     print(f"  Images processed: {image_index}")
     print(f"  Successfully downloaded: {downloaded}")
     print(f"  Failed: {failed}")
@@ -971,7 +970,7 @@ def main():
 
     # Navigate to Gallery page first
     print("\n" + "=" * 60)
-    print("Step 1: Navigating to Gallery page...")
+    print("Navigating to Gallery page...")
     print("=" * 60)
 
     nav_result = navigate_to_gallery()
@@ -990,143 +989,12 @@ def main():
         )
         return
 
-    # Get all camera buttons
+    # Download from gallery (will automatically organize by camera name from filenames)
     print("\n" + "=" * 60)
-    print("Step 2: Detecting available cameras/albums...")
-    print("=" * 60)
-    buttons = get_camera_buttons()
-
-    # Filter to likely camera names (capitalized, reasonable length)
-    # Skip "All images", "Favorites", and navigation buttons
-    skip_albums = {
-        "all images",
-        "favorites",
-        "all",
-        "favorite",
-        "dashboard",
-        "gallery",
-        "settings",
-        "profile",
-        "logout",
-        "login",
-        "account",
-        "help",
-        "support",
-        "home",
-        "back",
-        "menu",
-        "close",
-        "cancel",
-        "reload",
-        "cameras",
-        "contacts",
-        "shop",
-        "language",
-        "other",
-        "sign out",
-        "sign in",
-    }
-
-    # More strict filtering for camera buttons
-    camera_buttons = []
-    for btn in buttons:
-        text = btn["text"]
-        if not text or text.lower() in skip_albums:
-            continue
-
-        # Length check
-        if len(text) < 3 or len(text) > 30:
-            continue
-
-        # Must start with uppercase OR be all uppercase
-        if not (text[0].isupper() or text.isupper()):
-            continue
-
-        # Skip if it contains common UI words
-        ui_words = [
-            "click",
-            "view",
-            "show",
-            "hide",
-            "more",
-            "less",
-            "new",
-            "add",
-            "remove",
-            "filter",
-        ]
-        if any(word in text.lower() for word in ui_words):
-            continue
-
-        # Skip if it's mostly numbers or special characters
-        alpha_chars = sum(c.isalpha() for c in text)
-        if alpha_chars < len(text) * 0.5:
-            continue
-
-        camera_buttons.append(btn)
-
-    if not camera_buttons:
-        print("⚠ No camera buttons detected. Downloading from current view...")
-        print("=" * 60 + "\n")
-        download_gallery_images(download_dir)
-        return
-
-    # Remove duplicates
-    seen = set()
-    unique_cameras = []
-    for btn in camera_buttons:
-        if btn["text"] not in seen:
-            seen.add(btn["text"])
-            unique_cameras.append(btn)
-
-    print(f"\n✓ Found {len(unique_cameras)} cameras/albums:")
-    for i, btn in enumerate(unique_cameras, 1):
-        print(f"  {i}. {btn['text']}")
-
-    print("\n" + "=" * 60)
-    print("Starting automatic download for all cameras...")
+    print("Downloading images from gallery...")
     print("=" * 60 + "\n")
 
-    total_downloaded = 0
-    successful_cameras = 0
-
-    for idx, camera in enumerate(unique_cameras, 1):
-        camera_name = camera["text"]
-        print(f"\n{'=' * 60}")
-        print(f"[{idx}/{len(unique_cameras)}] Processing: {camera_name}")
-        print("=" * 60)
-
-        # Click the camera button
-        print(f"Clicking button: {camera_name}...")
-        if click_camera_button(camera_name):
-            print("✓ Button clicked")
-
-            # Wait for images to load
-            print("Waiting for images to load...")
-            import time
-
-            time.sleep(3)  # Give time for images to load
-
-            # Download images for this camera (pass the camera name)
-            success = download_gallery_images(download_dir, camera_name)
-
-            if success:
-                successful_cameras += 1
-
-            # Small delay between cameras
-            time.sleep(1)
-        else:
-            print(f"✗ Could not click button for {camera_name}")
-
-    # Final summary
-    print(f"\n{'=' * 60}")
-    print("=" * 60)
-    print("ALL CAMERAS PROCESSED")
-    print("=" * 60)
-    print(f"Total cameras processed: {len(unique_cameras)}")
-    print(f"Successful downloads: {successful_cameras}")
-    print(f"Download directory: {download_dir}")
-    print("=" * 60)
+    download_gallery_images(download_dir)
 
 
 if __name__ == "__main__":
