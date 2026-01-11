@@ -18,24 +18,46 @@ def get_current_carousel_image():
         tell current tab of front window
             do JavaScript "
                 (function() {
+                    // Find the currently visible/active carousel image
                     const allImages = Array.from(document.querySelectorAll('img'))
                         .filter(img => {
                             const src = img.src || '';
-                            const isGalleryImage = src.includes('media.secacam.com/getImage');
-                            const isLarge = img.naturalWidth > 1000 && img.naturalHeight > 500;
-                            return isGalleryImage && isLarge;
+                            if (!src.includes('media.secacam.com/getImage')) return false;
+                            if (img.naturalWidth < 1000 || img.naturalHeight < 500) return false;
+                            
+                            // Check if image is actually visible on screen
+                            const rect = img.getBoundingClientRect();
+                            const isVisible = rect.width > 0 && rect.height > 0 && 
+                                            rect.top < window.innerHeight && 
+                                            rect.bottom > 0 &&
+                                            rect.left < window.innerWidth && 
+                                            rect.right > 0;
+                            
+                            return isVisible;
                         })
-                        .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
+                        .sort((a, b) => {
+                            // Prefer images that are more centered on screen
+                            const rectA = a.getBoundingClientRect();
+                            const rectB = b.getBoundingClientRect();
+                            const centerA = Math.abs(rectA.top + rectA.height/2 - window.innerHeight/2);
+                            const centerB = Math.abs(rectB.top + rectB.height/2 - window.innerHeight/2);
+                            return centerA - centerB;
+                        });
                     
                     let mainImg = allImages.length > 0 ? allImages[0] : null;
                     
                     if (!mainImg) {
+                        // Fallback: Find any large visible image
                         const largeImages = Array.from(document.querySelectorAll('img'))
                             .filter(img => {
                                 const src = img.src || '';
                                 const skip = ['ic_', 'icon', 'logo', 'svg'];
                                 const isUI = skip.some(s => src.toLowerCase().includes(s));
-                                return !isUI && img.naturalWidth > 1000 && img.naturalHeight > 500;
+                                if (isUI) return false;
+                                
+                                const rect = img.getBoundingClientRect();
+                                const isVisible = rect.width > 500 && rect.height > 500;
+                                return isVisible && img.naturalWidth > 1000 && img.naturalHeight > 500;
                             })
                             .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
                         
@@ -44,9 +66,18 @@ def get_current_carousel_image():
                     
                     if (mainImg) {
                         const url = mainImg.src;
-                        const alt = mainImg.getAttribute('alt') || '';
-                        const title = mainImg.getAttribute('title') || '';
-                        let filename = alt || title || 'image_' + Date.now();
+                        const alt = mainImg.getAttribute('alt');
+                        const title = mainImg.getAttribute('title');
+                        
+                        // Clean up filename - avoid 'undefined' or empty strings
+                        let filename = '';
+                        if (alt && alt !== 'undefined' && alt.trim()) {
+                            filename = alt;
+                        } else if (title && title !== 'undefined' && title.trim()) {
+                            filename = title;
+                        } else {
+                            filename = 'image_' + Date.now();
+                        }
                         
                         return JSON.stringify({
                             url: url,
@@ -113,75 +144,55 @@ def click_next_in_carousel():
     applescript = """
     tell application "Safari"
         tell current tab of front window
-            set jsCode to "
-                // Look for next button
-                const nextSelectors = [
-                    'button[aria-label*=next]', 'button[aria-label*=Next]',
-                    '[class*=next]:not([class*=prev])', 
-                    '[class*=arrow-right]', '[class*=arrowright]',
-                    'button[class*=right]:not([class*=left])',
-                    '[data-action*=next]', 
-                    'button:has(svg[class*=right])',
-                    'button:has([class*=chevron-right])',
-                    'button:has([class*=arrow-right])'
-                ];
-                
-                let nextBtn = null;
-                for (const sel of nextSelectors) {
-                    try {
-                        const btns = document.querySelectorAll(sel);
-                        for (const btn of btns) {
-                            if (btn.offsetParent !== null) {
-                                const text = btn.textContent.toLowerCase();
-                                const classes = (btn.className || '').toLowerCase();
-                                const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
-                                
-                                const isPrev = text.includes('prev') || text.includes('back') || 
-                                             classes.includes('prev') || classes.includes('back') ||
-                                             aria.includes('prev') || aria.includes('back');
-                                
-                                if (!isPrev) {
-                                    nextBtn = btn;
-                                    break;
-                                }
-                            }
+            do JavaScript "
+                (function() {
+                    // Find visible buttons with SVG icons or arrows
+                    const allButtons = Array.from(document.querySelectorAll('button, [role=button]'));
+                    
+                    for (const btn of allButtons) {
+                        const rect = btn.getBoundingClientRect();
+                        if (rect.width === 0 || rect.height === 0) continue;
+                        
+                        // Look for right arrow indicators
+                        const innerHTML = btn.innerHTML || '';
+                        const ariaLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                        const text = (btn.textContent || '').toLowerCase();
+                        
+                        // Skip if it's a previous button
+                        if (ariaLabel.includes('prev') || ariaLabel.includes('back') ||
+                            text.includes('prev') || text.includes('back')) {
+                            continue;
                         }
-                        if (nextBtn) break;
-                    } catch(e) { continue; }
-                }
-                
-                if (nextBtn) {
-                    try {
-                        nextBtn.click();
-                        'clicked';
-                    } catch(e) {
-                        try {
-                            const event = new MouseEvent('click', {
-                                view: window,
-                                bubbles: true,
-                                cancelable: true
-                            });
-                            nextBtn.dispatchEvent(event);
-                            'clicked';
-                        } catch(e2) {
-                            'error';
+                        
+                        // Look for next indicators
+                        const isNext = ariaLabel.includes('next') || 
+                                      innerHTML.includes('arrow') && innerHTML.includes('right') ||
+                                      innerHTML.includes('chevron') && innerHTML.includes('right') ||
+                                      innerHTML.includes('M12') || // Common SVG path for arrows
+                                      innerHTML.includes('M8 4') ||
+                                      btn.className.includes('next');
+                        
+                        if (isNext) {
+                            btn.click();
+                            return 'clicked';
                         }
                     }
-                } else {
-                    // Try arrow key as fallback
-                    document.dispatchEvent(new KeyboardEvent('keydown', { 
-                        key: 'ArrowRight', 
-                        code: 'ArrowRight', 
+                    
+                    // Fallback: try arrow key
+                    const event = new KeyboardEvent('keydown', {
+                        key: 'ArrowRight',
                         keyCode: 39,
-                        bubbles: true
-                    }));
-                    'key_pressed';
-                }
+                        code: 'ArrowRight',
+                        bubbles: true,
+                        cancelable: true
+                    });
+                    document.body.dispatchEvent(event);
+                    document.dispatchEvent(event);
+                    window.dispatchEvent(event);
+                    return 'key_pressed';
+                })();
             "
-            
-            set result to do JavaScript jsCode
             delay 1.5
-            return result
         end tell
     end tell
     """
