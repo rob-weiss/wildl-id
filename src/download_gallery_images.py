@@ -127,7 +127,7 @@ def get_camera_buttons():
         tell current tab of front window
             set jsCode to "
                 JSON.stringify(
-                    Array.from(document.querySelectorAll('button, a, [role=button]'))
+                    Array.from(document.querySelectorAll('button, a, [role=button], div[onclick]'))
                         .filter(btn => {
                             const text = btn.textContent.trim();
                             const hasValidLength = text.length >= 3 && text.length <= 50;
@@ -179,32 +179,35 @@ def click_camera_button(button_text):
         delay 0.5
         
         tell current tab of front window
-            -- First scroll the button into view
-            set jsCodeScroll to "
-                const buttons = Array.from(document.querySelectorAll('button, a, [role=button]'));
-                const targetButton = buttons.find(btn => btn.textContent.trim() === '{safe_text}');
-                if (targetButton) {{
-                    targetButton.scrollIntoView({{ behavior: 'auto', block: 'center' }});
-                    'found';
-                }} else {{
-                    'not_found';
-                }}
-            "
-            
-            set scrollResult to do JavaScript jsCodeScroll
-            
-            if scrollResult is "not_found" then
-                return "not_found"
-            end if
-            
-            delay 0.5
-            
-            -- Now click the button
+            -- Try to click using multiple methods
             set jsCodeClick to "
-                const buttons = Array.from(document.querySelectorAll('button, a, [role=button]'));
-                const targetButton = buttons.find(btn => btn.textContent.trim() === '{safe_text}');
+                const allButtons = Array.from(document.querySelectorAll('button, a, [role=button], div[onclick]'));
+                const targetButton = allButtons.find(btn => btn.textContent.trim() === '{safe_text}' && btn.offsetParent !== null);
+                
                 if (targetButton) {{
-                    targetButton.click();
+                    // Scroll into view first
+                    targetButton.scrollIntoView({{ behavior: 'auto', block: 'center' }});
+                    
+                    // Try multiple click methods
+                    try {{
+                        // Method 1: Direct click
+                        targetButton.click();
+                    }} catch(e1) {{
+                        try {{
+                            // Method 2: Dispatch mouse event
+                            const event = new MouseEvent('click', {{
+                                view: window,
+                                bubbles: true,
+                                cancelable: true
+                            }});
+                            targetButton.dispatchEvent(event);
+                        }} catch(e2) {{
+                            // Method 3: If it has onclick, call it
+                            if (targetButton.onclick) {{
+                                targetButton.onclick();
+                            }}
+                        }}
+                    }}
                     'clicked';
                 }} else {{
                     'not_found';
@@ -212,7 +215,7 @@ def click_camera_button(button_text):
             "
             
             set clickResult to do JavaScript jsCodeClick
-            delay 1
+            delay 1.5
             return clickResult
         end tell
     end tell
@@ -729,18 +732,32 @@ def main():
         "reload",
     }
 
-    camera_buttons = [
-        btn
-        for btn in buttons
-        if btn["text"]
-        and btn["text"].lower() not in skip_albums
-        and len(btn["text"]) >= 3
-        and len(btn["text"]) <= 30
-        and (
-            btn["text"][0].isupper()
-            or any(keyword in btn["text"].lower() for keyword in ["camera", "album"])
-        )
-    ]
+    # More strict filtering for camera buttons
+    camera_buttons = []
+    for btn in buttons:
+        text = btn["text"]
+        if not text or text.lower() in skip_albums:
+            continue
+        
+        # Length check
+        if len(text) < 3 or len(text) > 30:
+            continue
+        
+        # Must start with uppercase OR be all uppercase
+        if not (text[0].isupper() or text.isupper()):
+            continue
+        
+        # Skip if it contains common UI words
+        ui_words = ["click", "view", "show", "hide", "more", "less", "new", "add", "remove", "filter"]
+        if any(word in text.lower() for word in ui_words):
+            continue
+        
+        # Skip if it's mostly numbers or special characters
+        alpha_chars = sum(c.isalpha() for c in text)
+        if alpha_chars < len(text) * 0.5:
+            continue
+        
+        camera_buttons.append(btn)
 
     if not camera_buttons:
         print("⚠ No camera buttons detected. Downloading from current view...")
