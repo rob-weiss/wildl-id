@@ -91,39 +91,92 @@ def get_current_carousel_image():
                         const alt = mainImg.getAttribute('alt');
                         const title = mainImg.getAttribute('title');
                         
-                        let filename = '';
                         let cameraName = '';
+                        let timestamp = '';
+                        let fullText = '';
+                        let textCount = 0;
                         
-                        // Try to get camera name from alt/title/nearby text
-                        if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
-                            cameraName = alt.trim();
-                        } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
-                            cameraName = title.trim();
-                        } else {
-                            // Look for figcaption
-                            const figure = mainImg.closest('figure');
-                            if (figure) {
-                                const caption = figure.querySelector('figcaption');
-                                if (caption && caption.textContent.trim()) {
-                                    cameraName = caption.textContent.trim();
+                        // Strategy 1: Look for aria-label attributes or title elements near the image
+                        const modal = mainImg.closest('[role=dialog], [class*=modal], [class*=viewer], [class*=lightbox]');
+                        if (modal) {
+                            // Check for aria-label on parent elements
+                            const labeledElement = modal.querySelector('[aria-label]');
+                            if (labeledElement) {
+                                const ariaText = labeledElement.getAttribute('aria-label');
+                                if (ariaText && ariaText.indexOf(' - ') !== -1 && ariaText.indexOf('/') !== -1) {
+                                    fullText = ariaText;
+                                    const dashIndex = ariaText.indexOf(' - ');
+                                    cameraName = ariaText.substring(0, dashIndex).trim();
+                                    timestamp = ariaText.substring(dashIndex + 3).trim();
                                 }
                             }
                             
-                            // Look for nearby headings
-                            if (!cameraName) {
-                                const parent = mainImg.closest('[class*=slide], [class*=item], [class*=modal], [class*=viewer]');
-                                if (parent) {
-                                    const heading = parent.querySelector('h1, h2, h3, h4, h5, h6, p, span[class*=title], div[class*=title]');
-                                    if (heading && heading.textContent.trim() && heading.textContent.trim().length < 100) {
-                                        cameraName = heading.textContent.trim();
+                            // Check for heading elements with the title
+                            if (!fullText) {
+                                const headings = modal.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                                for (let i = 0; i < headings.length; i++) {
+                                    const text = headings[i].textContent.trim();
+                                    if (text.indexOf(' - ') !== -1 && text.indexOf('/') !== -1) {
+                                        fullText = text;
+                                        const dashIndex = text.indexOf(' - ');
+                                        cameraName = text.substring(0, dashIndex).trim();
+                                        timestamp = text.substring(dashIndex + 3).trim();
+                                        break;
                                     }
                                 }
+                            }
+                        }
+                        
+                        // Strategy 2: Search all text content if not found yet
+                        if (!fullText) {
+                            const allElements = Array.from(document.querySelectorAll('*'));
+                            const allText = [];
+                            
+                            allElements.forEach(function(el) {
+                                if (allText.length >= 200) return;
+                                const elText = el.textContent;
+                                if (elText && elText.length > 20 && elText.length < 200) {
+                                    const childTexts = Array.from(el.children).map(c => c.textContent).join('');
+                                    const directText = elText.replace(childTexts, '').trim();
+                                    if (directText && directText.length > 5) {
+                                        allText.push(directText);
+                                    }
+                                }
+                            });
+                            
+                            textCount = allText.length;
+                            
+                            allText.forEach(function(text) {
+                                if (fullText) return;
+                                const hasDash = text.indexOf(' - ') !== -1;
+                                const hasSlash = text.indexOf('/') !== -1;
+                                const hasDigit = /[0-9]/.test(text);
+                                const notURL = text.indexOf('http') === -1;
+                                
+                                if (hasDash && hasSlash && hasDigit && notURL && text.length < 100) {
+                                    fullText = text.trim();
+                                    const dashIndex = text.indexOf(' - ');
+                                    cameraName = text.substring(0, dashIndex).trim();
+                                    timestamp = text.substring(dashIndex + 3).trim();
+                                }
+                            });
+                        }
+                        
+                        // Fallback to searching for any camera name
+                        if (!cameraName) {
+                            if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
+                                cameraName = alt.trim();
+                            } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
+                                cameraName = title.trim();
                             }
                         }
                         
                         return JSON.stringify({
                             url: url,
                             cameraName: cameraName,
+                            timestamp: timestamp,
+                            fullText: fullText,
+                            textCount: textCount,
                             width: mainImg.naturalWidth,
                             height: mainImg.naturalHeight,
                             debug_alt: mainImg.getAttribute('alt'),
@@ -348,12 +401,29 @@ def main():
 
         img_url = img_data.get("url")
         camera_name = img_data.get("cameraName", "").strip()
+        timestamp = img_data.get("timestamp", "").strip()
+        full_text = img_data.get("fullText", "").strip()
+        text_count = img_data.get("textCount", 0)
         width = img_data.get("width", 0)
         height = img_data.get("height", 0)
 
+        # Debug output
+        if full_text:
+            print(f"  Found: {full_text}")
+        if not camera_name:
+            print(f"  Text elements searched: {text_count}")
+        print(f"  Camera: {camera_name if camera_name else 'Unknown'}")
+        if timestamp:
+            print(f"  Timestamp: {timestamp}")
+
         # Create hash from URL for unique filename
         url_hash = hashlib.md5(img_url.encode()).hexdigest()[:16]
-        if camera_name:
+
+        # Build filename with camera name and timestamp
+        if camera_name and timestamp:
+            safe_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
+            original_filename = f"{camera_name}_{safe_timestamp}_{url_hash}"
+        elif camera_name:
             original_filename = f"{camera_name}_{url_hash}"
         else:
             original_filename = f"secacam_{url_hash}"
@@ -377,8 +447,6 @@ def main():
         if not safe_filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
             safe_filename += ".jpg"
         filepath = camera_path / safe_filename
-
-        print(f"  Camera: {camera_folder_name}")
 
         # Check if already downloaded
         if filepath.exists():
