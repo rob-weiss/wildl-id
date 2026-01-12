@@ -25,8 +25,12 @@ Usage:
 import re
 import sys
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
+
+# Suppress pkg_resources deprecation warning from dependencies
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resources")
 
 import cv2
 import matplotlib.image as mpimg
