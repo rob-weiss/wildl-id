@@ -686,12 +686,10 @@ def process_images_with_pytorch_wildlife():
                     and classification_model is not None
                     and bbox is not None
                 ):
-                    print(f"  Classifying animal in {image_file}...")
                     # Crop the detected animal
                     cropped_img = crop_detection(image_path, bbox)
 
                     if cropped_img is not None:
-                        print(f"    Cropped image size: {cropped_img.size}")
                         try:
                             # Run classification on the cropped image
                             classification_result = (
@@ -699,8 +697,6 @@ def process_images_with_pytorch_wildlife():
                                     np.array(cropped_img), img_id=image_file
                                 )
                             )
-
-                            print(f"    Classification result: {classification_result}")
 
                             # Get top prediction - classification_result is already a dict, not a list!
                             if classification_result and isinstance(
@@ -713,39 +709,22 @@ def process_images_with_pytorch_wildlife():
                                     "confidence", 0.0
                                 )
 
-                                print(
-                                    f"    Classifier says: {classifier_class} "
-                                    f"(confidence: {classification_confidence:.2%})"
-                                )
-
                                 # Map the classifier output to our categories
                                 classified_species = map_classifier_to_wildlife(
                                     classifier_class
                                 )
 
-                                print(f"    Mapped to: {classified_species}")
-
                                 # Always use the classified species, even if confidence is low
                                 # This way users can see what the model thinks it is
                                 img_class = classified_species
-
-                                # Add a note if confidence was low
-                                if classification_confidence < classification_threshold:
-                                    print(
-                                        f"    WARNING: Low confidence ({classification_confidence:.2%}) "
-                                        f"classification: {classified_species}"
-                                    )
                             else:
-                                print("    No classification result returned")
                                 img_class = "animal"
                         except Exception as e:
                             print(f"    Classification error: {e}")
                             import traceback
 
-                            traceback.print_exc()
                             img_class = "animal"
                     else:
-                        print("    Failed to crop image")
                         img_class = "animal"
                 elif megadetector_class == "person":
                     img_class = "human"
@@ -765,7 +744,6 @@ def process_images_with_pytorch_wildlife():
         lighting = detect_lighting(image_path)
 
         # Extract metadata using OCR
-        print("  Extracting metadata via OCR...")
         metadata = extract_metadata_ocr(image_path)
 
         result_dict = {
