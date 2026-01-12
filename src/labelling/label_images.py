@@ -310,9 +310,9 @@ def parse_camera_metadata(ocr_text):
         # Normalize linebreaks to spaces for more robust parsing
         normalized_text = re.sub(r"\s+", " ", ocr_text)
 
-        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C")
-        # Matches one or two digit numbers (positive or negative) before °C
-        temp_match = re.search(r"(-?\d{1,2})\s*°C", normalized_text, re.IGNORECASE)
+        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°")
+        # Matches one or two digit numbers (positive or negative) before ° (C is optional)
+        temp_match = re.search(r"(-?\d{1,2})\s*°C?", normalized_text, re.IGNORECASE)
         if temp_match:
             temperature = int(temp_match.group(1))
         else:
