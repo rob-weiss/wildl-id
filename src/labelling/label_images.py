@@ -578,13 +578,13 @@ def process_images_with_pytorch_wildlife():
         # Define expected columns with default values
         expected_columns = {
             "location_id": "",
+            "timestamp": None,
             "image_file": "",
             "class": "none",
             "box": None,
             "lighting": "unknown",
             "confidence": 0.0,
             "classification_confidence": None,
-            "timestamp": None,
             "temperature_celsius": None,
         }
 
@@ -770,13 +770,13 @@ def process_images_with_pytorch_wildlife():
 
         result_dict = {
             "location_id": location_id,
+            "timestamp": metadata["timestamp"],
             "image_file": image_file,
             "class": img_class,
             "box": box,
             "lighting": lighting,
             "confidence": confidence,
             "classification_confidence": classification_confidence,
-            "timestamp": metadata["timestamp"],
             "temperature_celsius": metadata["temperature_celsius"],
         }
         results.append(result_dict)
