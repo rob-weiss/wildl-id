@@ -307,16 +307,20 @@ def parse_camera_metadata(ocr_text):
     temperature = None
 
     try:
+        # Normalize linebreaks to spaces for more robust parsing
+        normalized_text = re.sub(r"\s+", " ", ocr_text)
+
         # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C")
         # Matches one or two digit numbers (positive or negative) before °C
-        temp_match = re.search(r"(-?\d{1,2})\s*°C", ocr_text, re.IGNORECASE)
+        temp_match = re.search(r"(-?\d{1,2})\s*°C", normalized_text, re.IGNORECASE)
         if temp_match:
             temperature = int(temp_match.group(1))
 
         # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41")
         # Format: weekday DD.MM.YYYY HH:MM:SS
         date_match = re.search(
-            r"\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})", ocr_text
+            r"\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
+            normalized_text,
         )
         if date_match:
             day, month, year, hour, minute, second = date_match.groups()
