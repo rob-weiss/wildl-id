@@ -128,11 +128,9 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                 except Exception:
                     pass
 
-                # Fallback to current date in Berlin timezone if no EXIF date found
+                # Fallback to "unknown" if no EXIF date found
                 if not timestamp_str:
-                    berlin_tz = ZoneInfo("Europe/Berlin")
-                    timestamp_str = datetime.now(berlin_tz).strftime(
-                        "%Y-%m-%dT%H-%M-%S"
+                    timestamp_str = "unknown"
                     )
 
                 # Create output filename: Location_YYYY-MM-DDTHH-MM-SS.ext
