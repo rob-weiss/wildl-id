@@ -309,6 +309,12 @@ def parse_camera_metadata(ocr_text):
     try:
         # Normalize linebreaks to spaces for more robust parsing
         normalized_text = re.sub(r"\s+", " ", ocr_text)
+        
+        # Replace common OCR artifacts before temperature parsing
+        # Replace letter O with 0 when followed by C (e.g., "OC" -> "0C")
+        normalized_text = re.sub(r"\bO(?=\s*[°С]?C)", "0", normalized_text, flags=re.IGNORECASE)
+        # Replace Cyrillic characters that look like temperature numbers/units
+        normalized_text = normalized_text.replace("б", "6").replace("С", "C")
 
         # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C")
         # Matches one or two digit numbers followed by °C, °, or just C
