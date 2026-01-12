@@ -363,12 +363,13 @@ def detect_lighting(image_path):
 
     Returns
     -------
-    str
-        'bright' or 'dark'
+    tuple
+        (classification, avg_brightness) where classification is 'bright' or 'dark',
+        and avg_brightness is the mean grayscale value (0-255)
     """
     img = cv2.imread(str(image_path))
     if img is None:
-        return "unknown"
+        return "unknown", None
 
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -427,9 +428,9 @@ def detect_lighting(image_path):
     # Score >= 6 is definitely dark (night/IR mode)
     # Score <= 3 is definitely bright (daylight)
     if darkness_score >= 6:
-        return "dark"
+        return "dark", avg_brightness
     else:
-        return "bright"
+        return "bright", avg_brightness
 
 
 def show_image_with_detection(
@@ -440,6 +441,7 @@ def show_image_with_detection(
     save_path=None,
     classification_info=None,
     metadata=None,
+    brightness_value=None,
 ):
     """Display an image with its predicted class and bounding box.
 
@@ -459,6 +461,8 @@ def show_image_with_detection(
         Additional classification information to display.
     metadata : dict, optional
         OCR metadata (timestamp, temperature) to display.
+    brightness_value : float, optional
+        Average brightness value (0-255) to display.
     """
     img = mpimg.imread(str(image_path))
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -472,6 +476,10 @@ def show_image_with_detection(
         conf = classification_info.get("confidence")
         if species and conf is not None:
             title += f"\nclassified as: {species} ({conf:.2%})"
+
+    # Add brightness info
+    if brightness_value is not None:
+        title += f"\nbrightness: {brightness_value:.1f}"
 
     # Add metadata info
     if metadata:
@@ -756,7 +764,7 @@ def process_images_with_pytorch_wildlife():
                     box = [x_center, y_center, width, height]
 
         # Detect lighting
-        lighting = detect_lighting(image_path)
+        lighting, brightness_value = detect_lighting(image_path)
 
         # Extract metadata using OCR
         metadata = extract_metadata_ocr(image_path)
@@ -798,6 +806,7 @@ def process_images_with_pytorch_wildlife():
             save_path=label_save_path,
             classification_info=classification_info,
             metadata=metadata,
+            brightness_value=brightness_value,
         )
 
         # Convert to parquet every 100 images
