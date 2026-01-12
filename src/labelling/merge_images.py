@@ -9,7 +9,6 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from PIL import Image
 from PIL.ExifTags import TAGS
@@ -112,20 +111,13 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                                 tag = TAGS.get(tag_id, tag_id)
                                 if tag == "DateTimeOriginal" or tag == "DateTime":
                                     # Parse date format: "YYYY:MM:DD HH:MM:SS"
-                                    # Camera stores time in standard time (CET, UTC+1) without DST
+                                    # Camera stores time in local Berlin time (already accounts for DST)
                                     date_obj = datetime.strptime(
                                         value, "%Y:%m:%d %H:%M:%S"
                                     )
-                                    # Treat EXIF time as CET (standard time, UTC+1, no DST)
-                                    from datetime import timedelta, timezone
-
-                                    cet = timezone(timedelta(hours=1))
-                                    date_obj_cet = date_obj.replace(tzinfo=cet)
-                                    # Convert to Berlin time (which handles DST)
-                                    berlin_tz = ZoneInfo("Europe/Berlin")
-                                    date_obj_berlin = date_obj_cet.astimezone(berlin_tz)
+                                    # Treat as naive local Berlin time - no conversion needed
                                     # Format as ISO 8601 compatible filename: YYYY-MM-DDTHH-MM-SS
-                                    timestamp_str = date_obj_berlin.strftime(
+                                    timestamp_str = date_obj.strftime(
                                         "%Y-%m-%dT%H-%M-%S"
                                     )
                                     break
