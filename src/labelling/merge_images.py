@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Process images from subfolders containing DCIM directories.
-Copies originals to DCIM/sendlist and saves downsampled versions to DCIM/sendlist_small.
+Move images from subfolders containing DCIM directories to the data directory.
+Optionally downsamples images if enabled.
 """
 
 import shutil
@@ -12,24 +12,34 @@ from PIL import Image
 from tqdm import tqdm
 
 
-def process_images(base_dir, target_width=1920):
+def process_images(source_dir, data_dir, downsample=False, target_width=1920):
     """
-    Process all images in subfolders containing DCIM directories.
+    Move images from source subfolders to data directory.
 
-    For each subfolder in base_dir:
+    For each subfolder in source_dir:
     - Finds all images in <subfolder>/DCIM/*
-    - Copies originals to <subfolder>/DCIM/sendlist
-    - Saves downsampled versions to <subfolder>/DCIM/sendlist_small
+    - Moves them to <data_dir>/<subfolder_name>/
+    - Optionally downsamples if enabled
     - Uses lowercase filenames for output
 
     Args:
-        base_dir: Path to directory containing subfolders with DCIM directories
-        target_width: Target width in pixels (height calculated to maintain aspect ratio)
+        source_dir: Path to directory containing subfolders with DCIM directories
+        data_dir: Path to target data directory
+        downsample: Whether to downsample images (default: False)
+        target_width: Target width in pixels if downsampling (height calculated to maintain aspect ratio)
     """
-    base_path = Path(base_dir)
+    source_path = Path(source_dir)
+    data_path = Path(data_dir)
 
-    if not base_path.exists():
-        print(f"Error: {base_dir} does not exist")
+    source_path = Path(source_dir)
+    data_path = Path(data_dir)
+
+    if not source_path.exists():
+        print(f"Error: {source_dir} does not exist")
+        return
+
+    if not data_path.exists():
+        print(f"Error: {data_dir} does not exist")
         return
 
     # Supported image extensions
@@ -37,17 +47,18 @@ def process_images(base_dir, target_width=1920):
 
     # Find all subfolders with DCIM directories
     dcim_folders = []
-    for subfolder in base_path.iterdir():
+    for subfolder in source_path.iterdir():
         if subfolder.is_dir():
             dcim_path = subfolder / "DCIM"
             if dcim_path.exists() and dcim_path.is_dir():
                 dcim_folders.append((subfolder.name, dcim_path))
 
     if not dcim_folders:
-        print(f"No DCIM folders found in {base_dir}")
+        print(f"No DCIM folders found in {source_dir}")
         return
 
     print(f"Found {len(dcim_folders)} DCIM folder(s)")
+    print(f"Downsample: {'enabled' if downsample else 'disabled'}")
 
     total_processed = 0
 
@@ -56,20 +67,14 @@ def process_images(base_dir, target_width=1920):
         print(f"Processing: {folder_name}")
         print(f"{'=' * 60}")
 
-        # Create output directories if they don't exist
-        sendlist_dir = dcim_path / "sendlist"
-        sendlist_small_dir = dcim_path / "sendlist_small"
-
-        sendlist_dir.mkdir(parents=True, exist_ok=True)
-        sendlist_small_dir.mkdir(parents=True, exist_ok=True)
+        # Create output directory in data folder
+        output_dir = data_path / folder_name
+        output_dir.mkdir(parents=True, exist_ok=True)
 
         # Find all images in all DCIM subfolders
         image_files = []
         for subfolder in dcim_path.iterdir():
-            if subfolder.is_dir() and subfolder.name not in [
-                "sendlist",
-                "sendlist_small",
-            ]:
+            if subfolder.is_dir():
                 for file_path in subfolder.rglob("*"):
                     if (
                         file_path.is_file()
@@ -89,40 +94,40 @@ def process_images(base_dir, target_width=1920):
         for image_file in tqdm(image_files, desc=f"  {folder_name}", unit="img"):
             # Use lowercase filename for output
             output_filename = image_file.name.lower()
+            output_path = output_dir / output_filename
 
             try:
-                # Copy original to sendlist
-                original_output = sendlist_dir / output_filename
-                shutil.copy2(image_file, original_output)
+                if downsample:
+                    # Open and downsample image
+                    with Image.open(image_file) as img:
+                        # Convert RGBA to RGB if necessary (for JPEG compatibility)
+                        if img.mode == "RGBA":
+                            img = img.convert("RGB")
 
-                # Open and downsample image
-                with Image.open(image_file) as img:
-                    # Convert RGBA to RGB if necessary (for JPEG compatibility)
-                    if img.mode == "RGBA":
-                        img = img.convert("RGB")
+                        # Calculate new height maintaining aspect ratio
+                        aspect_ratio = img.height / img.width
+                        target_height = int(target_width * aspect_ratio)
 
-                    # Calculate new height maintaining aspect ratio
-                    aspect_ratio = img.height / img.width
-                    target_height = int(target_width * aspect_ratio)
+                        # Only resize if image is larger than target
+                        if img.width > target_width:
+                            img = img.resize(
+                                (target_width, target_height), Image.Resampling.LANCZOS
+                            )
 
-                    # Only resize if image is larger than target
-                    if img.width > target_width:
-                        img = img.resize(
-                            (target_width, target_height), Image.Resampling.LANCZOS
+                        # Save downsampled version with optimizations:
+                        # - Strip EXIF metadata (exif=None)
+                        # - Progressive JPEG for better compression
+                        # - Quality 80 (good balance)
+                        img.save(
+                            output_path,
+                            quality=80,
+                            optimize=True,
+                            progressive=True,
+                            exif=b"",
                         )
-
-                    # Save downsampled version with optimizations:
-                    # - Strip EXIF metadata (exif=None)
-                    # - Progressive JPEG for better compression
-                    # - Quality 80 (good balance)
-                    downsampled_output = sendlist_small_dir / output_filename
-                    img.save(
-                        downsampled_output,
-                        quality=80,
-                        optimize=True,
-                        progressive=True,
-                        exif=b"",
-                    )
+                else:
+                    # Move original file
+                    shutil.move(str(image_file), str(output_path))
 
                 total_processed += 1
 
@@ -142,22 +147,33 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Process images from subfolders with DCIM directories"
+        description="Move images from DCIM directories to data directory"
     )
     parser.add_argument(
-        "folder",
-        nargs="?",
+        "-s",
+        "--source",
         default="/Users/wri2lr/Pictures/Wildkameras",
-        help="Path to folder containing subfolders with DCIM directories",
+        help="Path to folder containing subfolders with DCIM directories (default: /Users/wri2lr/Pictures/Wildkameras)",
+    )
+    parser.add_argument(
+        "-d",
+        "--data",
+        default="/Users/wri2lr/repos/wildl-id/data",
+        help="Path to target data directory (default: /Users/wri2lr/repos/wildl-id/data)",
+    )
+    parser.add_argument(
+        "--downsample",
+        action="store_true",
+        help="Enable downsampling (default: disabled)",
     )
     parser.add_argument(
         "-w",
         "--width",
         type=int,
         default=1920,
-        help="Target width in pixels (default: 1920)",
+        help="Target width in pixels when downsampling (default: 1920)",
     )
 
     args = parser.parse_args()
 
-    process_images(args.folder, args.width)
+    process_images(args.source, args.data, args.downsample, args.width)
