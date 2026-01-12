@@ -128,9 +128,9 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                 except Exception:
                     pass
 
-                # Fallback to "unknown" if no EXIF date found
+                # Fallback to "unknown_timestamp" if no EXIF date found
                 if not timestamp_str:
-                    timestamp_str = "unknown"
+                    timestamp_str = "unknown_timestamp"
                     )
 
                 # Create output filename: Location_YYYY-MM-DDTHH-MM-SS.ext
