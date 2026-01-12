@@ -153,7 +153,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "folder",
         nargs="?",
-        default=str(Path.home() / "Downloads"),
+        default="/Users/wri2lr/Pictures/Wildkameras",
         help="Path to folder containing subfolders with DCIM directories",
     )
     parser.add_argument(
