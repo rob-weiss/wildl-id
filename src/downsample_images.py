@@ -56,16 +56,10 @@ def process_images(base_dir, target_width=1920):
         print(f"Processing: {folder_name}")
         print(f"{'=' * 60}")
 
-        # Delete output directories if they exist
+        # Create output directories if they don't exist
         sendlist_dir = dcim_path / "sendlist"
         sendlist_small_dir = dcim_path / "sendlist_small"
 
-        if sendlist_dir.exists():
-            shutil.rmtree(sendlist_dir)
-        if sendlist_small_dir.exists():
-            shutil.rmtree(sendlist_small_dir)
-
-        # Create fresh output directories
         sendlist_dir.mkdir(parents=True, exist_ok=True)
         sendlist_small_dir.mkdir(parents=True, exist_ok=True)
 
