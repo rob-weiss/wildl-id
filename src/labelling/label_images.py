@@ -315,6 +315,14 @@ def parse_camera_metadata(ocr_text):
         temp_match = re.search(r"(-?\d{1,2})\s*°C", normalized_text, re.IGNORECASE)
         if temp_match:
             temperature = int(temp_match.group(1))
+        else:
+            # Debug: show what we're trying to parse if temperature pattern doesn't match
+            if normalized_text and (
+                "°" in normalized_text or "C" in normalized_text
+            ):  # Likely contains a temperature
+                print(
+                    f"    Temperature pattern did not match in: '{normalized_text[:100]}'"
+                )
 
         # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41" or "Sa 29.11.2025 08:15:47")
         # Format: weekday DD.MM.YYYY HH:MM:SS
