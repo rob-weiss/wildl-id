@@ -112,14 +112,17 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                                 tag = TAGS.get(tag_id, tag_id)
                                 if tag == "DateTimeOriginal" or tag == "DateTime":
                                     # Parse date format: "YYYY:MM:DD HH:MM:SS"
-                                    # EXIF timestamps are typically in local time without timezone info
-                                    # Assume they're in Berlin timezone (or treat as naive and localize)
+                                    # Camera stores time in standard time (CET, UTC+1) without DST
                                     date_obj = datetime.strptime(
                                         value, "%Y:%m:%d %H:%M:%S"
                                     )
-                                    # Localize to Berlin timezone (handles DST automatically)
+                                    # Treat EXIF time as CET (standard time, UTC+1, no DST)
+                                    from datetime import timezone, timedelta
+                                    cet = timezone(timedelta(hours=1))
+                                    date_obj_cet = date_obj.replace(tzinfo=cet)
+                                    # Convert to Berlin time (which handles DST)
                                     berlin_tz = ZoneInfo("Europe/Berlin")
-                                    date_obj_berlin = date_obj.replace(tzinfo=berlin_tz)
+                                    date_obj_berlin = date_obj_cet.astimezone(berlin_tz)
                                     # Format as ISO 8601 compatible filename: YYYY-MM-DDTHH-MM-SS
                                     timestamp_str = date_obj_berlin.strftime(
                                         "%Y-%m-%dT%H-%M-%S"
