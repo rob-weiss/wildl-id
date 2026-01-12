@@ -117,7 +117,8 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                                         value, "%Y:%m:%d %H:%M:%S"
                                     )
                                     # Treat EXIF time as CET (standard time, UTC+1, no DST)
-                                    from datetime import timezone, timedelta
+                                    from datetime import timedelta, timezone
+
                                     cet = timezone(timedelta(hours=1))
                                     date_obj_cet = date_obj.replace(tzinfo=cet)
                                     # Convert to Berlin time (which handles DST)
@@ -134,7 +135,6 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
                 # Fallback to "unknown_timestamp" if no EXIF date found
                 if not timestamp_str:
                     timestamp_str = "unknown_timestamp"
-                    )
 
                 # Create output filename: Location_YYYY-MM-DDTHH-MM-SS.ext
                 file_ext = image_file.suffix.lower()
