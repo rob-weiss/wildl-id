@@ -489,8 +489,8 @@ def main():
                 # Parse format like "01/11/2026 09:53 AM"
                 dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
                 image_date = dt
-                # Convert to ISO format suitable for filename: YYYY-MM-DD_HH-MM-SS
-                iso_timestamp = dt.strftime("%Y-%m-%d_%H-%M-%S")
+                # Convert to ISO format suitable for filename: YYYY-MM-DDTHH-MM-SS
+                iso_timestamp = dt.strftime("%Y-%m-%dT%H-%M-%S")
             except ValueError:
                 # If parsing fails, use sanitized original
                 iso_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
