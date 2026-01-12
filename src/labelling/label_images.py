@@ -22,7 +22,10 @@ Usage:
     python detect_animals.py
 """
 
+import re
+import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -32,11 +35,19 @@ import numpy as np
 import pandas as pd
 import torch
 from matplotlib.patches import Rectangle
-from ollama_ocr import OCRProcessor
 from PIL import Image
 from PytorchWildlife.models import classification as pw_classification
 from PytorchWildlife.models import detection as pw_detection
 from tqdm import tqdm
+
+try:
+    import Vision
+    from Foundation import NSURL
+    from Quartz import CIImage
+except ImportError:
+    print("Error: PyObjC not installed. Install with:")
+    print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
+    sys.exit(1)
 
 # Configuration
 image_dir = Path(__file__).parent.parent.parent / "data"
@@ -204,59 +215,120 @@ def map_classifier_to_wildlife(classifier_name):
         return "unknown"
 
 
-def extract_metadata_ocr(image_path, ocr_processor):
-    """Extract timestamp, temperature, and battery level from image using OCR.
+def extract_text_from_image(image_path):
+    """Extract text from an image using macOS Vision framework.
+    
+    Parameters
+    ----------
+    image_path : Path
+        Path to the image file.
+        
+    Returns
+    -------
+    str
+        Extracted text as a string.
+    """
+    try:
+        # Create image URL
+        image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
+        
+        # Create CIImage
+        ci_image = CIImage.imageWithContentsOfURL_(image_url)
+        if ci_image is None:
+            return ""
+        
+        # Create text recognition request
+        request = Vision.VNRecognizeTextRequest.alloc().init()
+        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+        request.setUsesLanguageCorrection_(True)
+        
+        # Create request handler
+        handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
+            ci_image, None
+        )
+        
+        # Perform request
+        success = handler.performRequests_error_([request], None)
+        
+        if not success[0]:
+            return ""
+        
+        # Extract text from results
+        results = request.results()
+        if not results:
+            return ""
+        
+        # Combine all recognized text
+        text_lines = []
+        for observation in results:
+            text = observation.text()
+            text_lines.append(text)
+            
+        return "\n".join(text_lines)
+    except Exception as e:
+        print(f"    OCR error: {e}")
+        return ""
+
+
+def parse_camera_metadata(ocr_text):
+    """Parse timestamp and temperature from camera metadata text.
+    
+    Expected format:
+    ZEISS
+    AMPHIKANZEL
+    • 3°C
+    Mo 10.11.2025 07:41:41
+    
+    Parameters
+    ----------
+    ocr_text : str
+        Text extracted from image via OCR.
+        
+    Returns
+    -------
+    dict
+        Dictionary with 'timestamp' and 'temperature_celsius' keys.
+    """
+    timestamp = None
+    temperature = None
+    
+    try:
+        # Parse temperature (e.g., "3°C" or "• 3°C")
+        temp_match = re.search(r'[•●]?\s*(-?\d+)\s*°?C', ocr_text, re.IGNORECASE)
+        if temp_match:
+            temperature = int(temp_match.group(1))
+        
+        # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41")
+        # Format: weekday DD.MM.YYYY HH:MM:SS
+        date_match = re.search(r'\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})', ocr_text)
+        if date_match:
+            day, month, year, hour, minute, second = date_match.groups()
+            dt = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
+            timestamp = dt.isoformat()
+    except Exception as e:
+        print(f"    Metadata parsing error: {e}")
+    
+    return {
+        "timestamp": timestamp,
+        "temperature_celsius": temperature,
+    }
+
+
+def extract_metadata_ocr(image_path):
+    """Extract timestamp and temperature from image using macOS OCR.
 
     Parameters
     ----------
     image_path : Path
         Path to the image file.
-    ocr_processor : OCRProcessor
-        OCR processor instance.
 
     Returns
     -------
     dict
-        Dictionary with 'timestamp', 'temperature_celsius', 'battery_level' keys.
+        Dictionary with 'timestamp' and 'temperature_celsius' keys.
     """
-    try:
-        result = ocr_processor.process_image(
-            image_path=str(image_path),
-            format_type="text",
-            custom_prompt="There is a gray bar in the bottom of the image. It contains the date and time in the lower right corner.\n"
-            "Add the timestamp as an additional key 'timestamp' in ISO 8601 format (YYYY-MM-DDTHH:MM:SS) if you can read it from the gray bar using OCR.\n"
-            "There is a temperature value in the lower right corner of the gray bar. Add it as an additional key 'temperature_celsius' in degrees Celsius if you can read it from the gray bar using OCR.\n"
-            "In the gray bar, there is also a rectangular battery symbol somewhere left of the temperature value. Inside the symbol there is either a percentage value with integer multiples of ten or up to four bars indicating the remaining battery level of the camera.\n"
-            "If you can read the battery percentage value or count the bars, add it as an additional key 'battery_level' with value in percent (0-100).\n"
-            "That is, if there are four bars, assume 100%, three bars 75%, two bars 50%, one bar 25%, and no bars 0%.\n"
-            "Respond only with the JSON object, nothing else.\n",
-            language="eng",
-        )
-
-        # Parse result - extract JSON from response (model may add extra text)
-        import json
-        import re
-
-        json_match = re.search(r"\{.*\}", result, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-            result = json.loads(json_str)
-        else:
-            # Fallback: try to parse as-is
-            result = json.loads(result)
-
-        return {
-            "timestamp": result.get("timestamp"),
-            "temperature_celsius": result.get("temperature_celsius"),
-            "battery_level": result.get("battery_level"),
-        }
-    except Exception as e:
-        print(f"    OCR error: {e}")
-        return {
-            "timestamp": None,
-            "temperature_celsius": None,
-            "battery_level": None,
-        }
+    ocr_text = extract_text_from_image(image_path)
+    return parse_camera_metadata(ocr_text)
 
 
 def detect_lighting(image_path):
@@ -320,7 +392,7 @@ def show_image_with_detection(
     classification_info : dict, optional
         Additional classification information to display.
     metadata : dict, optional
-        OCR metadata (timestamp, temperature, battery) to display.
+        OCR metadata (timestamp, temperature) to display.
     """
     img = mpimg.imread(str(image_path))
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -341,8 +413,6 @@ def show_image_with_detection(
             title += f"\ntimestamp: {metadata['timestamp']}"
         if metadata.get("temperature_celsius") is not None:
             title += f"\ntemp: {metadata['temperature_celsius']}°C"
-        if metadata.get("battery_level") is not None:
-            title += f"\nbattery: {metadata['battery_level']}%"
 
     ax.set_title(title)
 
@@ -378,10 +448,7 @@ def process_images_with_pytorch_wildlife():
         device = "mps"
     print(f"Using device: {device}")
 
-    # Initialize OCR processor
-    print("Initializing OCR processor...")
-    ocr_processor = OCRProcessor(model_name="llama3.2-vision:11b")
-    print("✓ OCR processor initialized")
+    print("Using macOS Vision framework for OCR")
 
     # Load MegaDetector model
     print(f"Loading {model_version} {model_name} model...")
@@ -467,7 +534,6 @@ def process_images_with_pytorch_wildlife():
             "classification_confidence": None,
             "timestamp": None,
             "temperature_celsius": None,
-            "battery_level": None,
         }
 
         # Add missing columns with default values
@@ -648,7 +714,7 @@ def process_images_with_pytorch_wildlife():
 
         # Extract metadata using OCR
         print("  Extracting metadata via OCR...")
-        metadata = extract_metadata_ocr(image_path, ocr_processor)
+        metadata = extract_metadata_ocr(image_path)
 
         result_dict = {
             "location_id": location_id,
@@ -660,7 +726,6 @@ def process_images_with_pytorch_wildlife():
             "classification_confidence": classification_confidence,
             "timestamp": metadata["timestamp"],
             "temperature_celsius": metadata["temperature_celsius"],
-            "battery_level": metadata["battery_level"],
         }
         results.append(result_dict)
 
