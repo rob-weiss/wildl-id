@@ -778,25 +778,6 @@ def process_images_with_pytorch_wildlife():
             lighting=lighting,
         )
 
-        # Convert to parquet every 100 images
-        if len(results) % 100 == 0 and csv_path.exists():
-            df_all = pd.read_csv(csv_path)
-            df_all.to_parquet(
-                labels_dir
-                / f"detection_results_{model_version}_{model_name}{classifier_suffix}.parquet",
-                index=False,
-            )
-
-    # Final conversion to parquet
-    if csv_path.exists():
-        df = pd.read_csv(csv_path)
-        df.to_parquet(
-            labels_dir
-            / f"detection_results_{model_version}_{model_name}{classifier_suffix}.parquet",
-            index=False,
-        )
-        print(f"\nConverted results to parquet: {len(df)} total images")
-
     # Print statistics
     end_time = time.time()
     total_time = end_time - start_time
