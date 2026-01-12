@@ -472,6 +472,10 @@ def main():
         width = img_data.get("width", 0)
         height = img_data.get("height", 0)
 
+        # Normalize camera names early (before building filename)
+        camera_name_mapping = {"Alu Sitz": "Alusitz", "Suhlenkamera": "Suhle"}
+        camera_name = camera_name_mapping.get(camera_name, camera_name)
+
         # Debug output
         if full_text:
             print(f"  Found: {full_text}")
@@ -520,12 +524,6 @@ def main():
 
         # Use camera name for folder organization
         camera_folder_name = camera_name if camera_name else "Unknown"
-
-        # Normalize camera names
-        camera_name_mapping = {"Alu Sitz": "Alusitz", "Suhlenkamera": "Suhle"}
-        camera_folder_name = camera_name_mapping.get(
-            camera_folder_name, camera_folder_name
-        )
 
         # Sanitize camera name for folder
         camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
