@@ -217,12 +217,12 @@ def map_classifier_to_wildlife(classifier_name):
 
 def extract_text_from_image(image_path):
     """Extract text from an image using macOS Vision framework.
-    
+
     Parameters
     ----------
     image_path : Path
         Path to the image file.
-        
+
     Returns
     -------
     str
@@ -231,39 +231,39 @@ def extract_text_from_image(image_path):
     try:
         # Create image URL
         image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
-        
+
         # Create CIImage
         ci_image = CIImage.imageWithContentsOfURL_(image_url)
         if ci_image is None:
             return ""
-        
+
         # Create text recognition request
         request = Vision.VNRecognizeTextRequest.alloc().init()
         request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
         request.setUsesLanguageCorrection_(True)
-        
+
         # Create request handler
         handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
             ci_image, None
         )
-        
+
         # Perform request
         success = handler.performRequests_error_([request], None)
-        
+
         if not success[0]:
             return ""
-        
+
         # Extract text from results
         results = request.results()
         if not results:
             return ""
-        
+
         # Combine all recognized text
         text_lines = []
         for observation in results:
             text = observation.text()
             text_lines.append(text)
-            
+
         return "\n".join(text_lines)
     except Exception as e:
         print(f"    OCR error: {e}")
@@ -272,18 +272,18 @@ def extract_text_from_image(image_path):
 
 def parse_camera_metadata(ocr_text):
     """Parse timestamp and temperature from camera metadata text.
-    
+
     Expected format:
     ZEISS
     AMPHIKANZEL
     • 3°C
     Mo 10.11.2025 07:41:41
-    
+
     Parameters
     ----------
     ocr_text : str
         Text extracted from image via OCR.
-        
+
     Returns
     -------
     dict
@@ -291,23 +291,28 @@ def parse_camera_metadata(ocr_text):
     """
     timestamp = None
     temperature = None
-    
+
     try:
-        # Parse temperature (e.g., "3°C" or "• 3°C")
-        temp_match = re.search(r'[•●]?\s*(-?\d+)\s*°?C', ocr_text, re.IGNORECASE)
+        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C")
+        # Matches one or two digit numbers (positive or negative) before °C
+        temp_match = re.search(r'(-?\d{1,2})\s*°C', ocr_text, re.IGNORECASE)
         if temp_match:
             temperature = int(temp_match.group(1))
-        
+
         # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41")
         # Format: weekday DD.MM.YYYY HH:MM:SS
-        date_match = re.search(r'\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})', ocr_text)
+        date_match = re.search(
+            r"\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})", ocr_text
+        )
         if date_match:
             day, month, year, hour, minute, second = date_match.groups()
-            dt = datetime(int(year), int(month), int(day), int(hour), int(minute), int(second))
+            dt = datetime(
+                int(year), int(month), int(day), int(hour), int(minute), int(second)
+            )
             timestamp = dt.isoformat()
     except Exception as e:
         print(f"    Metadata parsing error: {e}")
-    
+
     return {
         "timestamp": timestamp,
         "temperature_celsius": temperature,
