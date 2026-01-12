@@ -6,9 +6,13 @@ Optionally downsamples images if enabled.
 
 import shutil
 import sys
+from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from PIL import Image
+from PIL.ExifTags import TAGS
 from tqdm import tqdm
 
 
@@ -64,6 +68,8 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
     print(f"Downsample: {'enabled' if downsample else 'disabled'}")
 
     total_processed = 0
+    # Track serial numbers per location-month combination
+    serial_counters = defaultdict(int)
 
     for folder_name, dcim_path in dcim_folders:
         print(f"\n{'=' * 60}")
@@ -95,11 +101,45 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
         print(f"  Found {len(image_files)} images")
 
         for image_file in tqdm(image_files, desc=f"  {folder_name}", unit="img"):
-            # Use lowercase filename for output
-            output_filename = image_file.name.lower()
-            output_path = output_dir / output_filename
-
             try:
+                # Extract date from EXIF data and convert to Berlin timezone
+                timestamp_str = None
+                try:
+                    with Image.open(image_file) as img:
+                        exif_data = img._getexif()
+                        if exif_data:
+                            for tag_id, value in exif_data.items():
+                                tag = TAGS.get(tag_id, tag_id)
+                                if tag == "DateTimeOriginal" or tag == "DateTime":
+                                    # Parse date format: "YYYY:MM:DD HH:MM:SS"
+                                    # EXIF timestamps are typically in local time without timezone info
+                                    # Assume they're in Berlin timezone (or treat as naive and localize)
+                                    date_obj = datetime.strptime(
+                                        value, "%Y:%m:%d %H:%M:%S"
+                                    )
+                                    # Localize to Berlin timezone (handles DST automatically)
+                                    berlin_tz = ZoneInfo("Europe/Berlin")
+                                    date_obj_berlin = date_obj.replace(tzinfo=berlin_tz)
+                                    # Format as ISO 8601 compatible filename: YYYY-MM-DDTHH-MM-SS
+                                    timestamp_str = date_obj_berlin.strftime(
+                                        "%Y-%m-%dT%H-%M-%S"
+                                    )
+                                    break
+                except Exception:
+                    pass
+
+                # Fallback to current date in Berlin timezone if no EXIF date found
+                if not timestamp_str:
+                    berlin_tz = ZoneInfo("Europe/Berlin")
+                    timestamp_str = datetime.now(berlin_tz).strftime(
+                        "%Y-%m-%dT%H-%M-%S"
+                    )
+
+                # Create output filename: Location_YYYY-MM-DDTHH-MM-SS.ext
+                file_ext = image_file.suffix.lower()
+                output_filename = f"{folder_name}_{timestamp_str}{file_ext}"
+                output_path = output_dir / output_filename
+
                 if downsample:
                     # Open and downsample image
                     with Image.open(image_file) as img:
