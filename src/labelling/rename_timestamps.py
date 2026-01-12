@@ -42,9 +42,10 @@ def main():
     print(f"Scanning directory: {data_dir}")
     print("=" * 60)
 
-    # Pattern to match: YYYY-MM-DD_HH-MM-SS
-    # Looking for date format followed by underscore and time format
-    pattern = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})")
+    # Pattern to match old format: YYYY-MM-DD_HH-MM-SS
+    old_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})")
+    # Pattern to match any timestamp: YYYY-MM-DD[_T]HH-MM-SS
+    any_timestamp_pattern = re.compile(r"(\d{4}-\d{2}-\d{2})[_T](\d{2}-\d{2}-\d{2})")
 
     # Supported image extensions
     image_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif", ".webp"}
@@ -60,61 +61,63 @@ def main():
             continue
 
         filename = file_path.name
-
-        # Check if filename contains the old timestamp format
-        match = pattern.search(filename)
-        if match:
-            # For images, try to get the correct timestamp from EXIF
-            new_filename = None
-            is_image = file_path.suffix.lower() in image_extensions
-
-            if is_image:
-                exif_timestamp = get_exif_timestamp(file_path)
-                if exif_timestamp:
-                    # Extract the camera name/location prefix from the original filename
-                    # Format is typically: Location_YYYY-MM-DD_HH-MM-SS_hash.jpg
-                    # We want to keep everything before the date and everything after the time
+        is_image = file_path.suffix.lower() in image_extensions
+        new_filename = None
+        
+        # For images, try to fix timestamp from EXIF (regardless of format)
+        if is_image:
+            exif_timestamp = get_exif_timestamp(file_path)
+            if exif_timestamp:
+                # Look for any timestamp pattern in filename
+                match = any_timestamp_pattern.search(filename)
+                if match:
+                    # Replace with correct EXIF timestamp
                     before_date = filename[: match.start()]
                     after_time = filename[match.end() :]
                     new_filename = f"{before_date}{exif_timestamp}{after_time}"
-                    fixed_count += 1
+                    
+                    # Only count as fixed if timestamp actually changed
+                    if new_filename != filename:
+                        fixed_count += 1
+        
+        # If not fixed from EXIF, check for old format to convert _ to T
+        if not new_filename:
+            match = old_pattern.search(filename)
+            if match:
+                new_filename = old_pattern.sub(r"\1T\2", filename)
+        
+        # Skip if no changes needed
+        if not new_filename or new_filename == filename:
+            continue
 
-            # If not an image or no EXIF found, just replace _ with T
-            if not new_filename:
-                new_filename = pattern.sub(r"\1T\2", filename)
+        new_path = file_path.parent / new_filename
 
-            if new_filename == filename:
-                # No change needed (shouldn't happen, but safety check)
-                skipped_count += 1
-                continue
-
-            new_path = file_path.parent / new_filename
-
-            # Check if target already exists
-            if new_path.exists():
-                # Delete the old file since new one already exists
-                try:
-                    file_path.unlink()
-                    print(f"🗑️  Deleted (target exists): {filename}")
-                    print(f"   → {new_filename} (already exists)")
-                    deleted_count += 1
-                except Exception as e:
-                    print(f"❌ Error deleting {filename}: {e}")
-                    skipped_count += 1
-                continue
-
-            # Rename the file
+        # Check if target already exists
+        if new_path.exists():
+            # Delete the old file since new one already exists
             try:
-                file_path.rename(new_path)
-                action = (
-                    "✓ Fixed from EXIF" if is_image and exif_timestamp else "✓ Renamed"
-                )
-                print(f"{action}: {filename}")
-                print(f"  → {new_filename}")
-                renamed_count += 1
+                file_path.unlink()
+                print(f"🗑️  Deleted (target exists): {filename}")
+                print(f"   → {new_filename} (already exists)")
+                deleted_count += 1
             except Exception as e:
-                print(f"❌ Error renaming {filename}: {e}")
+                print(f"❌ Error deleting {filename}: {e}")
                 skipped_count += 1
+            continue
+
+        # Rename the file
+        try:
+            file_path.rename(new_path)
+            if is_image and fixed_count > 0 and exif_timestamp:
+                action = "✓ Fixed from EXIF"
+            else:
+                action = "✓ Renamed"
+            print(f"{action}: {filename}")
+            print(f"  → {new_filename}")
+            renamed_count += 1
+        except Exception as e:
+            print(f"❌ Error renaming {filename}: {e}")
+            skipped_count += 1
 
     # Summary
     print("=" * 60)
