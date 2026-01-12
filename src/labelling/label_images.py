@@ -23,18 +23,24 @@ Usage:
 """
 
 import logging
+import os
 import re
 import sys
 import time
 import warnings
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 
-# Suppress pkg_resources deprecation warning from dependencies
+# Suppress pkg_resources deprecation warning from dependencies (must be before imports)
+warnings.filterwarnings("ignore", message=".*pkg_resources.*")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resources")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*pkg_resources.*")
 
 # Suppress ultralytics/YOLO verbose output
-logging.getLogger("ultralytics").setLevel(logging.WARNING)
+os.environ["YOLO_VERBOSE"] = "False"
+logging.getLogger("ultralytics").setLevel(logging.ERROR)
 
 import cv2
 import matplotlib.image as mpimg
@@ -631,10 +637,11 @@ def process_images_with_pytorch_wildlife():
         image_file = img_info["name"]
         image_path = img_info["path"]
 
-        # Run single image detection
-        detection_result = detection_model.single_image_detection(
-            str(image_path), det_conf_thres=0.2, verbose=False
-        )
+        # Run single image detection (suppress verbose output)
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            detection_result = detection_model.single_image_detection(
+                str(image_path), det_conf_thres=0.2
+            )
 
         # Get detections
         img_class = "none"
