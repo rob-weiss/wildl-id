@@ -57,6 +57,9 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
         print(f"No DCIM folders found in {source_dir}")
         return
 
+    # Sort folders alphabetically
+    dcim_folders.sort(key=lambda x: x[0])
+
     print(f"Found {len(dcim_folders)} DCIM folder(s)")
     print(f"Downsample: {'enabled' if downsample else 'disabled'}")
 
@@ -73,14 +76,14 @@ def process_images(source_dir, data_dir, downsample=False, target_width=1920):
 
         # Find all images in all DCIM subfolders
         image_files = []
-        for subfolder in dcim_path.iterdir():
-            if subfolder.is_dir():
-                for file_path in subfolder.rglob("*"):
-                    if (
-                        file_path.is_file()
-                        and file_path.suffix.lower() in image_extensions
-                    ):
-                        image_files.append(file_path)
+        # Sort subfolders alphabetically
+        subfolders = sorted(
+            [sf for sf in dcim_path.iterdir() if sf.is_dir()], key=lambda x: x.name
+        )
+        for subfolder in subfolders:
+            for file_path in subfolder.rglob("*"):
+                if file_path.is_file() and file_path.suffix.lower() in image_extensions:
+                    image_files.append(file_path)
 
         if not image_files:
             print(f"  No images found in {dcim_path}")
