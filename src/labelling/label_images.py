@@ -316,18 +316,29 @@ def parse_camera_metadata(ocr_text):
         if temp_match:
             temperature = int(temp_match.group(1))
 
-        # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41")
+        # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41" or "Sa 29.11.2025 08:15:47")
         # Format: weekday DD.MM.YYYY HH:MM:SS
+        # Allow random characters between date and time that OCR sometimes picks up
         date_match = re.search(
-            r"\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
+            r"\w+\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s*[^\d\w]*\s*(\d{1,2}):(\d{2}):(\d{2})",
             normalized_text,
         )
         if date_match:
             day, month, year, hour, minute, second = date_match.groups()
-            dt = datetime(
-                int(year), int(month), int(day), int(hour), int(minute), int(second)
-            )
-            timestamp = dt.isoformat()
+            try:
+                dt = datetime(
+                    int(year), int(month), int(day), int(hour), int(minute), int(second)
+                )
+                timestamp = dt.isoformat()
+            except ValueError as ve:
+                print(
+                    f"    Invalid date/time values: day={day}, month={month}, year={year}, "
+                    f"hour={hour}, minute={minute}, second={second} - {ve}"
+                )
+        else:
+            # Debug: show what we're trying to parse if date pattern doesn't match
+            if normalized_text and "202" in normalized_text:  # Likely contains a date
+                print(f"    Date pattern did not match in: '{normalized_text[:100]}'")
     except Exception as e:
         print(f"    Metadata parsing error: {e}")
 
