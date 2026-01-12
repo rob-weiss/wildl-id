@@ -640,7 +640,7 @@ def process_images_with_pytorch_wildlife():
         # Run single image detection (suppress verbose output)
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             detection_result = detection_model.single_image_detection(
-                str(image_path), det_conf_thres=0.2
+                str(image_path), det_conf_thres=0.6
             )
 
         # Get detections
