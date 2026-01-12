@@ -309,10 +309,12 @@ def parse_camera_metadata(ocr_text):
     try:
         # Normalize linebreaks to spaces for more robust parsing
         normalized_text = re.sub(r"\s+", " ", ocr_text)
-        
+
         # Replace common OCR artifacts before temperature parsing
         # Replace letter O with 0 when followed by C (e.g., "OC" -> "0C")
-        normalized_text = re.sub(r"\bO(?=\s*[°С]?C)", "0", normalized_text, flags=re.IGNORECASE)
+        normalized_text = re.sub(
+            r"\bO(?=\s*[°С]?C)", "0", normalized_text, flags=re.IGNORECASE
+        )
         # Replace Cyrillic characters that look like temperature numbers/units
         normalized_text = normalized_text.replace("б", "6").replace("С", "C")
 
@@ -676,8 +678,8 @@ def process_images_with_pytorch_wildlife():
                     bbox_xyxy = detections.xyxy[best_idx]
                     # Convert to [x_min, y_min, width, height] normalized
                     # First get image dimensions from the detection result
-                    img = Image.open(image_path)
-                    img_w, img_h = img.size
+                    with Image.open(image_path) as img:
+                        img_w, img_h = img.size
                     x_min = float(bbox_xyxy[0]) / img_w
                     y_min = float(bbox_xyxy[1]) / img_h
                     x_max = float(bbox_xyxy[2]) / img_w
