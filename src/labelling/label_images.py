@@ -22,6 +22,7 @@ Usage:
     python detect_animals.py
 """
 
+import logging
 import re
 import sys
 import time
@@ -31,6 +32,9 @@ from pathlib import Path
 
 # Suppress pkg_resources deprecation warning from dependencies
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="pkg_resources")
+
+# Suppress ultralytics/YOLO verbose output
+logging.getLogger("ultralytics").setLevel(logging.WARNING)
 
 import cv2
 import matplotlib.image as mpimg
@@ -629,7 +633,7 @@ def process_images_with_pytorch_wildlife():
 
         # Run single image detection
         detection_result = detection_model.single_image_detection(
-            str(image_path), det_conf_thres=0.2
+            str(image_path), det_conf_thres=0.2, verbose=False
         )
 
         # Get detections
