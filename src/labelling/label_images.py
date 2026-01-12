@@ -350,87 +350,52 @@ def extract_metadata_ocr(image_path):
     return parse_camera_metadata(ocr_text)
 
 
-def detect_lighting(image_path):
-    """Detect whether image is bright or dark based on multiple brightness metrics.
+def detect_lighting(image_path, dim=10, thresh=0.5):
+    """Detect whether image is bright or dark using LAB color space.
 
-    Uses a combination of mean brightness, median brightness, and the percentage
-    of bright pixels to robustly classify day vs. night (IR) images from wildlife cameras.
+    Uses the LAB color space to extract the luminous channel (L) which is independent
+    of colors. This is much more reliable than grayscale for classifying day vs. night
+    images from wildlife cameras.
+
+    Based on: https://github.com/imneonizer/How-to-find-if-an-image-is-bright-or-dark
 
     Parameters
     ----------
     image_path : Path
         Path to the image file.
+    dim : int, optional
+        Resize dimension for faster computation (default: 10).
+    thresh : float, optional
+        Threshold for brightness classification (default: 0.5).
+        Range 0-1, where higher values mean stricter bright classification.
 
     Returns
     -------
     tuple
-        (classification, avg_brightness) where classification is 'bright' or 'dark',
-        and avg_brightness is the mean grayscale value (0-255)
+        (classification, brightness_value) where classification is 'bright' or 'dark',
+        and brightness_value is the normalized mean L channel value (0-1)
     """
     img = cv2.imread(str(image_path))
     if img is None:
         return "unknown", None
 
-    # Convert to grayscale
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # Resize image to reduce computation
+    img = cv2.resize(img, (dim, dim))
 
-    # Calculate multiple brightness metrics
-    avg_brightness = np.mean(gray)
-    median_brightness = np.median(gray)
+    # Convert color space to LAB format and extract L channel
+    L, A, B = cv2.split(cv2.cvtColor(img, cv2.COLOR_BGR2LAB))
 
-    # Calculate percentage of pixels above certain thresholds
-    bright_pixels_percent = np.sum(gray > 100) / gray.size * 100
-    very_bright_pixels_percent = np.sum(gray > 150) / gray.size * 100
+    # Normalize L channel by dividing all pixel values with maximum pixel value
+    L = L / np.max(L)
 
-    # Calculate the 90th percentile brightness (helps distinguish well-lit images)
-    percentile_90 = np.percentile(gray, 90)
+    # Calculate mean brightness
+    brightness = np.mean(L)
 
-    # Wildlife camera night mode (IR) characteristics:
-    # - Lower average brightness (typically < 60-70)
-    # - Lower median brightness
-    # - Fewer very bright pixels
-    # - Lower 90th percentile
-
-    # Scoring system: accumulate points for "darkness"
-    darkness_score = 0
-
-    # Check average brightness
-    if avg_brightness < 60:
-        darkness_score += 3
-    elif avg_brightness < 80:
-        darkness_score += 2
-    elif avg_brightness < 100:
-        darkness_score += 1
-
-    # Check median brightness
-    if median_brightness < 50:
-        darkness_score += 2
-    elif median_brightness < 70:
-        darkness_score += 1
-
-    # Check bright pixel percentage
-    if bright_pixels_percent < 20:
-        darkness_score += 2
-    elif bright_pixels_percent < 40:
-        darkness_score += 1
-
-    # Check very bright pixel percentage
-    if very_bright_pixels_percent < 10:
-        darkness_score += 1
-
-    # Check 90th percentile
-    if percentile_90 < 100:
-        darkness_score += 2
-    elif percentile_90 < 130:
-        darkness_score += 1
-
-    # Classify based on score
-    # Score >= 6 is definitely dark (night/IR mode)
-    # Score <= 3 is definitely bright (daylight)
-    if darkness_score >= 6:
-        return "dark", avg_brightness
+    # Classify based on threshold
+    if brightness > thresh:
+        return "bright", brightness
     else:
-        return "bright", avg_brightness
+        return "dark", brightness
 
 
 def show_image_with_detection(
@@ -441,7 +406,7 @@ def show_image_with_detection(
     save_path=None,
     classification_info=None,
     metadata=None,
-    brightness_value=None,
+    lighting=None,
 ):
     """Display an image with its predicted class and bounding box.
 
@@ -461,8 +426,8 @@ def show_image_with_detection(
         Additional classification information to display.
     metadata : dict, optional
         OCR metadata (timestamp, temperature) to display.
-    brightness_value : float, optional
-        Average brightness value (0-255) to display.
+    lighting : str, optional
+        Lighting classification ('bright' or 'dark') to display.
     """
     img = mpimg.imread(str(image_path))
     fig, ax = plt.subplots(figsize=(10, 8))
@@ -477,9 +442,9 @@ def show_image_with_detection(
         if species and conf is not None:
             title += f"\nclassified as: {species} ({conf:.2%})"
 
-    # Add brightness info
-    if brightness_value is not None:
-        title += f"\nbrightness: {brightness_value:.1f}"
+    # Add lighting info
+    if lighting:
+        title += f"\nlighting: {lighting}"
 
     # Add metadata info
     if metadata:
@@ -806,7 +771,7 @@ def process_images_with_pytorch_wildlife():
             save_path=label_save_path,
             classification_info=classification_info,
             metadata=metadata,
-            brightness_value=brightness_value,
+            lighting=lighting,
         )
 
         # Convert to parquet every 100 images
