@@ -318,9 +318,10 @@ def parse_camera_metadata(ocr_text):
 
         # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41" or "Sa 29.11.2025 08:15:47")
         # Format: weekday DD.MM.YYYY HH:MM:SS
-        # Allow random OCR artifacts between weekday and date, and between date and time
+        # Allow random OCR artifacts anywhere between weekday, date, and time
+        # Use non-greedy .*? to skip any garbage including stray digits
         date_match = re.search(
-            r"\w+\s*[^\d\w]*\s*(\d{1,2})\.(\d{1,2})\.(\d{4})\s*[^\d]*\s*(\d{1,2}):(\d{2}):(\d{2})",
+            r"\w+\s*.*?(\d{1,2})\.(\d{1,2})\.(\d{4}).*?(\d{1,2}):(\d{2}):(\d{2})",
             normalized_text,
         )
         if date_match:
