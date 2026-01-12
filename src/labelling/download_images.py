@@ -12,6 +12,8 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from dateutil.relativedelta import relativedelta
+
 
 def get_current_carousel_image():
     """Get the current full-resolution image URL and original filename from the carousel."""
@@ -419,9 +421,9 @@ def main():
         elif unit == "w":
             return timedelta(weeks=num), False
         elif unit == "m":
-            return timedelta(days=num * 30), False  # Approximate month
+            return relativedelta(months=num), False
         elif unit == "y":
-            return timedelta(days=num * 365), False  # Approximate year
+            return relativedelta(years=num), False
         else:
             return timedelta(weeks=1), False
 
