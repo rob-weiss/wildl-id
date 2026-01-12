@@ -295,7 +295,7 @@ def parse_camera_metadata(ocr_text):
     try:
         # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C")
         # Matches one or two digit numbers (positive or negative) before °C
-        temp_match = re.search(r'(-?\d{1,2})\s*°C', ocr_text, re.IGNORECASE)
+        temp_match = re.search(r"(-?\d{1,2})\s*°C", ocr_text, re.IGNORECASE)
         if temp_match:
             temperature = int(temp_match.group(1))
 
@@ -337,7 +337,10 @@ def extract_metadata_ocr(image_path):
 
 
 def detect_lighting(image_path):
-    """Detect whether image is bright or dark based on average intensity.
+    """Detect whether image is bright or dark based on multiple brightness metrics.
+
+    Uses a combination of mean brightness, median brightness, and the percentage
+    of bright pixels to robustly classify day vs. night (IR) images from wildlife cameras.
 
     Parameters
     ----------
@@ -355,17 +358,61 @@ def detect_lighting(image_path):
 
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # Calculate multiple brightness metrics
     avg_brightness = np.mean(gray)
+    median_brightness = np.median(gray)
 
-    # Check if image is mostly grayscale (black and white camera)
-    # Calculate color variance
-    if len(img.shape) == 3:
-        std_color = np.std(img, axis=2).mean()
-        is_bw = std_color < 10  # Low color variance indicates B&W
-    else:
-        is_bw = True
+    # Calculate percentage of pixels above certain thresholds
+    bright_pixels_percent = np.sum(gray > 100) / gray.size * 100
+    very_bright_pixels_percent = np.sum(gray > 150) / gray.size * 100
 
-    if is_bw or avg_brightness < 80:
+    # Calculate the 90th percentile brightness (helps distinguish well-lit images)
+    percentile_90 = np.percentile(gray, 90)
+
+    # Wildlife camera night mode (IR) characteristics:
+    # - Lower average brightness (typically < 60-70)
+    # - Lower median brightness
+    # - Fewer very bright pixels
+    # - Lower 90th percentile
+
+    # Scoring system: accumulate points for "darkness"
+    darkness_score = 0
+
+    # Check average brightness
+    if avg_brightness < 60:
+        darkness_score += 3
+    elif avg_brightness < 80:
+        darkness_score += 2
+    elif avg_brightness < 100:
+        darkness_score += 1
+
+    # Check median brightness
+    if median_brightness < 50:
+        darkness_score += 2
+    elif median_brightness < 70:
+        darkness_score += 1
+
+    # Check bright pixel percentage
+    if bright_pixels_percent < 20:
+        darkness_score += 2
+    elif bright_pixels_percent < 40:
+        darkness_score += 1
+
+    # Check very bright pixel percentage
+    if very_bright_pixels_percent < 10:
+        darkness_score += 1
+
+    # Check 90th percentile
+    if percentile_90 < 100:
+        darkness_score += 2
+    elif percentile_90 < 130:
+        darkness_score += 1
+
+    # Classify based on score
+    # Score >= 6 is definitely dark (night/IR mode)
+    # Score <= 3 is definitely bright (daylight)
+    if darkness_score >= 6:
         return "dark"
     else:
         return "bright"
