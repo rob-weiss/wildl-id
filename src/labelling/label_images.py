@@ -811,19 +811,15 @@ def process_images_with_pytorch_wildlife():
 
         # Save to CSV incrementally - append new results to existing complete entries
         if existing_df is not None and len(existing_df) > 0:
-            # Combine existing complete entries with new result
-            new_row_df = pd.DataFrame([result_dict])
-            # Use pd.concat with explicit dtype preservation
-            combined_df = pd.concat(
-                [existing_df, new_row_df], ignore_index=True, sort=False
-            )
-            combined_df.to_csv(csv_path, index=False)
-            existing_df = combined_df  # Update for next iteration
+            # Append new row to existing DataFrame using loc to avoid concat warning
+            new_idx = len(existing_df)
+            for key, value in result_dict.items():
+                existing_df.loc[new_idx, key] = value
+            existing_df.to_csv(csv_path, index=False)
         else:
             # First write - create new CSV
-            df = pd.DataFrame([result_dict])
-            df.to_csv(csv_path, index=False)
-            existing_df = df
+            existing_df = pd.DataFrame([result_dict])
+            existing_df.to_csv(csv_path, index=False)
 
         # Save annotated image
         label_save_path = images_output_dir / f"{location_id}_{image_file}"
