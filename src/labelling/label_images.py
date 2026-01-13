@@ -427,7 +427,7 @@ def detect_lighting(img_input, dim=10, thresh=0.5):
     else:
         # Assume it's a path
         img = cv2.imread(str(img_input))
-    
+
     if img is None:
         return "unknown", None
 
@@ -842,7 +842,7 @@ def process_images_with_pytorch_wildlife():
             if enable_ocr:
                 metadata = extract_metadata_ocr(image_path)
             else:
-                metadata = {\"timestamp\": None, \"temperature_celsius\": None}
+                metadata = {"timestamp": None, "temperature_celsius": None}
         # Image is automatically closed here when exiting the with block
 
         result_dict = {
@@ -890,10 +890,20 @@ def process_images_with_pytorch_wildlife():
                     torch.cuda.empty_cache()
                 elif device == "mps":
                     torch.mps.empty_cache()
-            
+
             # Additional aggressive cleanup for macOS Vision framework
             import objc
+
             objc.recycleAutoreleasePool()
+
+        # Save annotated image (only if enabled)
+        if save_annotated_images:
+            label_save_path = images_output_dir / f"{location_id}_{image_file}"
+
+            # Prepare classification info for display
+            classification_info = None
+            if classified_species and classification_confidence is not None:
+                classification_info = {
                     "species": classified_species,
                     "confidence": classification_confidence,
                 }
