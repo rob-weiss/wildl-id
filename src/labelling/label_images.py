@@ -597,6 +597,7 @@ def process_images_with_pytorch_wildlife():
         / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
     )
     processed_images = set()
+    existing_df = None
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path)
 
@@ -621,9 +622,6 @@ def process_images_with_pytorch_wildlife():
                 )
                 existing_df[col] = default_value
 
-        # Save the updated CSV with all columns
-        existing_df.to_csv(csv_path, index=False)
-
         # Only mark as processed if the entry is complete (has class and temperature)
         # Check for complete entries: class is not empty/none and temperature is not null
         complete_mask = (
@@ -643,6 +641,10 @@ def process_images_with_pytorch_wildlife():
             print(
                 f"Found {incomplete_count} incomplete entries that will be reprocessed\n"
             )
+
+        # Remove incomplete entries from existing_df to avoid duplicates
+        # Keep only the complete entries; incomplete ones will be replaced
+        existing_df = complete_df.copy()
 
     images_to_process = [
         img_info
@@ -804,10 +806,18 @@ def process_images_with_pytorch_wildlife():
         }
         results.append(result_dict)
 
-        # Save to CSV incrementally
-        df = pd.DataFrame([result_dict])
-        write_header = not csv_path.exists() or csv_path.stat().st_size == 0
-        df.to_csv(csv_path, mode="a", header=write_header, index=False)
+        # Save to CSV incrementally - append new results to existing complete entries
+        if existing_df is not None:
+            # Combine existing complete entries with new result
+            new_row_df = pd.DataFrame([result_dict])
+            combined_df = pd.concat([existing_df, new_row_df], ignore_index=True)
+            combined_df.to_csv(csv_path, index=False)
+            existing_df = combined_df  # Update for next iteration
+        else:
+            # First write - create new CSV
+            df = pd.DataFrame([result_dict])
+            df.to_csv(csv_path, index=False)
+            existing_df = df
 
         # Save annotated image
         label_save_path = images_output_dir / f"{location_id}_{image_file}"
