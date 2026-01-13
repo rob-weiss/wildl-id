@@ -33,7 +33,7 @@ from astral.moon import phase
 from astral.sun import sun
 
 # Configuration
-model = "qwen3-vl:235b-a22b-thinking"
+model = "MegaDetectorV6_MDV6-yolov10-e_classified"
 image_dir = Path(__file__).parent.parent.parent / "data"
 labels_dir = image_dir / f"labels_{model}"
 # Put visualizations in docs/diagrams
@@ -70,7 +70,7 @@ LONGITUDE = 8.9333
 TIMEZONE = "Europe/Berlin"
 
 # Load the data
-csv_path = labels_dir / f"labelling_results_{model}.csv"
+csv_path = labels_dir / f"detection_results_{model}.csv"
 if not csv_path.exists():
     print(f"Error: Results file not found at {csv_path}")
     exit(1)
