@@ -149,20 +149,41 @@ def get_current_carousel_image():
                             
                             textCount = allText.length;
                             
+                            // Collect all matching timestamp candidates
+                            const candidates = [];
                             allText.forEach(function(text) {
-                                if (fullText) return;
                                 const hasDash = text.indexOf(' - ') !== -1;
                                 const hasSlash = text.indexOf('/') !== -1;
                                 const hasDigit = /[0-9]/.test(text);
                                 const notURL = text.indexOf('http') === -1;
                                 
                                 if (hasDash && hasSlash && hasDigit && notURL && text.length < 100) {
-                                    fullText = text.trim();
                                     const dashIndex = text.indexOf(' - ');
-                                    cameraName = text.substring(0, dashIndex).trim();
-                                    timestamp = text.substring(dashIndex + 3).trim();
+                                    const cam = text.substring(0, dashIndex).trim();
+                                    const ts = text.substring(dashIndex + 3).trim();
+                                    candidates.push({ text: text.trim(), camera: cam, timestamp: ts });
                                 }
                             });
+                            
+                            // Prefer timestamp with seconds format (e.g., "01/12/2026 03:53:47 PM")
+                            let bestCandidate = null;
+                            for (let i = 0; i < candidates.length; i++) {
+                                const ts = candidates[i].timestamp;
+                                // Check if timestamp has seconds (format: HH:MM:SS AM/PM or similar)
+                                const hasSeconds = /\d{1,2}:\d{2}:\d{2}/.test(ts);
+                                if (hasSeconds) {
+                                    bestCandidate = candidates[i];
+                                    break;  // Found one with seconds, use it
+                                } else if (!bestCandidate) {
+                                    bestCandidate = candidates[i];  // Fallback to first candidate
+                                }
+                            }
+                            
+                            if (bestCandidate) {
+                                fullText = bestCandidate.text;
+                                cameraName = bestCandidate.camera;
+                                timestamp = bestCandidate.timestamp;
+                            }
                         }
                         
                         // Fallback to searching for any camera name
@@ -490,14 +511,21 @@ def main():
         image_date = None
         if timestamp:
             try:
-                # Parse format like "01/11/2026 09:53 AM"
-                dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
+                # Try parsing format with seconds first: "01/11/2026 09:53:47 AM"
+                dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M:%S %p")
                 image_date = dt
                 # Convert to ISO format suitable for filename: YYYY-MM-DDTHH-MM-SS
                 iso_timestamp = dt.strftime("%Y-%m-%dT%H-%M-%S")
             except ValueError:
-                # If parsing fails, use sanitized original
-                iso_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
+                try:
+                    # Fallback: Parse format without seconds: "01/11/2026 09:53 AM"
+                    dt = datetime.strptime(timestamp, "%m/%d/%Y %I:%M %p")
+                    image_date = dt
+                    # Convert to ISO format suitable for filename: YYYY-MM-DDTHH-MM-SS
+                    iso_timestamp = dt.strftime("%Y-%m-%dT%H-%M-%S")
+                except ValueError:
+                    # If parsing fails, use sanitized original
+                    iso_timestamp = re.sub(r'[<>:"/\\|?*]', "_", timestamp)
 
         # Check if image is older than cutoff date
         if image_date and image_date < cutoff_date:
