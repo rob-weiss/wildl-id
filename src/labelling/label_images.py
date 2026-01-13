@@ -596,22 +596,36 @@ def process_images_with_pytorch_wildlife():
         labels_dir
         / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
     )
+    
+    # Define explicit dtypes to avoid FutureWarning about NA entries
+    COLUMN_DTYPES = {
+        "location_id": str,
+        "timestamp": str,
+        "image_file": str,
+        "class": str,
+        "box": str,
+        "lighting": str,
+        "confidence": float,
+        "classification_confidence": float,
+        "temperature_celsius": float,
+    }
+    
     processed_images = set()
     existing_df = None
     if csv_path.exists():
-        existing_df = pd.read_csv(csv_path)
+        existing_df = pd.read_csv(csv_path, dtype=COLUMN_DTYPES, keep_default_na=False)
 
         # Define expected columns with default values
         expected_columns = {
             "location_id": "",
-            "timestamp": None,
+            "timestamp": "",
             "image_file": "",
             "class": "none",
-            "box": None,
+            "box": "",
             "lighting": "unknown",
             "confidence": 0.0,
-            "classification_confidence": None,
-            "temperature_celsius": None,
+            "classification_confidence": 0.0,
+            "temperature_celsius": 0.0,
         }
 
         # Add missing columns with default values
@@ -801,27 +815,25 @@ def process_images_with_pytorch_wildlife():
 
         result_dict = {
             "location_id": location_id,
-            "timestamp": metadata["timestamp"],
+            "timestamp": metadata["timestamp"] if metadata["timestamp"] else "",
             "image_file": image_file,
             "class": img_class,
-            "box": str(box)
-            if box is not None
-            else None,  # Convert list to string to avoid dtype issues
+            "box": str(box) if box is not None else "",
             "lighting": lighting,
-            "confidence": confidence,
-            "classification_confidence": classification_confidence,
-            "temperature_celsius": metadata["temperature_celsius"],
+            "confidence": float(confidence),
+            "classification_confidence": float(classification_confidence) if classification_confidence is not None else 0.0,
+            "temperature_celsius": float(metadata["temperature_celsius"]) if metadata["temperature_celsius"] is not None else 0.0,
         }
         results.append(result_dict)
 
         # Save to CSV in batches to avoid memory issues
         # Only save every BATCH_SIZE images or on the last image
         if (idx + 1) % BATCH_SIZE == 0 or (idx + 1) == len(images_to_process):
-            # Create DataFrame from accumulated results
-            new_rows_df = pd.DataFrame(results)
+            # Create DataFrame from accumulated results with explicit dtypes
+            new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
 
             if existing_df is not None and len(existing_df) > 0:
-                # Append batch to existing DataFrame
+                # Concat with matching dtypes - no more FutureWarning
                 existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
             else:
                 # First batch
