@@ -644,7 +644,10 @@ def process_images_with_pytorch_wildlife():
 
         # Remove incomplete entries from existing_df to avoid duplicates
         # Keep only the complete entries; incomplete ones will be replaced
-        existing_df = complete_df.copy()
+        if len(complete_df) > 0:
+            existing_df = complete_df.copy()
+        else:
+            existing_df = None  # No complete entries, start fresh
 
     images_to_process = [
         img_info
