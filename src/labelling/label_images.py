@@ -850,14 +850,14 @@ def process_images_with_pytorch_wildlife():
             new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
 
             if existing_df is not None and len(existing_df) > 0:
-                # Concat with matching dtypes - no more FutureWarning
-                existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
+                # Append to CSV file without keeping everything in memory
+                new_rows_df.to_csv(csv_path, mode="a", header=False, index=False)
+                # Don't keep existing_df in memory - it will grow too large
+                # existing_df is only used to check what's already processed
             else:
-                # First batch
+                # First batch - write with header
                 existing_df = new_rows_df
-
-            # Write to CSV
-            existing_df.to_csv(csv_path, index=False)
+                existing_df.to_csv(csv_path, index=False)
 
             # Clear results to free memory
             results = []
