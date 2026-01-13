@@ -78,6 +78,9 @@ classification_threshold = 0.1  # Minimum confidence for classification
 # Save annotated images (disable to reduce memory usage and speed up processing)
 save_annotated_images = False
 
+# Enable OCR for timestamp/temperature extraction (disable to save memory)
+enable_ocr = True
+
 # MegaDetector class names
 # MegaDetector detects: animal, person, vehicle
 MEGADETECTOR_CLASS_NAMES = {
@@ -106,13 +109,13 @@ WILDLIFE_SPECIES = [
 ]
 
 
-def crop_detection(image_path, bbox):
+def crop_detection(img_pil, bbox):
     """Crop a detected animal from the image for classification.
 
     Parameters
     ----------
-    image_path : Path
-        Path to the image file.
+    img_pil : PIL.Image
+        Already loaded PIL Image object.
     bbox : list
         Bounding box in format [x_min, y_min, width, height] (normalized).
 
@@ -122,24 +125,23 @@ def crop_detection(image_path, bbox):
         Cropped image as PIL Image, or None if cropping fails.
     """
     try:
-        with Image.open(image_path) as img:
-            img_w, img_h = img.size
+        img_w, img_h = img_pil.size
 
-            x_min, y_min, width, height = bbox
-            # Convert normalized coordinates to pixel coordinates
-            x1 = int(x_min * img_w)
-            y1 = int(y_min * img_h)
-            x2 = int((x_min + width) * img_w)
-            y2 = int((y_min + height) * img_h)
+        x_min, y_min, width, height = bbox
+        # Convert normalized coordinates to pixel coordinates
+        x1 = int(x_min * img_w)
+        y1 = int(y_min * img_h)
+        x2 = int((x_min + width) * img_w)
+        y2 = int((y_min + height) * img_h)
 
-            # Ensure coordinates are within image bounds
-            x1 = max(0, x1)
-            y1 = max(0, y1)
-            x2 = min(img_w, x2)
-            y2 = min(img_h, y2)
+        # Ensure coordinates are within image bounds
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(img_w, x2)
+        y2 = min(img_h, y2)
 
-            # Crop the image and load it to ensure it's independent of the source
-            cropped = img.crop((x1, y1, x2, y2)).copy()
+        # Crop the image and copy it
+        cropped = img_pil.crop((x1, y1, x2, y2)).copy()
         return cropped
     except Exception as e:
         print(f"Error cropping image: {e}")
@@ -691,7 +693,7 @@ def process_images_with_pytorch_wildlife():
     start_time = time.time()
 
     # Batch size for incremental saves (to avoid memory issues)
-    BATCH_SIZE = 100
+    BATCH_SIZE = 50  # Reduced from 100 to save memory
 
     # Process images one by one
     for idx, img_info in enumerate(tqdm(images_to_process, desc="Processing images")):
@@ -699,132 +701,140 @@ def process_images_with_pytorch_wildlife():
         image_file = img_info["name"]
         image_path = img_info["path"]
 
-        # Run single image detection (suppress verbose output)
-        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            detection_result = detection_model.single_image_detection(
-                str(image_path), det_conf_thres=0.6
-            )
+        # Load image once and reuse for multiple operations (with statement ensures cleanup)
+        with Image.open(image_path) as img_pil:
+            img_w, img_h = img_pil.size
 
-        # Get detections
-        img_class = "none"
-        box = None
-        confidence = 0.0
-        classification_confidence = None
-        classified_species = None  # Store the actual classified species
+            # Run single image detection (suppress verbose output)
+            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                detection_result = detection_model.single_image_detection(
+                    str(image_path), det_conf_thres=0.6
+                )
 
-        if detection_result and "detections" in detection_result:
-            detections = detection_result["detections"]
-            if detections and len(detections) > 0:
-                # PyTorch Wildlife returns detections as a supervision Detections object
-                # Access the underlying arrays
-                if hasattr(detections, "confidence"):
-                    # supervision.Detections object
-                    confidences = detections.confidence
-                    best_idx = confidences.argmax()
-                    confidence = float(confidences[best_idx])
+            # Get detections
+            img_class = "none"
+            box = None
+            confidence = 0.0
+            classification_confidence = None
+            classified_species = None  # Store the actual classified species
 
-                    # Get class ID
-                    class_id = int(detections.class_id[best_idx])
-                    megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
-                        class_id, "unknown"
-                    )
+            if detection_result and "detections" in detection_result:
+                detections = detection_result["detections"]
+                if detections and len(detections) > 0:
+                    # PyTorch Wildlife returns detections as a supervision Detections object
+                    # Access the underlying arrays
+                    if hasattr(detections, "confidence"):
+                        # supervision.Detections object
+                        confidences = detections.confidence
+                        best_idx = confidences.argmax()
+                        confidence = float(confidences[best_idx])
 
-                    # Get bounding box in format [x_min, y_min, x_max, y_max]
-                    bbox_xyxy = detections.xyxy[best_idx]
-                    # Convert to [x_min, y_min, width, height] normalized
-                    # First get image dimensions from the detection result
-                    with Image.open(image_path) as img:
-                        img_w, img_h = img.size
-                    x_min = float(bbox_xyxy[0]) / img_w
-                    y_min = float(bbox_xyxy[1]) / img_h
-                    x_max = float(bbox_xyxy[2]) / img_w
-                    y_max = float(bbox_xyxy[3]) / img_h
-                    width = x_max - x_min
-                    height = y_max - y_min
-                    bbox = [x_min, y_min, width, height]
-                else:
-                    # Fallback: try to handle as dict/list
-                    try:
-                        best_detection = max(detections, key=lambda x: x.get("conf", 0))
-                        confidence = float(best_detection["conf"])
-                        class_id = int(best_detection["category"])
+                        # Get class ID
+                        class_id = int(detections.class_id[best_idx])
                         megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
                             class_id, "unknown"
                         )
-                        bbox = best_detection["bbox"]
-                    except:
-                        # Skip this detection if we can't parse it
-                        megadetector_class = None
-                        bbox = None
 
-                # If it's an animal and we have classification enabled, classify the species
-                if (
-                    megadetector_class == "animal"
-                    and classification_model is not None
-                    and bbox is not None
-                ):
-                    # Crop the detected animal
-                    cropped_img = crop_detection(image_path, bbox)
-
-                    if cropped_img is not None:
-                        try:
-                            # Run classification on the cropped image
-                            classification_result = (
-                                classification_model.single_image_classification(
-                                    np.array(cropped_img), img_id=image_file
-                                )
-                            )
-
-                            # Get top prediction - classification_result is already a dict, not a list!
-                            if classification_result and isinstance(
-                                classification_result, dict
-                            ):
-                                classifier_class = classification_result.get(
-                                    "prediction", "unknown"
-                                )
-                                classification_confidence = classification_result.get(
-                                    "confidence", 0.0
-                                )
-
-                                # Map the classifier output to our categories
-                                classified_species = map_classifier_to_wildlife(
-                                    classifier_class
-                                )
-
-                                # Always use the classified species, even if confidence is low
-                                # This way users can see what the model thinks it is
-                                img_class = classified_species
-                            else:
-                                img_class = "animal"
-                        except Exception as e:
-                            print(f"    Classification error: {e}")
-                            import traceback
-
-                            img_class = "animal"
-                        finally:
-                            # Close the cropped image to free memory
-                            cropped_img.close()
+                        # Get bounding box in format [x_min, y_min, x_max, y_max]
+                        bbox_xyxy = detections.xyxy[best_idx]
+                        # Convert to [x_min, y_min, width, height] normalized
+                        # Use already loaded image dimensions
+                        x_min = float(bbox_xyxy[0]) / img_w
+                        y_min = float(bbox_xyxy[1]) / img_h
+                        x_max = float(bbox_xyxy[2]) / img_w
+                        y_max = float(bbox_xyxy[3]) / img_h
+                        width = x_max - x_min
+                        height = y_max - y_min
+                        bbox = [x_min, y_min, width, height]
                     else:
-                        img_class = "animal"
-                elif megadetector_class == "person":
-                    img_class = "human"
-                elif megadetector_class == "vehicle":
-                    img_class = "vehicle"
-                elif megadetector_class is not None:
-                    img_class = "unknown"
+                        # Fallback: try to handle as dict/list
+                        try:
+                            best_detection = max(
+                                detections, key=lambda x: x.get("conf", 0)
+                            )
+                            confidence = float(best_detection["conf"])
+                            class_id = int(best_detection["category"])
+                            megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
+                                class_id, "unknown"
+                            )
+                            bbox = best_detection["bbox"]
+                        except:
+                            # Skip this detection if we can't parse it
+                            megadetector_class = None
+                            bbox = None
 
-                # Convert bbox to YOLO format [x_center, y_center, width, height]
-                if bbox is not None:
-                    x_min, y_min, width, height = bbox
-                    x_center = x_min + width / 2
-                    y_center = y_min + height / 2
-                    box = [x_center, y_center, width, height]
+                    # If it's an animal and we have classification enabled, classify the species
+                    if (
+                        megadetector_class == "animal"
+                        and classification_model is not None
+                        and bbox is not None
+                    ):
+                        # Crop the detected animal from already-loaded image
+                        cropped_img = crop_detection(img_pil, bbox)
 
-        # Detect lighting
-        lighting, brightness_value = detect_lighting(image_path)
+                        if cropped_img is not None:
+                            try:
+                                # Run classification on the cropped image
+                                classification_result = (
+                                    classification_model.single_image_classification(
+                                        np.array(cropped_img), img_id=image_file
+                                    )
+                                )
 
-        # Extract metadata using OCR
-        metadata = extract_metadata_ocr(image_path)
+                                # Get top prediction - classification_result is already a dict, not a list!
+                                if classification_result and isinstance(
+                                    classification_result, dict
+                                ):
+                                    classifier_class = classification_result.get(
+                                        "prediction", "unknown"
+                                    )
+                                    classification_confidence = (
+                                        classification_result.get("confidence", 0.0)
+                                    )
+
+                                    # Map the classifier output to our categories
+                                    classified_species = map_classifier_to_wildlife(
+                                        classifier_class
+                                    )
+
+                                    # Always use the classified species, even if confidence is low
+                                    # This way users can see what the model thinks it is
+                                    img_class = classified_species
+                                else:
+                                    img_class = "animal"
+                            except Exception as e:
+                                print(f"    Classification error: {e}")
+                                import traceback
+
+                                img_class = "animal"
+                            finally:
+                                # Close the cropped image to free memory
+                                cropped_img.close()
+                        else:
+                            img_class = "animal"
+                    elif megadetector_class == "person":
+                        img_class = "human"
+                    elif megadetector_class == "vehicle":
+                        img_class = "vehicle"
+                    elif megadetector_class is not None:
+                        img_class = "unknown"
+
+                    # Convert bbox to YOLO format [x_center, y_center, width, height]
+                    if bbox is not None:
+                        x_min, y_min, width, height = bbox
+                        x_center = x_min + width / 2
+                        y_center = y_min + height / 2
+                        box = [x_center, y_center, width, height]
+
+            # Detect lighting
+            lighting, brightness_value = detect_lighting(image_path)
+
+            # Extract metadata using OCR (only if enabled)
+            if enable_ocr:
+                metadata = extract_metadata_ocr(image_path)
+            else:
+                metadata = {\"timestamp\": None, \"temperature_celsius\": None}
+        # Image is automatically closed here when exiting the with block
 
         result_dict = {
             "location_id": location_id,
@@ -864,6 +874,13 @@ def process_images_with_pytorch_wildlife():
 
             # Force garbage collection after each batch
             gc.collect()
+
+            # Clear torch cache if using GPU/MPS
+            if device in ["cuda", "mps"]:
+                if device == "cuda":
+                    torch.cuda.empty_cache()
+                elif device == "mps":
+                    torch.mps.empty_cache()
 
         # Save annotated image (only if enabled)
         if save_annotated_images:
