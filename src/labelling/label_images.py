@@ -663,8 +663,11 @@ def process_images_with_pytorch_wildlife():
     results = []
     start_time = time.time()
 
+    # Batch size for incremental saves (to avoid memory issues)
+    BATCH_SIZE = 100
+
     # Process images one by one
-    for img_info in tqdm(images_to_process, desc="Processing images"):
+    for idx, img_info in enumerate(tqdm(images_to_process, desc="Processing images")):
         location_id = img_info["location_id"]
         image_file = img_info["name"]
         image_path = img_info["path"]
@@ -811,25 +814,24 @@ def process_images_with_pytorch_wildlife():
         }
         results.append(result_dict)
 
-        # Save to CSV incrementally - append new results to existing complete entries
-        if existing_df is not None and len(existing_df) > 0:
-            # Create new row as DataFrame with explicit dtypes matching existing_df
-            new_row = pd.DataFrame([result_dict])
-            # Align columns to match existing_df
-            for col in existing_df.columns:
-                if col not in new_row.columns:
-                    new_row[col] = pd.NA
-            # Reindex to match column order and use pd.concat with future behavior
-            new_row = new_row.reindex(columns=existing_df.columns)
-            # Convert dtypes to match existing_df to avoid the warning
-            for col in existing_df.columns:
-                new_row[col] = new_row[col].astype(existing_df[col].dtype)
-            existing_df = pd.concat([existing_df, new_row], ignore_index=True)
-        else:
-            # First write - create new DataFrame
-            existing_df = pd.DataFrame([result_dict])
-        existing_df.to_csv(csv_path, index=False)
+        # Save to CSV in batches to avoid memory issues
+        # Only save every BATCH_SIZE images or on the last image
+        if (idx + 1) % BATCH_SIZE == 0 or (idx + 1) == len(images_to_process):
+            # Create DataFrame from accumulated results
+            new_rows_df = pd.DataFrame(results)
 
+            if existing_df is not None and len(existing_df) > 0:
+                # Append batch to existing DataFrame
+                existing_df = pd.concat([existing_df, new_rows_df], ignore_index=True)
+            else:
+                # First batch
+                existing_df = new_rows_df
+
+            # Write to CSV
+            existing_df.to_csv(csv_path, index=False)
+
+            # Clear results to free memory
+            results = []
         # Save annotated image
         label_save_path = images_output_dir / f"{location_id}_{image_file}"
 
