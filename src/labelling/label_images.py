@@ -811,10 +811,9 @@ def process_images_with_pytorch_wildlife():
 
         # Save to CSV incrementally - append new results to existing complete entries
         if existing_df is not None and len(existing_df) > 0:
-            # Append new row to existing DataFrame using loc to avoid concat warning
-            new_idx = len(existing_df)
-            for key, value in result_dict.items():
-                existing_df.loc[new_idx, key] = value
+            # Append new row to existing DataFrame
+            new_row_df = pd.DataFrame([result_dict])
+            existing_df = pd.concat([existing_df, new_row_df], ignore_index=True)
             existing_df.to_csv(csv_path, index=False)
         else:
             # First write - create new CSV
