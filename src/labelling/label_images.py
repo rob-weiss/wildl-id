@@ -22,6 +22,7 @@ Usage:
     python detect_animals.py
 """
 
+import gc
 import logging
 import os
 import re
@@ -73,6 +74,9 @@ model_name = "MDV6-yolov10-e"  # Best accuracy
 # Enable species classification (uses DeepFaune classifier for European wildlife)
 use_classification = True
 classification_threshold = 0.1  # Minimum confidence for classification
+
+# Save annotated images (disable to reduce memory usage and speed up processing)
+save_annotated_images = False
 
 # MegaDetector class names
 # MegaDetector detects: animal, person, vehicle
@@ -857,27 +861,32 @@ def process_images_with_pytorch_wildlife():
 
             # Clear results to free memory
             results = []
-        # Save annotated image
-        label_save_path = images_output_dir / f"{location_id}_{image_file}"
 
-        # Prepare classification info for display
-        classification_info = None
-        if classified_species and classification_confidence is not None:
-            classification_info = {
-                "species": classified_species,
-                "confidence": classification_confidence,
-            }
+            # Force garbage collection after each batch
+            gc.collect()
 
-        show_image_with_detection(
-            image_path,
-            image_file,
-            img_class,
-            box=box,
-            save_path=label_save_path,
-            classification_info=classification_info,
-            metadata=metadata,
-            lighting=lighting,
-        )
+        # Save annotated image (only if enabled)
+        if save_annotated_images:
+            label_save_path = images_output_dir / f"{location_id}_{image_file}"
+
+            # Prepare classification info for display
+            classification_info = None
+            if classified_species and classification_confidence is not None:
+                classification_info = {
+                    "species": classified_species,
+                    "confidence": classification_confidence,
+                }
+
+            show_image_with_detection(
+                image_path,
+                image_file,
+                img_class,
+                box=box,
+                save_path=label_save_path,
+                classification_info=classification_info,
+                metadata=metadata,
+                lighting=lighting,
+            )
 
     # Print statistics
     end_time = time.time()
