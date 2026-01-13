@@ -801,7 +801,9 @@ def process_images_with_pytorch_wildlife():
             "timestamp": metadata["timestamp"],
             "image_file": image_file,
             "class": img_class,
-            "box": box,
+            "box": str(box)
+            if box is not None
+            else None,  # Convert list to string to avoid dtype issues
             "lighting": lighting,
             "confidence": confidence,
             "classification_confidence": classification_confidence,
@@ -811,8 +813,15 @@ def process_images_with_pytorch_wildlife():
 
         # Save to CSV incrementally - append new results to existing complete entries
         if existing_df is not None and len(existing_df) > 0:
-            # Use _append() method which is designed for single-row additions
-            existing_df = existing_df._append(result_dict, ignore_index=True)
+            # Create new row as DataFrame and concatenate with proper dtype handling
+            new_row = pd.DataFrame([result_dict])
+            # Explicitly align columns and handle dtypes to avoid FutureWarning
+            for col in existing_df.columns:
+                if col not in new_row.columns:
+                    new_row[col] = None
+            existing_df = pd.concat(
+                [existing_df, new_row[existing_df.columns]], ignore_index=True
+            )
         else:
             # First write - create new DataFrame
             existing_df = pd.DataFrame([result_dict])
