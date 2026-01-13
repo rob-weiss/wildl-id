@@ -596,7 +596,7 @@ def process_images_with_pytorch_wildlife():
         labels_dir
         / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
     )
-    
+
     # Define explicit dtypes to avoid FutureWarning about NA entries
     COLUMN_DTYPES = {
         "location_id": str,
@@ -609,11 +609,12 @@ def process_images_with_pytorch_wildlife():
         "classification_confidence": float,
         "temperature_celsius": float,
     }
-    
+
     processed_images = set()
     existing_df = None
     if csv_path.exists():
-        existing_df = pd.read_csv(csv_path, dtype=COLUMN_DTYPES, keep_default_na=False)
+        # Read CSV without forcing float dtypes initially to handle empty strings
+        existing_df = pd.read_csv(csv_path, keep_default_na=False)
 
         # Define expected columns with default values
         expected_columns = {
@@ -636,13 +637,21 @@ def process_images_with_pytorch_wildlife():
                 )
                 existing_df[col] = default_value
 
+        # Replace empty strings in numeric columns with default values before type conversion
+        for col in ["confidence", "classification_confidence", "temperature_celsius"]:
+            existing_df[col] = existing_df[col].replace("", 0.0)
+
+        # Now convert to proper dtypes
+        # Now convert to proper dtypes
+        existing_df = existing_df.astype(COLUMN_DTYPES)
+
         # Only mark as processed if the entry is complete (has class and temperature)
         # Check for complete entries: class is not empty/none and temperature is not null
         complete_mask = (
             (existing_df["class"].notna())
             & (existing_df["class"] != "")
             & (existing_df["class"] != "none")
-            & (existing_df["temperature_celsius"].notna())
+            & (existing_df["temperature_celsius"] != 0.0)
         )
         complete_df = existing_df[complete_mask]
 
@@ -821,8 +830,12 @@ def process_images_with_pytorch_wildlife():
             "box": str(box) if box is not None else "",
             "lighting": lighting,
             "confidence": float(confidence),
-            "classification_confidence": float(classification_confidence) if classification_confidence is not None else 0.0,
-            "temperature_celsius": float(metadata["temperature_celsius"]) if metadata["temperature_celsius"] is not None else 0.0,
+            "classification_confidence": float(classification_confidence)
+            if classification_confidence is not None
+            else 0.0,
+            "temperature_celsius": float(metadata["temperature_celsius"])
+            if metadata["temperature_celsius"] is not None
+            else 0.0,
         }
         results.append(result_dict)
 
