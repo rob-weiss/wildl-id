@@ -813,15 +813,18 @@ def process_images_with_pytorch_wildlife():
 
         # Save to CSV incrementally - append new results to existing complete entries
         if existing_df is not None and len(existing_df) > 0:
-            # Create new row as DataFrame and concatenate with proper dtype handling
+            # Create new row as DataFrame with explicit dtypes matching existing_df
             new_row = pd.DataFrame([result_dict])
-            # Explicitly align columns and handle dtypes to avoid FutureWarning
+            # Align columns to match existing_df
             for col in existing_df.columns:
                 if col not in new_row.columns:
-                    new_row[col] = None
-            existing_df = pd.concat(
-                [existing_df, new_row[existing_df.columns]], ignore_index=True
-            )
+                    new_row[col] = pd.NA
+            # Reindex to match column order and use pd.concat with future behavior
+            new_row = new_row.reindex(columns=existing_df.columns)
+            # Convert dtypes to match existing_df to avoid the warning
+            for col in existing_df.columns:
+                new_row[col] = new_row[col].astype(existing_df[col].dtype)
+            existing_df = pd.concat([existing_df, new_row], ignore_index=True)
         else:
             # First write - create new DataFrame
             existing_df = pd.DataFrame([result_dict])
