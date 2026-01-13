@@ -118,24 +118,24 @@ def crop_detection(image_path, bbox):
         Cropped image as PIL Image, or None if cropping fails.
     """
     try:
-        img = Image.open(image_path)
-        img_w, img_h = img.size
+        with Image.open(image_path) as img:
+            img_w, img_h = img.size
 
-        x_min, y_min, width, height = bbox
-        # Convert normalized coordinates to pixel coordinates
-        x1 = int(x_min * img_w)
-        y1 = int(y_min * img_h)
-        x2 = int((x_min + width) * img_w)
-        y2 = int((y_min + height) * img_h)
+            x_min, y_min, width, height = bbox
+            # Convert normalized coordinates to pixel coordinates
+            x1 = int(x_min * img_w)
+            y1 = int(y_min * img_h)
+            x2 = int((x_min + width) * img_w)
+            y2 = int((y_min + height) * img_h)
 
-        # Ensure coordinates are within image bounds
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-        x2 = min(img_w, x2)
-        y2 = min(img_h, y2)
+            # Ensure coordinates are within image bounds
+            x1 = max(0, x1)
+            y1 = max(0, y1)
+            x2 = min(img_w, x2)
+            y2 = min(img_h, y2)
 
-        # Crop the image
-        cropped = img.crop((x1, y1, x2, y2))
+            # Crop the image and load it to ensure it's independent of the source
+            cropped = img.crop((x1, y1, x2, y2)).copy()
         return cropped
     except Exception as e:
         print(f"Error cropping image: {e}")
@@ -502,9 +502,10 @@ def show_image_with_detection(
 
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
-        plt.close()
     else:
         plt.show()
+    # Always close the figure to free memory
+    plt.close(fig)
 
 
 def process_images_with_pytorch_wildlife():
@@ -746,6 +747,9 @@ def process_images_with_pytorch_wildlife():
                             import traceback
 
                             img_class = "animal"
+                        finally:
+                            # Close the cropped image to free memory
+                            cropped_img.close()
                     else:
                         img_class = "animal"
                 elif megadetector_class == "person":
