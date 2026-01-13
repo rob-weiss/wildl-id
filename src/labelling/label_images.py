@@ -393,7 +393,7 @@ def extract_metadata_ocr(image_path):
     return parse_camera_metadata(ocr_text)
 
 
-def detect_lighting(image_path, dim=10, thresh=0.5):
+def detect_lighting(img_input, dim=10, thresh=0.5):
     """Detect whether image is bright or dark using LAB color space.
 
     Uses the LAB color space to extract the luminous channel (L) which is independent
@@ -404,8 +404,8 @@ def detect_lighting(image_path, dim=10, thresh=0.5):
 
     Parameters
     ----------
-    image_path : Path
-        Path to the image file.
+    img_input : PIL.Image, numpy.ndarray, or Path
+        Image as PIL Image, numpy array, or path to image file.
     dim : int, optional
         Resize dimension for faster computation (default: 10).
     thresh : float, optional
@@ -418,7 +418,16 @@ def detect_lighting(image_path, dim=10, thresh=0.5):
         (classification, brightness_value) where classification is 'bright' or 'dark',
         and brightness_value is the normalized mean L channel value (0-1)
     """
-    img = cv2.imread(str(image_path))
+    # Convert input to cv2 format
+    if isinstance(img_input, Image.Image):
+        # Convert PIL to numpy array in RGB format, then to BGR for cv2
+        img = cv2.cvtColor(np.array(img_input), cv2.COLOR_RGB2BGR)
+    elif isinstance(img_input, np.ndarray):
+        img = img_input
+    else:
+        # Assume it's a path
+        img = cv2.imread(str(img_input))
+    
     if img is None:
         return "unknown", None
 
@@ -826,10 +835,10 @@ def process_images_with_pytorch_wildlife():
                         y_center = y_min + height / 2
                         box = [x_center, y_center, width, height]
 
-            # Detect lighting
-            lighting, brightness_value = detect_lighting(image_path)
+            # Detect lighting using already-loaded PIL image (inside with block)
+            lighting, brightness_value = detect_lighting(img_pil)
 
-            # Extract metadata using OCR (only if enabled)
+            # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
             if enable_ocr:
                 metadata = extract_metadata_ocr(image_path)
             else:
@@ -881,15 +890,10 @@ def process_images_with_pytorch_wildlife():
                     torch.cuda.empty_cache()
                 elif device == "mps":
                     torch.mps.empty_cache()
-
-        # Save annotated image (only if enabled)
-        if save_annotated_images:
-            label_save_path = images_output_dir / f"{location_id}_{image_file}"
-
-            # Prepare classification info for display
-            classification_info = None
-            if classified_species and classification_confidence is not None:
-                classification_info = {
+            
+            # Additional aggressive cleanup for macOS Vision framework
+            import objc
+            objc.recycleAutoreleasePool()
                     "species": classified_species,
                     "confidence": classification_confidence,
                 }
