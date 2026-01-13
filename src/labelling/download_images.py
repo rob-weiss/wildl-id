@@ -540,9 +540,30 @@ def main():
         filepath = camera_path / safe_filename
 
         # Check if already downloaded
-        if filepath.exists():
-            existing_size = filepath.stat().st_size / 1024
-            print(f"  ⊘ Already exists ({existing_size:.1f} KB)")
+        file_exists = filepath.exists()
+        matched_file = filepath if file_exists else None
+
+        # If stop_on_existing mode, also check for file with seconds = 00
+        if stop_on_existing and not file_exists and camera_name and iso_timestamp:
+            # Check if a file exists with seconds set to 00
+            timestamp_with_00 = (
+                iso_timestamp.rsplit("-", 1)[0] + "-00"
+            )  # Replace seconds with 00
+            if (
+                timestamp_with_00 != iso_timestamp
+            ):  # Only check if seconds were different
+                alt_filename = f"{camera_name}_{timestamp_with_00}_{url_hash}"
+                alt_safe_filename = re.sub(r'[<>:"/\\|?*]', "_", alt_filename) + ".jpg"
+                alt_filepath = camera_path / alt_safe_filename
+                if alt_filepath.exists():
+                    file_exists = True
+                    matched_file = alt_filepath
+                    print(f"  ⊘ Found file with 00 seconds: {alt_filepath.name}")
+
+        if file_exists:
+            existing_size = matched_file.stat().st_size / 1024
+            if matched_file == filepath:
+                print(f"  ⊘ Already exists ({existing_size:.1f} KB)")
             skipped += 1
 
             if stop_on_existing:
@@ -559,7 +580,7 @@ def main():
                 # Don't download, just move to next
                 pass  # Continue to navigation below
 
-        if not filepath.exists():
+        if not file_exists:
             print("  ⬇ Downloading...")
 
             try:
