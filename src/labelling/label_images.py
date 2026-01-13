@@ -316,12 +316,15 @@ def parse_camera_metadata(ocr_text):
             r"\bO(?=\s*[°С]?C)", "0", normalized_text, flags=re.IGNORECASE
         )
         # Replace Cyrillic characters that look like temperature numbers/units
-        normalized_text = normalized_text.replace("б", "6").replace("С", "C")
+        normalized_text = (
+            normalized_text.replace("б", "6").replace("С", "C").replace("з", "3")
+        )
 
         # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C")
         # Matches one or two digit numbers followed by °C, °, or just C
+        # Now handles cases with prefix garbage like "20 •", "[90 •", etc.
         temp_match = re.search(
-            r"(-?\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
+            r"(?:^|[\s•\[\]])(-?\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
         )
         if temp_match:
             temperature = int(temp_match.group(1))
