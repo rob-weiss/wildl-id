@@ -624,9 +624,25 @@ def process_images_with_pytorch_wildlife():
         # Save the updated CSV with all columns
         existing_df.to_csv(csv_path, index=False)
 
-        processed_images = set(
-            zip(existing_df["location_id"], existing_df["image_file"])
+        # Only mark as processed if the entry is complete (has class and temperature)
+        # Check for complete entries: class is not empty/none and temperature is not null
+        complete_mask = (
+            (existing_df["class"].notna())
+            & (existing_df["class"] != "")
+            & (existing_df["class"] != "none")
+            & (existing_df["temperature_celsius"].notna())
         )
+        complete_df = existing_df[complete_mask]
+
+        processed_images = set(
+            zip(complete_df["location_id"], complete_df["image_file"])
+        )
+
+        incomplete_count = len(existing_df) - len(complete_df)
+        if incomplete_count > 0:
+            print(
+                f"Found {incomplete_count} incomplete entries that will be reprocessed\n"
+            )
 
     images_to_process = [
         img_info
