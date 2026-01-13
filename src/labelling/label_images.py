@@ -321,10 +321,10 @@ def parse_camera_metadata(ocr_text):
         )
 
         # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C")
-        # Matches one or two digit numbers followed by °C, °, or just C
-        # Now handles cases with prefix garbage like "20 •", "[90 •", etc.
+        # Match the number immediately before °C or C, regardless of what precedes it
+        # Uses \D (non-digit) or start of string to avoid matching numbers that aren't temperatures
         temp_match = re.search(
-            r"(?:^|[\s•\[\]])(-?\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
+            r"(?:^|\D)(-?\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
         )
         if temp_match:
             temperature = int(temp_match.group(1))
