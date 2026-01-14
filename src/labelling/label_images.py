@@ -91,8 +91,8 @@ MEGADETECTOR_CLASS_NAMES = {
 
 # German wildlife species we want to detect (matching labelling.py)
 WILDLIFE_SPECIES = [
-    "roe_deer",
-    "wild_boar",
+    "roe deer",
+    "wild boar",
     "pigeon",
     "badger",
     "marten",
@@ -167,9 +167,9 @@ def map_classifier_to_wildlife(classifier_name):
 
     # Direct matches
     if "roe deer" in classifier_name_lower or "chevreuil" in classifier_name_lower:
-        return "roe_deer"
+        return "roe deer"
     elif "wild boar" in classifier_name_lower or "sanglier" in classifier_name_lower:
-        return "wild_boar"
+        return "wild boar"
     elif "badger" in classifier_name_lower or "blaireau" in classifier_name_lower:
         return "badger"
     elif (
@@ -229,7 +229,7 @@ def map_classifier_to_wildlife(classifier_name):
         return "jay"
     elif "deer" in classifier_name_lower or "cerf" in classifier_name_lower:
         # Generic deer - default to roe deer
-        return "roe_deer"
+        return "roe deer"
     else:
         # Unknown species
         return "unknown"
