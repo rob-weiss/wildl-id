@@ -1020,7 +1020,10 @@ if len(df_temp) > 0:
                 and len(species_data["month"].unique()) > 1
             ):
                 monthly_data = []
-                months = sorted(species_data["month"].unique())
+                # Filter out NaN values before sorting
+                months = sorted(
+                    [m for m in species_data["month"].unique() if pd.notna(m)]
+                )
 
                 for m in months:
                     monthly_data.append(
