@@ -1031,7 +1031,7 @@ if len(df_temp) > 0:
 
                 bp = ax5.boxplot(
                     monthly_data,
-                    tick_labels=[f"{m:02d}" for m in months],
+                    tick_labels=[f"{int(m):02d}" for m in months],
                     patch_artist=True,
                     showfliers=False,
                 )
