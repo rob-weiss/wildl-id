@@ -209,10 +209,12 @@ def get_current_carousel_image():
     }
 })()
     """.strip()
-    
+
     # Prepare JavaScript for embedding in AppleScript (escape quotes and make single-line)
-    js_escaped = javascript_code.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
-    
+    js_escaped = (
+        javascript_code.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")
+    )
+
     # Use a simpler AppleScript structure with the JavaScript code
     applescript = f"""
     tell application "Safari"
