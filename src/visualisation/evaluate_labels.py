@@ -429,100 +429,7 @@ if len(df_valid) > 0:
     print(f"Combined target wildlife sightings: {len(df_target_wildlife)}")
 
     if len(df_humans) > 0 and len(df_target_wildlife) > 0:
-        # Create figure with 3 subplots
-        fig = plt.figure(figsize=(16, 14))
-        gs = fig.add_gridspec(3, 1, hspace=0.3)
-        ax1 = fig.add_subplot(gs[0])
-        ax2 = fig.add_subplot(gs[1])
-        ax3 = fig.add_subplot(gs[2])
-
-        # Plot 1: Timeline showing human activity and target wildlife activity
-        daily_humans = df_humans.groupby("date").size().reset_index(name="count")
-        daily_humans["date"] = pd.to_datetime(daily_humans["date"])
-
-        # Get daily counts for each species
-        daily_roe_deer = (
-            df_valid[df_valid["class"] == "roe deer"]
-            .groupby("date")
-            .size()
-            .reset_index(name="count")
-        )
-        daily_roe_deer["date"] = pd.to_datetime(daily_roe_deer["date"])
-
-        daily_wild_boar = (
-            df_valid[df_valid["class"] == "wild boar"]
-            .groupby("date")
-            .size()
-            .reset_index(name="count")
-        )
-        daily_wild_boar["date"] = pd.to_datetime(daily_wild_boar["date"])
-
-        # Merge to have all dates
-        date_range = pd.date_range(
-            start=df_valid["date"].min(), end=df_valid["date"].max(), freq="D"
-        )
-        all_dates = pd.DataFrame({"date": date_range})
-        daily_data = all_dates.merge(daily_roe_deer, on="date", how="left").fillna(0)
-        daily_data = daily_data.merge(
-            daily_wild_boar, on="date", how="left", suffixes=("_roe_deer", "_wild_boar")
-        ).fillna(0)
-        daily_data = daily_data.merge(daily_humans, on="date", how="left").fillna(0)
-        daily_data.rename(columns={"count": "count_human"}, inplace=True)
-
-        ax1_twin = ax1.twinx()
-
-        # Stack roe deer and wild boar
-        ax1.bar(
-            daily_data["date"],
-            daily_data["count_roe_deer"],
-            color="steelblue",
-            alpha=0.7,
-            label="Roe Deer",
-            width=1.0,
-        )
-        ax1.bar(
-            daily_data["date"],
-            daily_data["count_wild_boar"],
-            bottom=daily_data["count_roe_deer"],
-            color="darkgreen",
-            alpha=0.7,
-            label="Wild Boar",
-            width=1.0,
-        )
-        ax1_twin.bar(
-            daily_data["date"],
-            daily_data["count_human"],
-            color="orange",
-            alpha=0.8,
-            label="Human (Baiting)",
-            width=1.0,
-        )
-
-        ax1.set_xlabel("Date", fontsize=12)
-        ax1.set_ylabel(
-            "Wildlife Detections (Roe Deer + Wild Boar)", fontsize=12, color="black"
-        )
-        ax1_twin.set_ylabel(
-            "Human Detections (Baiting Events)", fontsize=12, color="orange"
-        )
-        ax1.tick_params(axis="y")
-        ax1_twin.tick_params(axis="y", labelcolor="orange")
-        ax1.set_title(
-            "Roe Deer & Wild Boar Activity vs Human Activity (Baiting) Over Time",
-            fontsize=14,
-            fontweight="bold",
-        )
-        ax1.grid(True, alpha=0.3)
-        ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-        ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
-        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
-
-        # Add legends
-        lines1, labels1 = ax1.get_legend_handles_labels()
-        lines2, labels2 = ax1_twin.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
-
-        # Plot 2: Roe Deer activity before and after human sightings
+        # Helper function for before/after calculation
         window_days = 2  # Look at +/- 2 days around human sightings
 
         def calculate_before_after(df_species, species_name):
@@ -557,135 +464,180 @@ if len(df_valid) > 0:
 
             return np.mean(before), np.mean(after)
 
-        # Calculate for roe deer
-        df_roe_deer = df_valid[df_valid["class"] == "roe deer"].copy()
-        roe_deer_before, roe_deer_after = calculate_before_after(
-            df_roe_deer, "roe deer"
-        )
+        # Get daily counts for humans
+        daily_humans = df_humans.groupby("date").size().reset_index(name="count")
+        daily_humans["date"] = pd.to_datetime(daily_humans["date"])
 
-        categories = [f"{window_days} days\nbefore", f"{window_days} days\nafter"]
-        averages = [roe_deer_before, roe_deer_after]
-        colors_bar = ["coral", "lightgreen"]
+        # Create separate plots for each species
+        target_species_data = {
+            "roe deer": {
+                "color": "steelblue",
+                "data": df_valid[df_valid["class"] == "roe deer"].copy(),
+            },
+            "wild boar": {
+                "color": "darkgreen",
+                "data": df_valid[df_valid["class"] == "wild boar"].copy(),
+            },
+        }
 
-        bars = ax2.bar(
-            categories, averages, color=colors_bar, edgecolor="black", linewidth=2
-        )
-        ax2.set_ylabel("Average Roe Deer Detections per Day", fontsize=12)
-        ax2.set_title(
-            f"Roe Deer Activity Before vs After Baiting Events (n={len(df_humans['date'].unique())} baiting dates)",
-            fontsize=14,
-            fontweight="bold",
-        )
-        ax2.grid(axis="y", alpha=0.3)
+        for species_name, species_info in target_species_data.items():
+            df_species = species_info["data"]
+            species_color = species_info["color"]
 
-        # Add value labels on bars
-        for i, (bar, val) in enumerate(zip(bars, averages)):
-            max_avg = float(np.max(averages)) if len(averages) > 0 else 1.0
+            if len(df_species) == 0:
+                print(f"No data for {species_name}, skipping plot")
+                continue
+
+            # Create figure with 2 subplots for this species
+            fig = plt.figure(figsize=(16, 10))
+            gs = fig.add_gridspec(2, 1, hspace=0.3)
+            ax1 = fig.add_subplot(gs[0])
+            ax2 = fig.add_subplot(gs[1])
+
+            # Plot 1: Timeline showing human activity and this species' activity
+            daily_species = df_species.groupby("date").size().reset_index(name="count")
+            daily_species["date"] = pd.to_datetime(daily_species["date"])
+
+            # Merge to have all dates
+            date_range = pd.date_range(
+                start=df_valid["date"].min(), end=df_valid["date"].max(), freq="D"
+            )
+            all_dates = pd.DataFrame({"date": date_range})
+            daily_data = all_dates.merge(daily_species, on="date", how="left").fillna(0)
+            daily_data = daily_data.merge(
+                daily_humans, on="date", how="left", suffixes=("_species", "_human")
+            ).fillna(0)
+            daily_data.rename(
+                columns={
+                    "count_species": "count_species",
+                    "count_human": "count_human",
+                },
+                inplace=True,
+            )
+
+            ax1_twin = ax1.twinx()
+
+            # Plot species activity
+            ax1.bar(
+                daily_data["date"],
+                daily_data["count_species"],
+                color=species_color,
+                alpha=0.7,
+                label=species_name.title(),
+                width=1.0,
+            )
+
+            # Plot human activity on secondary axis
+            ax1_twin.bar(
+                daily_data["date"],
+                daily_data["count_human"],
+                color="orange",
+                alpha=0.8,
+                label="Human (Baiting)",
+                width=1.0,
+            )
+
+            ax1.set_xlabel("Date", fontsize=12)
+            ax1.set_ylabel(
+                f"{species_name.title()} Detections", fontsize=12, color="black"
+            )
+            ax1_twin.set_ylabel(
+                "Human Detections (Baiting Events)", fontsize=12, color="orange"
+            )
+            ax1.tick_params(axis="y")
+            ax1_twin.tick_params(axis="y", labelcolor="orange")
+            ax1.set_title(
+                f"{species_name.title()} Activity vs Human Activity (Baiting) Over Time",
+                fontsize=14,
+                fontweight="bold",
+            )
+            ax1.grid(True, alpha=0.3)
+            ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+            ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
+            plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
+
+            # Add legends
+            lines1, labels1 = ax1.get_legend_handles_labels()
+            lines2, labels2 = ax1_twin.get_legend_handles_labels()
+            ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
+
+            # Plot 2: Species activity before and after human sightings
+            species_before, species_after = calculate_before_after(
+                df_species, species_name
+            )
+
+            categories = [f"{window_days} days\nbefore", f"{window_days} days\nafter"]
+            averages = [species_before, species_after]
+            colors_bar = ["coral", "lightgreen"]
+
+            bars = ax2.bar(
+                categories, averages, color=colors_bar, edgecolor="black", linewidth=2
+            )
+            ax2.set_ylabel(
+                f"Average {species_name.title()} Detections per Day", fontsize=12
+            )
+            ax2.set_title(
+                f"{species_name.title()} Activity Before vs After Baiting Events (n={len(df_humans['date'].unique())} baiting dates)",
+                fontsize=14,
+                fontweight="bold",
+            )
+            ax2.grid(axis="y", alpha=0.3)
+
+            # Add value labels on bars
+            for i, (bar, val) in enumerate(zip(bars, averages)):
+                max_avg = float(np.max(averages)) if len(averages) > 0 else 1.0
+                ax2.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    val + max_avg * 0.02,
+                    f"{val:.2f}",
+                    ha="center",
+                    va="bottom",
+                    fontweight="bold",
+                    fontsize=11,
+                )
+
+            # Calculate and display percentage increase
+            pct_change = (
+                ((species_after - species_before) / species_before * 100)
+                if species_before > 0
+                else 0
+            )
             ax2.text(
-                bar.get_x() + bar.get_width() / 2,
-                val + max_avg * 0.02,
-                f"{val:.2f}",
+                0.5,
+                0.95,
+                f"Change: {pct_change:+.1f}%",
+                transform=ax2.transAxes,
                 ha="center",
-                va="bottom",
+                va="top",
+                bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.7),
+                fontsize=12,
                 fontweight="bold",
-                fontsize=11,
             )
 
-        # Calculate and display percentage increase
-        pct_change_roe = (
-            ((roe_deer_after - roe_deer_before) / roe_deer_before * 100)
-            if roe_deer_before > 0
-            else 0
-        )
-        ax2.text(
-            0.5,
-            0.95,
-            f"Change: {pct_change_roe:+.1f}%",
-            transform=ax2.transAxes,
-            ha="center",
-            va="top",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.7),
-            fontsize=12,
-            fontweight="bold",
-        )
+            try:
+                import warnings
 
-        # Plot 3: Wild Boar activity before and after human sightings
-        df_wild_boar = df_valid[df_valid["class"] == "wild boar"].copy()
-        wild_boar_before, wild_boar_after = calculate_before_after(
-            df_wild_boar, "wild boar"
-        )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    fig.tight_layout()
+            except Exception:
+                pass
 
-        averages_boar = [wild_boar_before, wild_boar_after]
-
-        bars = ax3.bar(
-            categories, averages_boar, color=colors_bar, edgecolor="black", linewidth=2
-        )
-        ax3.set_ylabel("Average Wild Boar Detections per Day", fontsize=12)
-        ax3.set_title(
-            f"Wild Boar Activity Before vs After Baiting Events (n={len(df_humans['date'].unique())} baiting dates)",
-            fontsize=14,
-            fontweight="bold",
-        )
-        ax3.grid(axis="y", alpha=0.3)
-
-        # Add value labels on bars
-        for i, (bar, val) in enumerate(zip(bars, averages_boar)):
-            max_avg = float(np.max(averages_boar)) if len(averages_boar) > 0 else 1.0
-            ax3.text(
-                bar.get_x() + bar.get_width() / 2,
-                val + max_avg * 0.02,
-                f"{val:.2f}",
-                ha="center",
-                va="bottom",
-                fontweight="bold",
-                fontsize=11,
+            plot_num += 1
+            filename_species = species_name.lower().replace(" ", "_")
+            plt.savefig(
+                output_dir / f"{plot_num:02d}_baiting_effect_{filename_species}.svg",
+                bbox_inches="tight",
             )
+            print(f"✓ Saved: {plot_num:02d}_baiting_effect_{filename_species}.svg")
 
-        # Calculate and display percentage increase
-        pct_change_boar = (
-            ((wild_boar_after - wild_boar_before) / wild_boar_before * 100)
-            if wild_boar_before > 0
-            else 0
-        )
-        ax3.text(
-            0.5,
-            0.95,
-            f"Change: {pct_change_boar:+.1f}%",
-            transform=ax3.transAxes,
-            ha="center",
-            va="top",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="yellow", alpha=0.7),
-            fontsize=12,
-            fontweight="bold",
-        )
+            # Print summary statistics for this species
+            print(f"\nBaiting Effect Summary - {species_name.title()}:")
+            print(f"  Before baiting: {species_before:.2f} detections/day")
+            print(f"  After baiting: {species_after:.2f} detections/day")
+            print(f"  Change: {pct_change:+.1f}%")
 
-        try:
-            import warnings
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                fig.tight_layout()
-        except Exception:
-            pass
-        plot_num += 1
-        plt.savefig(
-            output_dir / f"{plot_num:02d}_baiting_effect_analysis.svg",
-            bbox_inches="tight",
-        )
-        print(f"✓ Saved: {plot_num:02d}_baiting_effect_analysis.svg")
-
-        # Print summary statistics
-        print("\nBaiting Effect Summary:")
-        print("  Roe Deer:")
-        print(f"    Before baiting: {roe_deer_before:.2f} detections/day")
-        print(f"    After baiting: {roe_deer_after:.2f} detections/day")
-        print(f"    Change: {pct_change_roe:+.1f}%")
-        print("  Wild Boar:")
-        print(f"    Before baiting: {wild_boar_before:.2f} detections/day")
-        print(f"    After baiting: {wild_boar_after:.2f} detections/day")
-        print(f"    Change: {pct_change_boar:+.1f}%")
-
-        plt.close()
+            plt.close()
     else:
         print("\nInsufficient data for baiting effect analysis")
 
