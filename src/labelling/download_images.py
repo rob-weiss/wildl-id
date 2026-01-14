@@ -17,214 +17,208 @@ from dateutil.relativedelta import relativedelta
 
 def get_current_carousel_image():
     """Get the current full-resolution image URL and original filename from the carousel."""
-    applescript = """
+    # Encode the JavaScript to avoid AppleScript parsing issues
+    javascript_code = """
+(function() {
+    const allImages = Array.from(document.querySelectorAll('img'))
+        .filter(img => {
+            const src = img.src || '';
+            if (!src.includes('media.secacam.com/getImage')) return false;
+            if (img.naturalWidth < 1000 || img.naturalHeight < 500) return false;
+            
+            const rect = img.getBoundingClientRect();
+            return rect.width > 500 && rect.height > 500;
+        })
+        .map(img => {
+            const rect = img.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const viewportCenterX = window.innerWidth / 2;
+            const viewportCenterY = window.innerHeight / 2;
+            const distanceFromCenter = Math.sqrt(
+                Math.pow(centerX - viewportCenterX, 2) + 
+                Math.pow(centerY - viewportCenterY, 2)
+            );
+            
+            const parent = img.closest('[class*=active], [class*=current], [class*=selected], [aria-current]');
+            const hasActiveClass = parent !== null;
+            const zIndex = parseInt(window.getComputedStyle(img).zIndex) || 0;
+            
+            return {
+                img: img,
+                distanceFromCenter: distanceFromCenter,
+                hasActiveClass: hasActiveClass,
+                zIndex: zIndex,
+                rect: rect
+            };
+        })
+        .sort((a, b) => {
+            if (a.hasActiveClass !== b.hasActiveClass) {
+                return b.hasActiveClass ? 1 : -1;
+            }
+            if (Math.abs(a.zIndex - b.zIndex) > 0) {
+                return b.zIndex - a.zIndex;
+            }
+            return a.distanceFromCenter - b.distanceFromCenter;
+        });
+    
+    let mainImg = allImages.length > 0 ? allImages[0].img : null;
+    
+    if (!mainImg) {
+        const largeImages = Array.from(document.querySelectorAll('img'))
+            .filter(img => {
+                const src = img.src || '';
+                const skip = ['ic_', 'icon', 'logo', 'svg'];
+                const isUI = skip.some(s => src.toLowerCase().includes(s));
+                if (isUI) return false;
+                
+                const rect = img.getBoundingClientRect();
+                const isVisible = rect.width > 500 && rect.height > 500;
+                return isVisible && img.naturalWidth > 1000 && img.naturalHeight > 500;
+            })
+            .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
+        
+        mainImg = largeImages.length > 0 ? largeImages[0] : null;
+    }
+    
+    if (mainImg) {
+        const url = mainImg.src;
+        const alt = mainImg.getAttribute('alt');
+        const title = mainImg.getAttribute('title');
+        
+        let cameraName = '';
+        let timestamp = '';
+        let fullText = '';
+        let textCount = 0;
+        
+        const modal = mainImg.closest('[role=dialog], [class*=modal], [class*=viewer], [class*=lightbox]');
+        if (modal) {
+            const labeledElement = modal.querySelector('[aria-label]');
+            if (labeledElement) {
+                const ariaText = labeledElement.getAttribute('aria-label');
+                if (ariaText && ariaText.indexOf(' - ') !== -1 && ariaText.indexOf('/') !== -1) {
+                    fullText = ariaText;
+                    const dashIndex = ariaText.indexOf(' - ');
+                    cameraName = ariaText.substring(0, dashIndex).trim();
+                    timestamp = ariaText.substring(dashIndex + 3).trim();
+                }
+            }
+            
+            if (!fullText) {
+                const headings = modal.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                for (let i = 0; i < headings.length; i++) {
+                    const text = headings[i].textContent.trim();
+                    if (text.indexOf(' - ') !== -1 && text.indexOf('/') !== -1) {
+                        fullText = text;
+                        const dashIndex = text.indexOf(' - ');
+                        cameraName = text.substring(0, dashIndex).trim();
+                        timestamp = text.substring(dashIndex + 3).trim();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!fullText) {
+            const allElements = Array.from(document.querySelectorAll('*'));
+            const allText = [];
+            
+            allElements.forEach(function(el) {
+                if (allText.length >= 200) return;
+                const elText = el.textContent;
+                if (elText && elText.length > 20 && elText.length < 200) {
+                    const childTexts = Array.from(el.children).map(c => c.textContent).join('');
+                    const directText = elText.replace(childTexts, '').trim();
+                    if (directText && directText.length > 5) {
+                        allText.push(directText);
+                    }
+                }
+            });
+            
+            textCount = allText.length;
+            
+            const candidates = [];
+            allText.forEach(function(text) {
+                const hasDash = text.indexOf(' - ') !== -1;
+                const hasSlash = text.indexOf('/') !== -1;
+                const hasDigit = /[0-9]/.test(text);
+                const notURL = text.indexOf('http') === -1;
+                
+                if (hasDash && hasSlash && hasDigit && notURL && text.length < 100) {
+                    const dashIndex = text.indexOf(' - ');
+                    const cam = text.substring(0, dashIndex).trim();
+                    const ts = text.substring(dashIndex + 3).trim();
+                    candidates.push({ text: text.trim(), camera: cam, timestamp: ts });
+                }
+            });
+            
+            let bestCandidate = null;
+            for (let i = 0; i < candidates.length; i++) {
+                const ts = candidates[i].timestamp;
+                const hasSeconds = /\\d{1,2}:\\d{2}:\\d{2}/.test(ts);
+                if (hasSeconds) {
+                    bestCandidate = candidates[i];
+                    break;
+                } else if (!bestCandidate) {
+                    bestCandidate = candidates[i];
+                }
+            }
+            
+            if (bestCandidate) {
+                fullText = bestCandidate.text;
+                cameraName = bestCandidate.camera;
+                timestamp = bestCandidate.timestamp;
+            }
+        }
+        
+        if (!cameraName) {
+            if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
+                cameraName = alt.trim();
+            } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
+                cameraName = title.trim();
+            }
+        }
+        
+        return JSON.stringify({
+            url: url,
+            cameraName: cameraName,
+            timestamp: timestamp,
+            fullText: fullText,
+            textCount: textCount,
+            width: mainImg.naturalWidth,
+            height: mainImg.naturalHeight,
+            debug_alt: mainImg.getAttribute('alt'),
+            debug_title: mainImg.getAttribute('title')
+        });
+    } else {
+        const allImgs = Array.from(document.querySelectorAll('img'));
+        const imgInfo = allImgs.slice(0, 5).map(i => ({
+            src: (i.src || '').substring(0, 80),
+            width: i.naturalWidth,
+            height: i.naturalHeight,
+            alt: i.alt || ''
+        }));
+        
+        return JSON.stringify({
+            error: 'not_found',
+            totalImages: allImgs.length,
+            largeImages: allImgs.filter(i => i.naturalWidth > 1000).length,
+            mediaImages: allImgs.filter(i => (i.src || '').includes('media.secacam.com')).length,
+            sampleImages: imgInfo
+        });
+    }
+})()
+    """.strip()
+    
+    # Prepare JavaScript for embedding in AppleScript (escape quotes and make single-line)
+    js_escaped = javascript_code.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
+    
+    # Use a simpler AppleScript structure with the JavaScript code
+    applescript = f"""
     tell application "Safari"
         tell current tab of front window
-            do JavaScript "
-                (function() {
-                    // Find the currently visible/active carousel image - prefer the most centered one
-                    const allImages = Array.from(document.querySelectorAll('img'))
-                        .filter(img => {
-                            const src = img.src || '';
-                            if (!src.includes('media.secacam.com/getImage')) return false;
-                            if (img.naturalWidth < 1000 || img.naturalHeight < 500) return false;
-                            
-                            // Must be actually visible with reasonable size
-                            const rect = img.getBoundingClientRect();
-                            return rect.width > 500 && rect.height > 500;
-                        })
-                        .map(img => {
-                            const rect = img.getBoundingClientRect();
-                            // Calculate how centered the image is
-                            const centerX = rect.left + rect.width / 2;
-                            const centerY = rect.top + rect.height / 2;
-                            const viewportCenterX = window.innerWidth / 2;
-                            const viewportCenterY = window.innerHeight / 2;
-                            const distanceFromCenter = Math.sqrt(
-                                Math.pow(centerX - viewportCenterX, 2) + 
-                                Math.pow(centerY - viewportCenterY, 2)
-                            );
-                            
-                            // Also check for active indicators
-                            const parent = img.closest('[class*=active], [class*=current], [class*=selected], [aria-current]');
-                            const hasActiveClass = parent !== null;
-                            const zIndex = parseInt(window.getComputedStyle(img).zIndex) || 0;
-                            
-                            return {
-                                img: img,
-                                distanceFromCenter: distanceFromCenter,
-                                hasActiveClass: hasActiveClass,
-                                zIndex: zIndex,
-                                rect: rect
-                            };
-                        })
-                        .sort((a, b) => {
-                            // Prioritize: active class > higher z-index > more centered
-                            if (a.hasActiveClass !== b.hasActiveClass) {
-                                return b.hasActiveClass ? 1 : -1;
-                            }
-                            if (Math.abs(a.zIndex - b.zIndex) > 0) {
-                                return b.zIndex - a.zIndex;
-                            }
-                            return a.distanceFromCenter - b.distanceFromCenter;
-                        });
-                    
-                    let mainImg = allImages.length > 0 ? allImages[0].img : null;
-                    
-                    if (!mainImg) {
-                        // Fallback: Find any large visible image
-                        const largeImages = Array.from(document.querySelectorAll('img'))
-                            .filter(img => {
-                                const src = img.src || '';
-                                const skip = ['ic_', 'icon', 'logo', 'svg'];
-                                const isUI = skip.some(s => src.toLowerCase().includes(s));
-                                if (isUI) return false;
-                                
-                                const rect = img.getBoundingClientRect();
-                                const isVisible = rect.width > 500 && rect.height > 500;
-                                return isVisible && img.naturalWidth > 1000 && img.naturalHeight > 500;
-                            })
-                            .sort((a, b) => (b.naturalWidth * b.naturalHeight) - (a.naturalWidth * a.naturalHeight));
-                        
-                        mainImg = largeImages.length > 0 ? largeImages[0] : null;
-                    }
-                    
-                    if (mainImg) {
-                        const url = mainImg.src;
-                        const alt = mainImg.getAttribute('alt');
-                        const title = mainImg.getAttribute('title');
-                        
-                        let cameraName = '';
-                        let timestamp = '';
-                        let fullText = '';
-                        let textCount = 0;
-                        
-                        // Strategy 1: Look for aria-label attributes or title elements near the image
-                        const modal = mainImg.closest('[role=dialog], [class*=modal], [class*=viewer], [class*=lightbox]');
-                        if (modal) {
-                            // Check for aria-label on parent elements
-                            const labeledElement = modal.querySelector('[aria-label]');
-                            if (labeledElement) {
-                                const ariaText = labeledElement.getAttribute('aria-label');
-                                if (ariaText && ariaText.indexOf(' - ') !== -1 && ariaText.indexOf('/') !== -1) {
-                                    fullText = ariaText;
-                                    const dashIndex = ariaText.indexOf(' - ');
-                                    cameraName = ariaText.substring(0, dashIndex).trim();
-                                    timestamp = ariaText.substring(dashIndex + 3).trim();
-                                }
-                            }
-                            
-                            // Check for heading elements with the title
-                            if (!fullText) {
-                                const headings = modal.querySelectorAll('h1, h2, h3, h4, h5, h6');
-                                for (let i = 0; i < headings.length; i++) {
-                                    const text = headings[i].textContent.trim();
-                                    if (text.indexOf(' - ') !== -1 && text.indexOf('/') !== -1) {
-                                        fullText = text;
-                                        const dashIndex = text.indexOf(' - ');
-                                        cameraName = text.substring(0, dashIndex).trim();
-                                        timestamp = text.substring(dashIndex + 3).trim();
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Strategy 2: Search all text content if not found yet
-                        if (!fullText) {
-                            const allElements = Array.from(document.querySelectorAll('*'));
-                            const allText = [];
-                            
-                            allElements.forEach(function(el) {
-                                if (allText.length >= 200) return;
-                                const elText = el.textContent;
-                                if (elText && elText.length > 20 && elText.length < 200) {
-                                    const childTexts = Array.from(el.children).map(c => c.textContent).join('');
-                                    const directText = elText.replace(childTexts, '').trim();
-                                    if (directText && directText.length > 5) {
-                                        allText.push(directText);
-                                    }
-                                }
-                            });
-                            
-                            textCount = allText.length;
-                            
-                            // Collect all matching timestamp candidates
-                            const candidates = [];
-                            allText.forEach(function(text) {
-                                const hasDash = text.indexOf(' - ') !== -1;
-                                const hasSlash = text.indexOf('/') !== -1;
-                                const hasDigit = /[0-9]/.test(text);
-                                const notURL = text.indexOf('http') === -1;
-                                
-                                if (hasDash && hasSlash && hasDigit && notURL && text.length < 100) {
-                                    const dashIndex = text.indexOf(' - ');
-                                    const cam = text.substring(0, dashIndex).trim();
-                                    const ts = text.substring(dashIndex + 3).trim();
-                                    candidates.push({ text: text.trim(), camera: cam, timestamp: ts });
-                                }
-                            });
-                            
-                            // Prefer timestamp with seconds format (e.g., "01/12/2026 03:53:47 PM")
-                            let bestCandidate = null;
-                            for (let i = 0; i < candidates.length; i++) {
-                                const ts = candidates[i].timestamp;
-                                // Check if timestamp has seconds (format: HH:MM:SS AM/PM or similar)
-                                const hasSeconds = /\d{1,2}:\d{2}:\d{2}/.test(ts);
-                                if (hasSeconds) {
-                                    bestCandidate = candidates[i];
-                                    break;  // Found one with seconds, use it
-                                } else if (!bestCandidate) {
-                                    bestCandidate = candidates[i];  // Fallback to first candidate
-                                }
-                            }
-                            
-                            if (bestCandidate) {
-                                fullText = bestCandidate.text;
-                                cameraName = bestCandidate.camera;
-                                timestamp = bestCandidate.timestamp;
-                            }
-                        }
-                        
-                        // Fallback to searching for any camera name
-                        if (!cameraName) {
-                            if (alt && alt !== 'undefined' && alt !== 'null' && alt.trim() && alt.trim() !== 'undefined') {
-                                cameraName = alt.trim();
-                            } else if (title && title !== 'undefined' && title !== 'null' && title.trim() && title.trim() !== 'undefined') {
-                                cameraName = title.trim();
-                            }
-                        }
-                        
-                        return JSON.stringify({
-                            url: url,
-                            cameraName: cameraName,
-                            timestamp: timestamp,
-                            fullText: fullText,
-                            textCount: textCount,
-                            width: mainImg.naturalWidth,
-                            height: mainImg.naturalHeight,
-                            debug_alt: mainImg.getAttribute('alt'),
-                            debug_title: mainImg.getAttribute('title')
-                        });
-                    } else {
-                        const allImgs = Array.from(document.querySelectorAll('img'));
-                        const imgInfo = allImgs.slice(0, 5).map(i => ({
-                            src: (i.src || '').substring(0, 80),
-                            width: i.naturalWidth,
-                            height: i.naturalHeight,
-                            alt: i.alt || ''
-                        }));
-                        
-                        return JSON.stringify({
-                            error: 'not_found',
-                            totalImages: allImgs.length,
-                            largeImages: allImgs.filter(i => i.naturalWidth > 1000).length,
-                            mediaImages: allImgs.filter(i => (i.src || '').includes('media.secacam.com')).length,
-                            sampleImages: imgInfo
-                        });
-                    }
-                })()
-            "
+            set jsResult to do JavaScript "{js_escaped}"
+            return jsResult
         end tell
     end tell
     """
