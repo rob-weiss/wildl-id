@@ -686,11 +686,11 @@ def process_images_with_pytorch_wildlife():
         existing_df = existing_df.astype(COLUMN_DTYPES)
 
         # Only mark as processed if the entry is complete (has class and temperature)
-        # Check for complete entries: class is not empty/none and temperature is not null
+        # Check for complete entries: class is not empty and temperature is not null
+        # Note: "none" is a valid class when no animal/human/vehicle is detected
         complete_mask = (
             (existing_df["class"].notna())
             & (existing_df["class"] != "")
-            & (existing_df["class"] != "none")
             & (existing_df["temperature_celsius"] != 0.0)
         )
         complete_df = existing_df[complete_mask]
