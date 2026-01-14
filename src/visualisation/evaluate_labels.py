@@ -330,185 +330,6 @@ print(f"✓ Saved: {plot_num:02d}_lighting_analysis.svg")
 plt.close()
 
 # ============================================================================
-# BATTERY LEVEL ANALYSIS
-# ============================================================================
-print("\n" + "=" * 70)
-print("BATTERY LEVEL ANALYSIS")
-print("=" * 70)
-
-if "battery_level" in df.columns:
-    df_battery = df[df["battery_level"].notna()].copy()
-    print(
-        f"\nImages with battery data: {len(df_battery)} ({100 * len(df_battery) / len(df):.1f}%)"
-    )
-
-    if (
-        len(df_battery) > 0
-        and "timestamp" in df_battery.columns
-        and df_battery["timestamp"].notna().any()
-    ):
-        print(
-            f"Battery level range: {df_battery['battery_level'].min():.1f}% to {df_battery['battery_level'].max():.1f}%"
-        )
-        print(f"Mean battery level: {df_battery['battery_level'].mean():.1f}%")
-        print(f"Median battery level: {df_battery['battery_level'].median():.1f}%")
-
-        # Prepare data with timestamps
-        df_battery_time = df_battery[df_battery["timestamp"].notna()].copy()
-        df_battery_time = df_battery_time.sort_values("timestamp")
-
-        if len(df_battery_time) > 0 and "location_id" in df_battery_time.columns:
-            # Get all unique locations
-            all_battery_locations = df_battery_time["location_id"].unique()
-            n_locations = len(all_battery_locations)
-
-            print(f"Tracking battery for {n_locations} locations")
-
-            # Create figure with battery over time for all locations
-            fig, ax = plt.subplots(figsize=(18, 8))
-
-            # Use a color palette with enough distinct colors
-            if n_locations <= 10:
-                colors_palette = sns.color_palette("tab10", n_locations)
-            elif n_locations <= 20:
-                colors_palette = sns.color_palette("tab20", n_locations)
-            else:
-                colors_palette = sns.color_palette("husl", n_locations)
-
-            # Plot each location's battery level over time
-            for idx, location in enumerate(sorted(all_battery_locations)):
-                location_data = df_battery_time[
-                    df_battery_time["location_id"] == location
-                ].copy()
-                location_data = location_data.sort_values("timestamp")
-
-                # Only plot if there's meaningful data
-                if len(location_data) >= 2:
-                    ax.plot(
-                        location_data["timestamp"],
-                        location_data["battery_level"],
-                        marker="o",
-                        markersize=4,
-                        linewidth=2,
-                        alpha=0.7,
-                        label=f"{location} (n={len(location_data)})",
-                        color=colors_palette[idx],
-                    )
-
-                    # Add trend line for each location if enough data points
-                    if len(location_data) >= 3:
-                        x_numeric = np.arange(len(location_data))
-                        z = np.polyfit(
-                            x_numeric, location_data["battery_level"].values, 1
-                        )
-                        if abs(z[0]) > 0.01:  # Only show trend if meaningful
-                            p = np.poly1d(z)
-                            ax.plot(
-                                location_data["timestamp"],
-                                p(x_numeric),
-                                linestyle="--",
-                                linewidth=1,
-                                alpha=0.4,
-                                color=colors_palette[idx],
-                            )
-
-            # Add warning zones
-            ax.axhspan(
-                0, 20, alpha=0.15, color="red", label="Critical (<20%)", zorder=0
-            )
-            ax.axhspan(
-                20, 40, alpha=0.08, color="orange", label="Low (20-40%)", zorder=0
-            )
-
-            ax.set_xlabel("Date", fontsize=13, fontweight="bold")
-            ax.set_ylabel("Battery Level (%)", fontsize=13, fontweight="bold")
-            ax.set_title(
-                "Battery Levels Over Time by Location", fontsize=16, fontweight="bold"
-            )
-            ax.set_ylim(0, 105)
-            ax.grid(True, alpha=0.3, linestyle=":", linewidth=0.8)
-
-            # Format x-axis
-            ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
-            ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-            plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha="right")
-
-            # Place legend outside plot area
-            if n_locations <= 15:
-                ax.legend(
-                    loc="center left",
-                    bbox_to_anchor=(1.02, 0.5),
-                    framealpha=0.95,
-                    fontsize=9,
-                )
-            else:
-                ax.legend(
-                    loc="center left",
-                    bbox_to_anchor=(1.02, 0.5),
-                    framealpha=0.95,
-                    fontsize=8,
-                    ncol=2,
-                )
-
-            try:
-                plt.tight_layout()
-            except Exception:
-                pass
-
-            plot_num += 1
-            plt.savefig(
-                output_dir / f"{plot_num:02d}_battery_levels_by_location.svg",
-                bbox_inches="tight",
-            )
-            print(f"✓ Saved: {plot_num:02d}_battery_levels_by_location.svg")
-            plt.close()
-
-            # Print warnings for critical batteries
-            critical_data = df_battery_time[df_battery_time["battery_level"] < 20]
-            if len(critical_data) > 0:
-                print(
-                    f"\n⚠ WARNING: {len(critical_data)} readings with critical battery level (<20%)"
-                )
-                if "location_id" in critical_data.columns:
-                    critical_locations = critical_data.groupby("location_id").agg(
-                        {"battery_level": ["min", "mean", "count"]}
-                    )
-                    critical_locations.columns = ["Min %", "Avg %", "Count"]
-                    critical_locations = critical_locations.sort_values("Avg %")
-                    print("\n  Critical/low battery by location:")
-                    for loc in critical_locations.index:
-                        print(
-                            f"    {loc}: {critical_locations.loc[loc, 'Count']:.0f} readings, "
-                            f"avg {critical_locations.loc[loc, 'Avg %']:.1f}%, "
-                            f"min {critical_locations.loc[loc, 'Min %']:.1f}%"
-                        )
-
-            # Summary table by location
-            print("\n  Battery summary by location:")
-            location_battery_summary = df_battery_time.groupby("location_id").agg(
-                {"battery_level": ["mean", "min", "max", "count"]}
-            )
-            location_battery_summary.columns = ["Mean %", "Min %", "Max %", "Readings"]
-            location_battery_summary = location_battery_summary.sort_values("Mean %")
-
-            for loc in location_battery_summary.index:
-                print(
-                    f"    {loc}: mean={location_battery_summary.loc[loc, 'Mean %']:.1f}%, "
-                    f"range={location_battery_summary.loc[loc, 'Min %']:.1f}-"
-                    f"{location_battery_summary.loc[loc, 'Max %']:.1f}%, "
-                    f"n={location_battery_summary.loc[loc, 'Readings']:.0f}"
-                )
-        else:
-            print(
-                "\n⚠ No location data available or insufficient timestamp data for battery timeline"
-            )
-    else:
-        print("\n⚠ No battery level data with timestamps available in dataset")
-else:
-    print("\n⚠ Battery level column not found in dataset")
-    print(f"Available columns: {df.columns.tolist()}")
-
-# ============================================================================
 # LOCATION COMPARISON
 # ============================================================================
 print("\n" + "=" * 70)
@@ -1385,7 +1206,7 @@ if len(df_valid) > 0:
                 )
 
                 ax_main.set_title(
-                    f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})\n⚠ Times in standard time (may be ~1h off during DST)",
+                    f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
                     fontsize=13,
                     fontweight="bold",
                 )
@@ -1518,7 +1339,7 @@ if len(df_valid) > 0:
             )
 
             ax_main.set_title(
-                f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})\n⚠ Times in standard time (may be ~1h off during DST)",
+                f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
                 fontsize=13,
                 fontweight="bold",
             )
