@@ -290,7 +290,7 @@ def extract_text_from_image(image_path):
         return ""
 
 
-def parse_camera_metadata(ocr_text):
+def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
     """Parse timestamp and temperature from camera metadata text.
 
     Expected format:
@@ -303,6 +303,10 @@ def parse_camera_metadata(ocr_text):
     ----------
     ocr_text : str
         Text extracted from image via OCR.
+    image_path : Path, optional
+        Path to the image file (for logging failures).
+    ocr_failures_log : Path, optional
+        Path to the OCR failures log file.
 
     Returns
     -------
@@ -342,6 +346,12 @@ def parse_camera_metadata(ocr_text):
                 print(
                     f"    Temperature pattern did not match in: '{normalized_text[:100]}'"
                 )
+                # Log to file with image path
+                if image_path and ocr_failures_log:
+                    with open(ocr_failures_log, "a", encoding="utf-8") as f:
+                        f.write(f"\n[TEMP FAIL] {image_path.name}\n")
+                        f.write(f"OCR Text: {normalized_text}\n")
+                        f.write(f"Original: {ocr_text}\n")
 
         # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41" or "Sa 29.11.2025 08:15:47")
         # Format: weekday DD.MM.YYYY HH:MM:SS
@@ -367,6 +377,12 @@ def parse_camera_metadata(ocr_text):
             # Debug: show what we're trying to parse if date pattern doesn't match
             if normalized_text and "202" in normalized_text:  # Likely contains a date
                 print(f"    Date pattern did not match in: '{normalized_text[:100]}'")
+                # Log to file with image path
+                if image_path and ocr_failures_log:
+                    with open(ocr_failures_log, "a", encoding="utf-8") as f:
+                        f.write(f"\n[DATE FAIL] {image_path.name}\n")
+                        f.write(f"OCR Text: {normalized_text}\n")
+                        f.write(f"Original: {ocr_text}\n")
     except Exception as e:
         print(f"    Metadata parsing error: {e}")
 
@@ -376,13 +392,15 @@ def parse_camera_metadata(ocr_text):
     }
 
 
-def extract_metadata_ocr(image_path):
+def extract_metadata_ocr(image_path, ocr_failures_log=None):
     """Extract timestamp and temperature from image using macOS OCR.
 
     Parameters
     ----------
     image_path : Path
         Path to the image file.
+    ocr_failures_log : Path, optional
+        Path to the OCR failures log file.
 
     Returns
     -------
@@ -390,7 +408,7 @@ def extract_metadata_ocr(image_path):
         Dictionary with 'timestamp' and 'temperature_celsius' keys.
     """
     ocr_text = extract_text_from_image(image_path)
-    return parse_camera_metadata(ocr_text)
+    return parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
 
 
 def detect_lighting(img_input, dim=10, thresh=0.5):
@@ -580,6 +598,13 @@ def process_images_with_pytorch_wildlife():
     labels_dir.mkdir(exist_ok=True)
     images_output_dir = labels_dir / "images"
     images_output_dir.mkdir(exist_ok=True)
+
+    # Initialize OCR failures log file in labels_dir
+    ocr_failures_log = labels_dir / "ocr_failures.txt"
+    if enable_ocr:
+        with open(ocr_failures_log, "w", encoding="utf-8") as f:
+            f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
+            f.write("=" * 80 + "\\n")
 
     # Get all subfolders (locations)
     subfolders = [
@@ -840,7 +865,7 @@ def process_images_with_pytorch_wildlife():
 
             # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
             if enable_ocr:
-                metadata = extract_metadata_ocr(image_path)
+                metadata = extract_metadata_ocr(image_path, ocr_failures_log)
             else:
                 metadata = {"timestamp": None, "temperature_celsius": None}
         # Image is automatically closed here when exiting the with block
@@ -936,6 +961,10 @@ def process_images_with_pytorch_wildlife():
         df_results = pd.DataFrame(results)
         print("\nClass distribution:")
         print(df_results["class"].value_counts())
+
+    # Print OCR failures log location
+    if enable_ocr and ocr_failures_log.exists():
+        print(f"\n✓ OCR failures logged to: {ocr_failures_log}")
 
 
 if __name__ == "__main__":
