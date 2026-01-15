@@ -185,8 +185,10 @@ def map_classifier_to_wildlife(classifier_name):
         return "fox"
     elif (
         "hare" in classifier_name_lower
+        or "rabbit" in classifier_name_lower
         or "lièvre" in classifier_name_lower
         or "lievre" in classifier_name_lower
+        or "lapin" in classifier_name_lower
     ):
         return "hare"
     elif (
