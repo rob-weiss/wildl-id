@@ -474,7 +474,11 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
 
 
 def extract_metadata_ocr(image_path, ocr_failures_log=None):
-    """Extract timestamp and temperature from image using macOS OCR.
+    """Extract timestamp and temperature from image using macOS OCR with EasyOCR fallback.
+
+    Tries macOS Vision first, then falls back to EasyOCR if:
+    1. macOS Vision fails to extract text, OR
+    2. Extracted text cannot be parsed (no timestamp AND no temperature found)
 
     Parameters
     ----------
@@ -488,8 +492,101 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
     dict
         Dictionary with 'timestamp' and 'temperature_celsius' keys.
     """
-    ocr_text = extract_text_from_image(image_path)
-    return parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+    # Try macOS Vision first if available
+    if MACOS_VISION_AVAILABLE:
+        try:
+            # Create image URL
+            image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
+
+            # Create CIImage
+            ci_image = CIImage.imageWithContentsOfURL_(image_url)
+            if ci_image is None:
+                raise Exception("Could not create CIImage from file")
+
+            # Create text recognition request
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+            request.setUsesLanguageCorrection_(True)
+            request.setRecognitionLanguages_(["en-US"])
+
+            # Create request handler
+            handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
+                ci_image, None
+            )
+
+            # Perform request
+            success = handler.performRequests_error_([request], None)
+
+            if not success[0]:
+                raise Exception("Vision request failed")
+
+            # Extract text from results
+            results = request.results()
+            if not results:
+                raise Exception("No text detected")
+
+            # Combine all recognized text
+            text_lines = []
+            for observation in results:
+                text = observation.text()
+                text_lines.append(text)
+
+            ocr_text = "\n".join(text_lines)
+            if not ocr_text:
+                raise Exception("Empty text result")
+
+            # Try to parse the extracted text
+            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+
+            # Check if parsing was successful (at least one field extracted)
+            if (
+                metadata["timestamp"] is not None
+                or metadata["temperature_celsius"] is not None
+            ):
+                return metadata
+            else:
+                # Parsing failed - no data extracted
+                if enable_ocr_fallback and EASYOCR_AVAILABLE:
+                    print(
+                        "    macOS Vision text could not be parsed, trying EasyOCR fallback..."
+                    )
+                else:
+                    return metadata  # Return empty result
+
+        except Exception as e:
+            if enable_ocr_fallback and EASYOCR_AVAILABLE:
+                print(f"    macOS Vision failed ({e}), trying EasyOCR fallback...")
+            else:
+                return {"timestamp": None, "temperature_celsius": None}
+
+    # Fall back to EasyOCR if macOS Vision failed or parsing failed
+    if enable_ocr_fallback and EASYOCR_AVAILABLE:
+        try:
+            # Initialize EasyOCR reader (cached globally for performance)
+            if not hasattr(extract_text_from_image, "easyocr_reader"):
+                print("    Initializing EasyOCR reader (one-time setup)...")
+                extract_text_from_image.easyocr_reader = easyocr.Reader(
+                    ["en"], gpu=torch.cuda.is_available()
+                )
+
+            # Read text from image
+            result = extract_text_from_image.easyocr_reader.readtext(
+                str(image_path), detail=0
+            )
+
+            # Combine all detected text
+            ocr_text = "\n".join(result)
+
+            # Parse the EasyOCR result
+            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+            return metadata
+
+        except Exception as e:
+            print(f"    EasyOCR error: {e}")
+            return {"timestamp": None, "temperature_celsius": None}
+
+    # No OCR available or all attempts failed
+    return {"timestamp": None, "temperature_celsius": None}
 
 
 def detect_lighting(img_input, dim=10, thresh=0.5):
