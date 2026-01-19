@@ -11,6 +11,7 @@ python main.py
 ```
 
 This will present an interactive menu where you can:
+
 1. **Download new images** from your camera gallery (ZEISS Secacam)
 2. **Label/classify images** using MegaDetector and DeepFaune species classifier
 3. **Generate visualizations** and analysis reports
@@ -30,11 +31,13 @@ The interface will guide you through each step with clear instructions and confi
 ## Features
 
 ### 1. Image Download
+
 - Downloads images from ZEISS Secacam gallery carousel
 - Works with Safari browser automation
 - Organizes images by location and timestamp
 
 ### 2. Image Labeling & Classification
+
 - **Animal Detection**: Uses PyTorch Wildlife MegaDetector V6 for detecting animals, humans, and vehicles
 - **Species Classification**: DeepFaune classifier identifies European wildlife species
 - **Metadata Extraction**: OCR extracts timestamp and temperature data from camera overlay
@@ -43,6 +46,7 @@ The interface will guide you through each step with clear instructions and confi
 - Configurable to skip incomplete entries
 
 ### 3. Visualizations & Analysis
+
 - Activity patterns by hour of day
 - Species distribution charts
 - Calendar heatmaps
@@ -58,16 +62,19 @@ All visualizations are saved to `docs/diagrams/` for easy access.
 If you prefer to run individual components:
 
 ### Download Images
+
 ```bash
 python src/labelling/download_images.py
 ```
 
 ### Label Images
+
 ```bash
 python src/labelling/label_images.py
 ```
 
 ### Generate Visualizations
+
 ```bash
 python src/visualisation/evaluate_labels.py
 ```
@@ -75,7 +82,9 @@ python src/visualisation/evaluate_labels.py
 ## Configuration
 
 ### Image Labeling Configuration
+
 Edit [src/labelling/label_images.py](src/labelling/label_images.py) to configure:
+
 - Model selection (MegaDetectorV5/V6 variants)
 - Species classification on/off
 - OCR enabled/disabled
@@ -83,7 +92,9 @@ Edit [src/labelling/label_images.py](src/labelling/label_images.py) to configure
 - Save annotated images
 
 ### Visualization Configuration
+
 Edit [src/visualisation/evaluate_labels.py](src/visualisation/evaluate_labels.py) to configure:
+
 - Model to analyze
 - Output directory
 - Location coordinates for sunrise/sunset calculations

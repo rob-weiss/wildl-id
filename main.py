@@ -11,7 +11,7 @@ It provides a user-friendly interface to:
 
 Usage:
     python main.py
-    
+
 Then follow the interactive menu prompts.
 """
 
@@ -48,19 +48,17 @@ def download_images():
     print()
     print("⚠️  IMPORTANT: Make sure the ZEISS Secacam carousel is open in Safari!")
     print()
-    
+
     proceed = input("Ready to proceed? (y/n): ").strip().lower()
-    if proceed != 'y':
+    if proceed != "y":
         print("Download cancelled.")
         return False
-    
+
     script_path = Path(__file__).parent / "src" / "labelling" / "download_images.py"
-    
+
     try:
         result = subprocess.run(
-            [sys.executable, str(script_path)],
-            check=True,
-            cwd=Path(__file__).parent
+            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
         )
         print("\n✓ Download completed successfully!")
         return True
@@ -82,19 +80,17 @@ def label_images():
     print("classification. It will also extract metadata (timestamp, temperature) and")
     print("analyze lighting conditions.")
     print()
-    
+
     proceed = input("Ready to proceed? (y/n): ").strip().lower()
-    if proceed != 'y':
+    if proceed != "y":
         print("Labeling cancelled.")
         return False
-    
+
     script_path = Path(__file__).parent / "src" / "labelling" / "label_images.py"
-    
+
     try:
         result = subprocess.run(
-            [sys.executable, str(script_path)],
-            check=True,
-            cwd=Path(__file__).parent
+            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
         )
         print("\n✓ Labeling completed successfully!")
         return True
@@ -120,22 +116,20 @@ def generate_visualizations():
     print("  • Day/night activity patterns")
     print("  • Temperature correlations")
     print()
-    
+
     proceed = input("Ready to proceed? (y/n): ").strip().lower()
-    if proceed != 'y':
+    if proceed != "y":
         print("Visualization cancelled.")
         return False
-    
+
     script_path = Path(__file__).parent / "src" / "visualisation" / "evaluate_labels.py"
-    
+
     try:
         result = subprocess.run(
-            [sys.executable, str(script_path)],
-            check=True,
-            cwd=Path(__file__).parent
+            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
         )
         print("\n✓ Visualizations generated successfully!")
-        print(f"📁 Check the docs/diagrams/ folder for output files")
+        print("📁 Check the docs/diagrams/ folder for output files")
         return True
     except subprocess.CalledProcessError as e:
         print(f"\n✗ Visualization failed with error code {e.returncode}")
@@ -156,12 +150,12 @@ def run_all():
     print("  2. Label/classify images")
     print("  3. Generate visualizations")
     print()
-    
+
     proceed = input("Ready to proceed? (y/n): ").strip().lower()
-    if proceed != 'y':
+    if proceed != "y":
         print("Pipeline cancelled.")
         return
-    
+
     # Step 1: Download
     print("\n\n" + "=" * 70)
     print("STEP 1/3: DOWNLOADING IMAGES")
@@ -170,7 +164,7 @@ def run_all():
     if not success:
         print("\n⚠️  Pipeline stopped due to download failure")
         return
-    
+
     # Step 2: Label
     print("\n\n" + "=" * 70)
     print("STEP 2/3: LABELING IMAGES")
@@ -179,7 +173,7 @@ def run_all():
     if not success:
         print("\n⚠️  Pipeline stopped due to labeling failure")
         return
-    
+
     # Step 3: Visualize
     print("\n\n" + "=" * 70)
     print("STEP 3/3: GENERATING VISUALIZATIONS")
@@ -188,7 +182,7 @@ def run_all():
     if not success:
         print("\n⚠️  Pipeline completed with visualization errors")
         return
-    
+
     print("\n\n" + "=" * 70)
     print("✓  PIPELINE COMPLETED SUCCESSFULLY!")
     print("=" * 70)
@@ -198,34 +192,34 @@ def run_all():
 def main():
     """Main function with interactive menu."""
     print_header()
-    
+
     while True:
         print_menu()
-        
+
         try:
             choice = input("\nEnter your choice (1-5): ").strip()
-            
-            if choice == '1':
+
+            if choice == "1":
                 download_images()
-            elif choice == '2':
+            elif choice == "2":
                 label_images()
-            elif choice == '3':
+            elif choice == "3":
                 generate_visualizations()
-            elif choice == '4':
+            elif choice == "4":
                 run_all()
-            elif choice == '5':
+            elif choice == "5":
                 print("\n👋  Goodbye!")
                 break
             else:
                 print("\n⚠️  Invalid choice. Please enter 1-5.")
-        
+
         except KeyboardInterrupt:
             print("\n\n👋  Goodbye!")
             break
         except Exception as e:
             print(f"\n✗ An error occurred: {e}")
             print("Please try again or report this issue.")
-    
+
     print()
 
 
