@@ -10,7 +10,7 @@ It provides a user-friendly interface to:
 4. Run all steps in sequence
 
 Usage:
-    python main.py
+    python wildl_id.py
 
 Then follow the interactive menu prompts.
 """

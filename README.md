@@ -7,7 +7,7 @@ As a conservationist, hunter, and software developer I've been curious about wha
 The easiest way to use this system is through the main interface:
 
 ```bash
-python main.py
+python wildl_id.py
 ```
 
 This will present an interactive menu where you can:
@@ -23,7 +23,7 @@ Simply run the main script and follow the prompts:
 
 ```bash
 cd wildl-id
-python main.py
+python wildl_id.py
 ```
 
 The interface will guide you through each step with clear instructions and confirmations.
