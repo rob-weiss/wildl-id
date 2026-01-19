@@ -579,6 +579,19 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
 
             # Parse the EasyOCR result
             metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+
+            # Check if EasyOCR parsing was successful
+            missing_fields = []
+            if metadata["timestamp"] is None:
+                missing_fields.append("timestamp")
+            if metadata["temperature_celsius"] is None:
+                missing_fields.append("temperature")
+
+            if missing_fields:
+                print(
+                    f"    ⚠️  Both OCR methods failed to extract: {', '.join(missing_fields)}"
+                )
+
             return metadata
 
         except Exception as e:
@@ -854,7 +867,7 @@ def process_images_with_pytorch_wildlife():
             "lighting": "unknown",
             "confidence": 0.0,
             "classification_confidence": 0.0,
-            "temperature_celsius": 0.0,
+            "temperature_celsius": np.nan,
         }
 
         # Add missing columns with default values
@@ -866,20 +879,24 @@ def process_images_with_pytorch_wildlife():
                 existing_df[col] = default_value
 
         # Replace empty strings in numeric columns with default values before type conversion
-        for col in ["confidence", "classification_confidence", "temperature_celsius"]:
+        for col in ["confidence", "classification_confidence"]:
             existing_df[col] = existing_df[col].replace("", 0.0)
+        existing_df["temperature_celsius"] = existing_df["temperature_celsius"].replace(
+            "", np.nan
+        )
 
         # Now convert to proper dtypes
         # Now convert to proper dtypes
         existing_df = existing_df.astype(COLUMN_DTYPES)
 
-        # Only mark as processed if the entry is complete (has class and temperature)
-        # Check for complete entries: class is not empty and temperature is not null
+        # Only mark as processed if the entry is complete (has class, timestamp, AND temperature)
+        # Check for complete entries: all required fields are present
         # Note: "none" is a valid class when no animal/human/vehicle is detected
         complete_mask = (
             (existing_df["class"].notna())
             & (existing_df["class"] != "")
-            & (existing_df["temperature_celsius"] != 0.0)
+            & (existing_df["timestamp"] != "")
+            & (existing_df["temperature_celsius"].notna())
         )
         complete_df = existing_df[complete_mask]
 
@@ -1087,7 +1104,7 @@ def process_images_with_pytorch_wildlife():
             else 0.0,
             "temperature_celsius": float(metadata["temperature_celsius"])
             if metadata["temperature_celsius"] is not None
-            else 0.0,
+            else np.nan,
         }
         results.append(result_dict)
 
