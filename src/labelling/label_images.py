@@ -76,10 +76,14 @@ use_classification = True
 classification_threshold = 0.1  # Minimum confidence for classification
 
 # Save annotated images (disable to reduce memory usage and speed up processing)
-save_annotated_images = False
+save_annotated_images = True
 
 # Enable OCR for timestamp/temperature extraction (disable to save memory)
 enable_ocr = True
+
+# Reprocess incomplete entries (entries without class or temperature)
+# Set to False to skip incomplete entries and only process new images
+reprocess_incomplete = False
 
 # MegaDetector class names
 # MegaDetector detects: animal, person, vehicle
@@ -697,22 +701,38 @@ def process_images_with_pytorch_wildlife():
         )
         complete_df = existing_df[complete_mask]
 
-        processed_images = set(
-            zip(complete_df["location_id"], complete_df["image_file"])
-        )
-
-        incomplete_count = len(existing_df) - len(complete_df)
-        if incomplete_count > 0:
-            print(
-                f"Found {incomplete_count} incomplete entries that will be reprocessed\n"
+        if reprocess_incomplete:
+            # Mark only complete entries as processed; incomplete ones will be reprocessed
+            processed_images = set(
+                zip(complete_df["location_id"], complete_df["image_file"])
             )
 
-        # Remove incomplete entries from existing_df to avoid duplicates
-        # Keep only the complete entries; incomplete ones will be replaced
-        if len(complete_df) > 0:
-            existing_df = complete_df.copy()
+            incomplete_count = len(existing_df) - len(complete_df)
+            if incomplete_count > 0:
+                print(
+                    f"Found {incomplete_count} incomplete entries that will be reprocessed\n"
+                )
+
+            # Remove incomplete entries from existing_df to avoid duplicates
+            # Keep only the complete entries; incomplete ones will be replaced
+            if len(complete_df) > 0:
+                existing_df = complete_df.copy()
+            else:
+                existing_df = None  # No complete entries, start fresh
         else:
-            existing_df = None  # No complete entries, start fresh
+            # Mark all entries (complete and incomplete) as processed
+            processed_images = set(
+                zip(existing_df["location_id"], existing_df["image_file"])
+            )
+
+            incomplete_count = len(existing_df) - len(complete_df)
+            if incomplete_count > 0:
+                print(
+                    f"Found {incomplete_count} incomplete entries that will be kept as-is\n"
+                )
+
+            # Keep all entries including incomplete ones
+            # No need to filter, existing_df already contains everything
 
     images_to_process = [
         img_info
