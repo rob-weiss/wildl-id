@@ -87,7 +87,7 @@ enable_ocr_fallback = True
 
 # Reprocess incomplete entries (entries without class or temperature)
 # Set to False to skip incomplete entries and only process new images
-reprocess_incomplete = True
+reprocess_incomplete = False
 
 # OCR Framework availability checks
 try:
