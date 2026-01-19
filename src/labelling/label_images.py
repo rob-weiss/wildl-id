@@ -267,6 +267,7 @@ def extract_text_from_image(image_path):
         request = Vision.VNRecognizeTextRequest.alloc().init()
         request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
         request.setUsesLanguageCorrection_(True)
+        request.setRecognitionLanguages_(["en-US"])
 
         # Create request handler
         handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
