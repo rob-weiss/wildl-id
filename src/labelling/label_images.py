@@ -64,6 +64,32 @@ from PytorchWildlife.models import classification as pw_classification
 from PytorchWildlife.models import detection as pw_detection
 from tqdm import tqdm
 
+# Configuration (must be defined before OCR framework checks)
+image_dir = Path(__file__).parent.parent.parent / "data"
+# MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
+# MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
+model_version = "MegaDetectorV6"
+model_name = "MDV6-yolov10-e"  # Best accuracy
+
+# Enable species classification (uses DeepFaune classifier for European wildlife)
+use_classification = True
+classification_threshold = 0.1  # Minimum confidence for classification
+
+# Save annotated images (disable to reduce memory usage and speed up processing)
+save_annotated_images = True
+
+# Enable OCR for timestamp/temperature extraction (disable to save memory)
+enable_ocr = True
+
+# Enable OCR fallback: if macOS Vision fails, try EasyOCR
+# Requires: pip install easyocr
+enable_ocr_fallback = True
+
+# Reprocess incomplete entries (entries without class or temperature)
+# Set to False to skip incomplete entries and only process new images
+reprocess_incomplete = True
+
+# OCR Framework availability checks
 try:
     import Vision
     from Foundation import NSURL
@@ -97,31 +123,6 @@ if enable_ocr:
         )
         print("  EasyOCR:      pip install easyocr")
         sys.exit(1)
-
-# Configuration
-image_dir = Path(__file__).parent.parent.parent / "data"
-# MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
-# MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
-model_version = "MegaDetectorV6"
-model_name = "MDV6-yolov10-e"  # Best accuracy
-
-# Enable species classification (uses DeepFaune classifier for European wildlife)
-use_classification = True
-classification_threshold = 0.1  # Minimum confidence for classification
-
-# Save annotated images (disable to reduce memory usage and speed up processing)
-save_annotated_images = True
-
-# Enable OCR for timestamp/temperature extraction (disable to save memory)
-enable_ocr = True
-
-# Enable OCR fallback: if macOS Vision fails, try EasyOCR
-# Requires: pip install easyocr
-enable_ocr_fallback = True
-
-# Reprocess incomplete entries (entries without class or temperature)
-# Set to False to skip incomplete entries and only process new images
-reprocess_incomplete = False
 
 # MegaDetector class names
 # MegaDetector detects: animal, person, vehicle
