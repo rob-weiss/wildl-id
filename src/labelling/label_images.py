@@ -8,6 +8,7 @@ Main approach:
 - Detects animals, persons, and vehicles in camera trap images
 - Processes images from wildlife camera directory structure
 - Outputs results compatible with labelling.py format
+- OCR support: macOS Vision (primary) with EasyOCR fallback
 
 Dependencies:
 - PytorchWildlife
@@ -15,8 +16,16 @@ Dependencies:
 - pandas
 - opencv-python
 - matplotlib
+- pyobjc-framework-Vision pyobjc-framework-Quartz (for macOS Vision OCR)
+- easyocr (optional, for OCR fallback)
 
 pip install PytorchWildlife torch pandas opencv-python matplotlib pillow lightning omegaconf pyarrow
+
+# For macOS Vision OCR (macOS only):
+pip install pyobjc-framework-Vision pyobjc-framework-Quartz
+
+# For EasyOCR fallback (cross-platform):
+pip install easyocr
 
 Usage:
     python detect_animals.py
@@ -59,10 +68,35 @@ try:
     import Vision
     from Foundation import NSURL
     from Quartz import CIImage
+
+    MACOS_VISION_AVAILABLE = True
 except ImportError:
-    print("Error: PyObjC not installed. Install with:")
-    print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
-    sys.exit(1)
+    MACOS_VISION_AVAILABLE = False
+    print("Warning: macOS Vision not available (PyObjC not installed)")
+    if enable_ocr and not enable_ocr_fallback:
+        print("Error: OCR enabled but no OCR framework available. Install with:")
+        print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
+        print("  or enable EasyOCR fallback: pip install easyocr")
+        sys.exit(1)
+
+# Try to import EasyOCR for fallback
+try:
+    import easyocr
+
+    EASYOCR_AVAILABLE = True
+except ImportError:
+    EASYOCR_AVAILABLE = False
+
+# Check OCR availability
+if enable_ocr:
+    if not MACOS_VISION_AVAILABLE and not EASYOCR_AVAILABLE:
+        print("Error: OCR enabled but no OCR framework available.")
+        print("Install one of the following:")
+        print(
+            "  macOS Vision: pip install pyobjc-framework-Vision pyobjc-framework-Quartz"
+        )
+        print("  EasyOCR:      pip install easyocr")
+        sys.exit(1)
 
 # Configuration
 image_dir = Path(__file__).parent.parent.parent / "data"
@@ -80,6 +114,10 @@ save_annotated_images = True
 
 # Enable OCR for timestamp/temperature extraction (disable to save memory)
 enable_ocr = True
+
+# Enable OCR fallback: if macOS Vision fails, try EasyOCR
+# Requires: pip install easyocr
+enable_ocr_fallback = True
 
 # Reprocess incomplete entries (entries without class or temperature)
 # Set to False to skip incomplete entries and only process new images
@@ -242,7 +280,7 @@ def map_classifier_to_wildlife(classifier_name):
 
 
 def extract_text_from_image(image_path):
-    """Extract text from an image using macOS Vision framework.
+    """Extract text from an image using macOS Vision framework or EasyOCR fallback.
 
     Parameters
     ----------
@@ -254,47 +292,82 @@ def extract_text_from_image(image_path):
     str
         Extracted text as a string.
     """
-    try:
-        # Create image URL
-        image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
+    # Try macOS Vision first if available
+    if MACOS_VISION_AVAILABLE:
+        try:
+            # Create image URL
+            image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
 
-        # Create CIImage
-        ci_image = CIImage.imageWithContentsOfURL_(image_url)
-        if ci_image is None:
+            # Create CIImage
+            ci_image = CIImage.imageWithContentsOfURL_(image_url)
+            if ci_image is None:
+                raise Exception("Could not create CIImage from file")
+
+            # Create text recognition request
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+            request.setUsesLanguageCorrection_(True)
+            request.setRecognitionLanguages_(["en-US"])
+
+            # Create request handler
+            handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
+                ci_image, None
+            )
+
+            # Perform request
+            success = handler.performRequests_error_([request], None)
+
+            if not success[0]:
+                raise Exception("Vision request failed")
+
+            # Extract text from results
+            results = request.results()
+            if not results:
+                raise Exception("No text detected")
+
+            # Combine all recognized text
+            text_lines = []
+            for observation in results:
+                text = observation.text()
+                text_lines.append(text)
+
+            text = "\n".join(text_lines)
+            if text:
+                return text
+            else:
+                raise Exception("Empty text result")
+
+        except Exception as e:
+            if enable_ocr_fallback and EASYOCR_AVAILABLE:
+                print(f"    macOS Vision failed ({e}), trying EasyOCR fallback...")
+            else:
+                print(f"    OCR error: {e}")
+                return ""
+
+    # Fall back to EasyOCR if macOS Vision failed or is not available
+    if enable_ocr_fallback and EASYOCR_AVAILABLE:
+        try:
+            # Initialize EasyOCR reader (cached globally for performance)
+            if not hasattr(extract_text_from_image, "easyocr_reader"):
+                print("    Initializing EasyOCR reader (one-time setup)...")
+                extract_text_from_image.easyocr_reader = easyocr.Reader(
+                    ["en"], gpu=torch.cuda.is_available()
+                )
+
+            # Read text from image
+            result = extract_text_from_image.easyocr_reader.readtext(
+                str(image_path), detail=0
+            )
+
+            # Combine all detected text
+            text = "\n".join(result)
+            return text
+
+        except Exception as e:
+            print(f"    EasyOCR error: {e}")
             return ""
 
-        # Create text recognition request
-        request = Vision.VNRecognizeTextRequest.alloc().init()
-        request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-        request.setUsesLanguageCorrection_(True)
-        request.setRecognitionLanguages_(["en-US"])
-
-        # Create request handler
-        handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
-            ci_image, None
-        )
-
-        # Perform request
-        success = handler.performRequests_error_([request], None)
-
-        if not success[0]:
-            return ""
-
-        # Extract text from results
-        results = request.results()
-        if not results:
-            return ""
-
-        # Combine all recognized text
-        text_lines = []
-        for observation in results:
-            text = observation.text()
-            text_lines.append(text)
-
-        return "\n".join(text_lines)
-    except Exception as e:
-        print(f"    OCR error: {e}")
-        return ""
+    return ""
 
 
 def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
@@ -565,7 +638,17 @@ def process_images_with_pytorch_wildlife():
         device = "mps"
     print(f"Using device: {device}")
 
-    print("Using macOS Vision framework for OCR")
+    # Print OCR framework being used
+    if enable_ocr:
+        if MACOS_VISION_AVAILABLE:
+            ocr_framework = "macOS Vision"
+            if enable_ocr_fallback and EASYOCR_AVAILABLE:
+                ocr_framework += " (with EasyOCR fallback)"
+        elif EASYOCR_AVAILABLE:
+            ocr_framework = "EasyOCR"
+        else:
+            ocr_framework = "None"
+        print(f"Using OCR framework: {ocr_framework}")
 
     # Load MegaDetector model
     print(f"Loading {model_version} {model_name} model...")
