@@ -15,9 +15,16 @@ Usage:
 Then follow the interactive menu prompts.
 """
 
-import subprocess
 import sys
 from pathlib import Path
+
+# Add src directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+# Import the main functions from each module
+from labelling.download_images import main as download_main
+from labelling.label_images import process_images_with_pytorch_wildlife
+from visualisation.evaluate_labels import main as visualisation_main
 
 
 def print_header():
@@ -54,16 +61,12 @@ def download_images():
         print("Download cancelled.")
         return False
 
-    script_path = Path(__file__).parent / "src" / "labelling" / "download_images.py"
-
     try:
-        result = subprocess.run(
-            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
-        )
+        download_main()
         print("\n✓ Download completed successfully!")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Download failed with error code {e.returncode}")
+    except Exception as e:
+        print(f"\n✗ Download failed: {e}")
         return False
     except KeyboardInterrupt:
         print("\n\n⚠️  Download interrupted by user")
@@ -86,16 +89,12 @@ def label_images():
         print("Labeling cancelled.")
         return False
 
-    script_path = Path(__file__).parent / "src" / "labelling" / "label_images.py"
-
     try:
-        result = subprocess.run(
-            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
-        )
+        process_images_with_pytorch_wildlife()
         print("\n✓ Labeling completed successfully!")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Labeling failed with error code {e.returncode}")
+    except Exception as e:
+        print(f"\n✗ Labeling failed: {e}")
         return False
     except KeyboardInterrupt:
         print("\n\n⚠️  Labeling interrupted by user")
@@ -122,17 +121,13 @@ def generate_visualizations():
         print("Visualization cancelled.")
         return False
 
-    script_path = Path(__file__).parent / "src" / "visualisation" / "evaluate_labels.py"
-
     try:
-        result = subprocess.run(
-            [sys.executable, str(script_path)], check=True, cwd=Path(__file__).parent
-        )
+        visualisation_main()
         print("\n✓ Visualizations generated successfully!")
         print("📁 Check the docs/diagrams/ folder for output files")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"\n✗ Visualization failed with error code {e.returncode}")
+    except Exception as e:
+        print(f"\n✗ Visualization failed: {e}")
         return False
     except KeyboardInterrupt:
         print("\n\n⚠️  Visualization interrupted by user")
