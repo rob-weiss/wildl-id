@@ -54,7 +54,7 @@ def print_menu():
     print("-" * 70)
 
 
-def download_images(skip_prompt=False):
+def download_images():
     """Download images from camera gallery."""
     print("\n" + "=" * 70)
     print("📥  DOWNLOADING IMAGES FROM CAMERA GALLERY")
@@ -62,12 +62,6 @@ def download_images(skip_prompt=False):
     print()
     print("⚠️  IMPORTANT: Make sure the ZEISS Secacam carousel is open in Safari!")
     print()
-
-    if not skip_prompt:
-        proceed = input("Ready to proceed? (y/n): ").strip().lower()
-        if proceed != "y":
-            print("Download cancelled.")
-            return False
 
     try:
         download_main()
@@ -81,7 +75,7 @@ def download_images(skip_prompt=False):
         return False
 
 
-def label_images(skip_prompt=False):
+def label_images():
     """Label and classify images using MegaDetector."""
     print("\n" + "=" * 70)
     print("🏷️  LABELING IMAGES")
@@ -91,12 +85,6 @@ def label_images(skip_prompt=False):
     print("classification. It will also extract metadata (timestamp, temperature) and")
     print("analyze lighting conditions.")
     print()
-
-    if not skip_prompt:
-        proceed = input("Ready to proceed? (y/n): ").strip().lower()
-        if proceed != "y":
-            print("Labeling cancelled.")
-            return False
 
     try:
         process_images_with_pytorch_wildlife()
@@ -110,7 +98,7 @@ def label_images(skip_prompt=False):
         return False
 
 
-def generate_visualizations(skip_prompt=False):
+def generate_visualizations():
     """Generate visualizations and analysis reports."""
     print("\n" + "=" * 70)
     print("📊  GENERATING VISUALIZATIONS")
@@ -125,12 +113,6 @@ def generate_visualizations(skip_prompt=False):
     print("  • Temperature correlations")
     print()
 
-    if not skip_prompt:
-        proceed = input("Ready to proceed? (y/n): ").strip().lower()
-        if proceed != "y":
-            print("Visualization cancelled.")
-            return False
-
     try:
         visualisation_main()
         print("\n✓ Visualizations generated successfully!")
@@ -144,7 +126,7 @@ def generate_visualizations(skip_prompt=False):
         return False
 
 
-def run_all(skip_prompt=False):
+def run_all():
     """Run all steps in sequence."""
     print("\n" + "=" * 70)
     print("🚀  RUNNING COMPLETE PIPELINE")
@@ -156,17 +138,11 @@ def run_all(skip_prompt=False):
     print("  3. Generate visualizations")
     print()
 
-    if not skip_prompt:
-        proceed = input("Ready to proceed? (y/n): ").strip().lower()
-        if proceed != "y":
-            print("Pipeline cancelled.")
-            return
-
     # Step 1: Download
     print("\n\n" + "=" * 70)
     print("STEP 1/3: DOWNLOADING IMAGES")
     print("=" * 70)
-    success = download_images(skip_prompt=True)
+    success = download_images()
     if not success:
         print("\n⚠️  Pipeline stopped due to download failure")
         return
@@ -175,7 +151,7 @@ def run_all(skip_prompt=False):
     print("\n\n" + "=" * 70)
     print("STEP 2/3: LABELING IMAGES")
     print("=" * 70)
-    success = label_images(skip_prompt=True)
+    success = label_images()
     if not success:
         print("\n⚠️  Pipeline stopped due to labeling failure")
         return
@@ -184,7 +160,7 @@ def run_all(skip_prompt=False):
     print("\n\n" + "=" * 70)
     print("STEP 3/3: GENERATING VISUALIZATIONS")
     print("=" * 70)
-    success = generate_visualizations(skip_prompt=True)
+    success = generate_visualizations()
     if not success:
         print("\n⚠️  Pipeline completed with visualization errors")
         return
@@ -207,7 +183,7 @@ Examples:
   %(prog)s --label            Label/classify images
   %(prog)s --visualize        Generate visualizations
   %(prog)s --all              Run all steps in sequence
-  %(prog)s -d -l -v           Same as --all (using short options)
+  %(prog)s -d -l -v           Run download, label, and visualize
         """,
     )
 
@@ -239,13 +215,6 @@ Examples:
         help="Run all steps in sequence (download, label, visualize)",
     )
 
-    parser.add_argument(
-        "-y",
-        "--yes",
-        action="store_true",
-        help="Skip confirmation prompts (auto-proceed)",
-    )
-
     return parser.parse_args()
 
 
@@ -260,21 +229,19 @@ def main():
         # Command-line mode: run specified actions
         print_header()
 
-        skip_prompt = args.yes
-
         if args.all:
             # Run all steps in sequence
-            run_all(skip_prompt=skip_prompt)
+            run_all()
         else:
             # Run individual steps as specified
             if args.download:
-                download_images(skip_prompt=skip_prompt)
+                download_images()
 
             if args.label:
-                label_images(skip_prompt=skip_prompt)
+                label_images()
 
             if args.visualize:
-                generate_visualizations(skip_prompt=skip_prompt)
+                generate_visualizations()
 
         print()
     else:
