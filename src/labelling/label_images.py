@@ -478,7 +478,7 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
 
     Tries macOS Vision first, then falls back to EasyOCR if:
     1. macOS Vision fails to extract text, OR
-    2. Extracted text cannot be parsed (no timestamp AND no temperature found)
+    2. Extracted text cannot be fully parsed (missing timestamp OR temperature)
 
     Parameters
     ----------
@@ -538,20 +538,20 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
             # Try to parse the extracted text
             metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
 
-            # Check if parsing was successful (at least one field extracted)
+            # Check if parsing was successful (both fields extracted)
             if (
                 metadata["timestamp"] is not None
-                or metadata["temperature_celsius"] is not None
+                and metadata["temperature_celsius"] is not None
             ):
                 return metadata
             else:
-                # Parsing failed - no data extracted
+                # Parsing failed - at least one field missing
                 if enable_ocr_fallback and EASYOCR_AVAILABLE:
                     print(
-                        "    macOS Vision text could not be parsed, trying EasyOCR fallback..."
+                        "    macOS Vision text incomplete, trying EasyOCR fallback..."
                     )
                 else:
-                    return metadata  # Return empty result
+                    return metadata  # Return partial result
 
         except Exception as e:
             if enable_ocr_fallback and EASYOCR_AVAILABLE:
