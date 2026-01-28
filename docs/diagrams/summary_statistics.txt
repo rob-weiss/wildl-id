@@ -1,11 +1,11 @@
 WILDLIFE CAMERA ACTIVITY ANALYSIS
 ======================================================================
 
-Total Images: 29955
-Images with Timestamps: 29916
+Total Images: 26595
+Images with Timestamps: 25773
 Unique Species: 9
 Unique Locations: 9
-Date Range: 2024-10-02 to 2026-01-19
+Date Range: 2024-10-02 to 2026-01-28
 Most Common Species: roe deer
 Most Active Location: Sauenburg
 
@@ -13,26 +13,26 @@ Most Active Location: Sauenburg
 
 SPECIES COUNTS:
 class
-roe deer     24036
-wild boar     2900
-human         1099
-badger         805
-jay            539
-fox            385
-dog             85
+roe deer     21297
+wild boar     2627
+human          967
+badger         710
+jay            479
+fox            348
 squirrel        71
+dog             61
 cat             35
 
 ======================================================================
 
 LOCATION COUNTS:
 location_id
-Sauenburg       8384
-Sandweg         5843
-Waldböckchen    5229
-Heliossitz      3135
-Amphitheater    3037
-Kirschensitz    2090
-Brunftplatz     1113
-Alusitz          789
-Suhle            335
+Sauenburg       7260
+Sandweg         5225
+Waldböckchen    4758
+Heliossitz      3047
+Amphitheater    2411
+Kirschensitz    1973
+Brunftplatz      897
+Alusitz          700
+Suhle            324
