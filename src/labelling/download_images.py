@@ -546,12 +546,17 @@ def main():
         print(f"  Filename: {original_filename}")
         print(f"  Size: {width}x{height}px")
 
-        # Use camera name for folder organization
-        camera_folder_name = camera_name if camera_name else "Unknown"
+        # Fail if location is Unknown
+        if not camera_name or camera_name == "Unknown":
+            print("  ✗ Error: Camera location is 'Unknown'. Exiting.")
+            import sys
 
+            sys.exit(1)
+
+        # Use camera name for folder organization
+        camera_folder_name = camera_name
         # Sanitize camera name for folder
         camera_folder_name = re.sub(r'[<>:"/\\|?*]', "_", camera_folder_name)
-
         # Create camera-specific subfolder
         camera_path = download_dir / camera_folder_name
         camera_path.mkdir(parents=True, exist_ok=True)
