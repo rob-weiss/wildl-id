@@ -38,12 +38,33 @@ from tqdm import tqdm
 
 model = "qwen3-vl:235b-a22b-thinking"
 
-client = Client(
-    host="http://localhost:11434",
-)
 
-client.list()
-client.show(model=model)
+client = Client(host="http://localhost:11434")
+
+
+# Check if model exists, pull if not
+def ensure_model_exists(client, model):
+    # Ollama client.list() returns a list of tuples or dicts, handle both
+    model_list = client.list()
+    # Try tuple (name, ...), fallback to dict
+    models = []
+    for m in model_list:
+        if isinstance(m, dict) and "name" in m:
+            models.append(m["name"])
+        elif isinstance(m, (list, tuple)) and len(m) > 0:
+            models.append(m[0])
+        else:
+            continue
+    if model not in models:
+        print(f"Model '{model}' not found. Pulling from Ollama...")
+        client.pull(model=model)
+        print(f"Model '{model}' pulled successfully.")
+    else:
+        print(f"Model '{model}' already exists.")
+
+
+ensure_model_exists(client, model)
+
 image_dir = Path(os.environ["HOME"] + "/mnt/wildlife")
 
 
