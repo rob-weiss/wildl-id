@@ -1,0 +1,16 @@
+name: wildlife
+channels:
+  - conda-forge
+  - anaconda
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - setuptools
+  - pip:
+      - pandas
+      - matplotlib
+      - opencv-python
+      - python-dateutil
+      - torch
+      - PytorchWildlife
