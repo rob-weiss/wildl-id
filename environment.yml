@@ -7,9 +7,17 @@ dependencies:
   - python=3.10
   - pip
   - pip:
+      - setuptools<71
       - pandas
       - matplotlib
       - opencv-python
       - python-dateutil
       - torch
       - PytorchWildlife
+      - lightning
+      - omegaconf
+      - pyobjc-framework-Vision
+      - pyobjc-framework-Quartz
+      - easyocr
+      - ephem
+      - astral
