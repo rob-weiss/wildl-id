@@ -176,3 +176,5 @@ cython_debug/
 labelling_results*
 docs/diagrams/*.png
 models/*
+
+data/
