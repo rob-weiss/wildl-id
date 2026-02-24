@@ -90,20 +90,25 @@ enable_ocr_fallback = True
 reprocess_incomplete = False
 
 # OCR Framework availability checks
-try:
-    import Vision
-    from Foundation import NSURL
-    from Quartz import CIImage
+# macOS Vision is only available on macOS — skip the import entirely on other platforms
+# to avoid "ModuleNotFoundError: No module named 'objc'" on Windows/Linux.
+if sys.platform == "darwin":
+    try:
+        import Vision
+        from Foundation import NSURL
+        from Quartz import CIImage
 
-    MACOS_VISION_AVAILABLE = True
-except ImportError:
+        MACOS_VISION_AVAILABLE = True
+    except ImportError:
+        MACOS_VISION_AVAILABLE = False
+        print("Warning: macOS Vision not available (PyObjC not installed)")
+        if enable_ocr and not enable_ocr_fallback:
+            print("Error: OCR enabled but no OCR framework available. Install with:")
+            print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
+            print("  or enable EasyOCR fallback: pip install easyocr")
+            sys.exit(1)
+else:
     MACOS_VISION_AVAILABLE = False
-    print("Warning: macOS Vision not available (PyObjC not installed)")
-    if enable_ocr and not enable_ocr_fallback:
-        print("Error: OCR enabled but no OCR framework available. Install with:")
-        print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
-        print("  or enable EasyOCR fallback: pip install easyocr")
-        sys.exit(1)
 
 # Try to import EasyOCR for fallback
 try:
