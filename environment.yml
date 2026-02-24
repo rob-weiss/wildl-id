@@ -16,8 +16,8 @@ dependencies:
       - PytorchWildlife
       - lightning
       - omegaconf
-      - pyobjc-framework-Vision
-      - pyobjc-framework-Quartz
+      - pyobjc-framework-Vision; sys_platform == "darwin"
+      - pyobjc-framework-Quartz; sys_platform == "darwin"
       - easyocr
       - ephem
       - astral
