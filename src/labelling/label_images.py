@@ -987,20 +987,20 @@ def process_images_with_pytorch_wildlife(camera=None):
         try:
             with Image.open(image_path) as img_pil:
                 img_w, img_h = img_pil.size
-    
+
                 # Run single image detection (suppress verbose output)
                 with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                     detection_result = detection_model.single_image_detection(
                         str(image_path), det_conf_thres=0.6
                     )
-    
+
                 # Get detections
                 img_class = "none"
                 box = None
                 confidence = 0.0
                 classification_confidence = None
                 classified_species = None  # Store the actual classified species
-    
+
                 if detection_result and "detections" in detection_result:
                     detections = detection_result["detections"]
                     if detections and len(detections) > 0:
@@ -1011,13 +1011,13 @@ def process_images_with_pytorch_wildlife(camera=None):
                             confidences = detections.confidence
                             best_idx = confidences.argmax()
                             confidence = float(confidences[best_idx])
-    
+
                             # Get class ID
                             class_id = int(detections.class_id[best_idx])
                             megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
                                 class_id, "unknown"
                             )
-    
+
                             # Get bounding box in format [x_min, y_min, x_max, y_max]
                             bbox_xyxy = detections.xyxy[best_idx]
                             # Convert to [x_min, y_min, width, height] normalized
@@ -1045,7 +1045,7 @@ def process_images_with_pytorch_wildlife(camera=None):
                                 # Skip this detection if we can't parse it
                                 megadetector_class = None
                                 bbox = None
-    
+
                         # If it's an animal and we have classification enabled, classify the species
                         if (
                             megadetector_class == "animal"
@@ -1054,16 +1054,14 @@ def process_images_with_pytorch_wildlife(camera=None):
                         ):
                             # Crop the detected animal from already-loaded image
                             cropped_img = crop_detection(img_pil, bbox)
-    
+
                             if cropped_img is not None:
                                 try:
                                     # Run classification on the cropped image
-                                    classification_result = (
-                                        classification_model.single_image_classification(
-                                            np.array(cropped_img), img_id=image_file
-                                        )
+                                    classification_result = classification_model.single_image_classification(
+                                        np.array(cropped_img), img_id=image_file
                                     )
-    
+
                                     # Get top prediction - classification_result is already a dict, not a list!
                                     if classification_result and isinstance(
                                         classification_result, dict
@@ -1074,12 +1072,12 @@ def process_images_with_pytorch_wildlife(camera=None):
                                         classification_confidence = (
                                             classification_result.get("confidence", 0.0)
                                         )
-    
+
                                         # Map the classifier output to our categories
                                         classified_species = map_classifier_to_wildlife(
                                             classifier_class
                                         )
-    
+
                                         # Always use the classified species, even if confidence is low
                                         # This way users can see what the model thinks it is
                                         img_class = classified_species
@@ -1088,7 +1086,7 @@ def process_images_with_pytorch_wildlife(camera=None):
                                 except Exception as e:
                                     print(f"    Classification error: {e}")
                                     import traceback
-    
+
                                     img_class = "animal"
                                 finally:
                                     # Close the cropped image to free memory
@@ -1101,20 +1099,22 @@ def process_images_with_pytorch_wildlife(camera=None):
                             img_class = "vehicle"
                         elif megadetector_class is not None:
                             img_class = "unknown"
-    
+
                         # Convert bbox to YOLO format [x_center, y_center, width, height]
                         if bbox is not None:
                             x_min, y_min, width, height = bbox
                             x_center = x_min + width / 2
                             y_center = y_min + height / 2
                             box = [x_center, y_center, width, height]
-    
+
                 # Detect lighting using already-loaded PIL image (inside with block)
                 lighting, brightness_value = detect_lighting(img_pil)
-    
+
                 # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
                 if enable_ocr:
-                    metadata = extract_metadata_ocr(image_path, ocr_failures_log, camera)
+                    metadata = extract_metadata_ocr(
+                        image_path, ocr_failures_log, camera
+                    )
                 else:
                     metadata = {"timestamp": None, "temperature_celsius": None}
         except Exception as e:
