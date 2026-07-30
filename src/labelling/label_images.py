@@ -357,7 +357,8 @@ def extract_text_from_image(image_path):
             if not hasattr(extract_text_from_image, "easyocr_reader"):
                 print("    Initializing EasyOCR reader (one-time setup)...")
                 extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"], gpu=torch.cuda.is_available() or torch.backends.mps.is_available()
+                    ["en"],
+                    gpu=torch.cuda.is_available() or torch.backends.mps.is_available(),
                 )
 
             # Read text from image
@@ -589,7 +590,8 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
             if not hasattr(extract_text_from_image, "easyocr_reader"):
                 print("    Initializing EasyOCR reader (one-time setup)...")
                 extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"], gpu=torch.cuda.is_available() or torch.backends.mps.is_available()
+                    ["en"],
+                    gpu=torch.cuda.is_available() or torch.backends.mps.is_available(),
                 )
 
             # Read text from image
@@ -982,139 +984,142 @@ def process_images_with_pytorch_wildlife(camera=None):
         image_path = img_info["path"]
 
         # Load image once and reuse for multiple operations (with statement ensures cleanup)
-        with Image.open(image_path) as img_pil:
-            img_w, img_h = img_pil.size
-
-            # Run single image detection (suppress verbose output)
-            with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-                detection_result = detection_model.single_image_detection(
-                    str(image_path), det_conf_thres=0.6
-                )
-
-            # Get detections
-            img_class = "none"
-            box = None
-            confidence = 0.0
-            classification_confidence = None
-            classified_species = None  # Store the actual classified species
-
-            if detection_result and "detections" in detection_result:
-                detections = detection_result["detections"]
-                if detections and len(detections) > 0:
-                    # PyTorch Wildlife returns detections as a supervision Detections object
-                    # Access the underlying arrays
-                    if hasattr(detections, "confidence"):
-                        # supervision.Detections object
-                        confidences = detections.confidence
-                        best_idx = confidences.argmax()
-                        confidence = float(confidences[best_idx])
-
-                        # Get class ID
-                        class_id = int(detections.class_id[best_idx])
-                        megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
-                            class_id, "unknown"
-                        )
-
-                        # Get bounding box in format [x_min, y_min, x_max, y_max]
-                        bbox_xyxy = detections.xyxy[best_idx]
-                        # Convert to [x_min, y_min, width, height] normalized
-                        # Use already loaded image dimensions
-                        x_min = float(bbox_xyxy[0]) / img_w
-                        y_min = float(bbox_xyxy[1]) / img_h
-                        x_max = float(bbox_xyxy[2]) / img_w
-                        y_max = float(bbox_xyxy[3]) / img_h
-                        width = x_max - x_min
-                        height = y_max - y_min
-                        bbox = [x_min, y_min, width, height]
-                    else:
-                        # Fallback: try to handle as dict/list
-                        try:
-                            best_detection = max(
-                                detections, key=lambda x: x.get("conf", 0)
-                            )
-                            confidence = float(best_detection["conf"])
-                            class_id = int(best_detection["category"])
+        try:
+            with Image.open(image_path) as img_pil:
+                img_w, img_h = img_pil.size
+    
+                # Run single image detection (suppress verbose output)
+                with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+                    detection_result = detection_model.single_image_detection(
+                        str(image_path), det_conf_thres=0.6
+                    )
+    
+                # Get detections
+                img_class = "none"
+                box = None
+                confidence = 0.0
+                classification_confidence = None
+                classified_species = None  # Store the actual classified species
+    
+                if detection_result and "detections" in detection_result:
+                    detections = detection_result["detections"]
+                    if detections and len(detections) > 0:
+                        # PyTorch Wildlife returns detections as a supervision Detections object
+                        # Access the underlying arrays
+                        if hasattr(detections, "confidence"):
+                            # supervision.Detections object
+                            confidences = detections.confidence
+                            best_idx = confidences.argmax()
+                            confidence = float(confidences[best_idx])
+    
+                            # Get class ID
+                            class_id = int(detections.class_id[best_idx])
                             megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
                                 class_id, "unknown"
                             )
-                            bbox = best_detection["bbox"]
-                        except:
-                            # Skip this detection if we can't parse it
-                            megadetector_class = None
-                            bbox = None
-
-                    # If it's an animal and we have classification enabled, classify the species
-                    if (
-                        megadetector_class == "animal"
-                        and classification_model is not None
-                        and bbox is not None
-                    ):
-                        # Crop the detected animal from already-loaded image
-                        cropped_img = crop_detection(img_pil, bbox)
-
-                        if cropped_img is not None:
-                            try:
-                                # Run classification on the cropped image
-                                classification_result = (
-                                    classification_model.single_image_classification(
-                                        np.array(cropped_img), img_id=image_file
-                                    )
-                                )
-
-                                # Get top prediction - classification_result is already a dict, not a list!
-                                if classification_result and isinstance(
-                                    classification_result, dict
-                                ):
-                                    classifier_class = classification_result.get(
-                                        "prediction", "unknown"
-                                    )
-                                    classification_confidence = (
-                                        classification_result.get("confidence", 0.0)
-                                    )
-
-                                    # Map the classifier output to our categories
-                                    classified_species = map_classifier_to_wildlife(
-                                        classifier_class
-                                    )
-
-                                    # Always use the classified species, even if confidence is low
-                                    # This way users can see what the model thinks it is
-                                    img_class = classified_species
-                                else:
-                                    img_class = "animal"
-                            except Exception as e:
-                                print(f"    Classification error: {e}")
-                                import traceback
-
-                                img_class = "animal"
-                            finally:
-                                # Close the cropped image to free memory
-                                cropped_img.close()
+    
+                            # Get bounding box in format [x_min, y_min, x_max, y_max]
+                            bbox_xyxy = detections.xyxy[best_idx]
+                            # Convert to [x_min, y_min, width, height] normalized
+                            # Use already loaded image dimensions
+                            x_min = float(bbox_xyxy[0]) / img_w
+                            y_min = float(bbox_xyxy[1]) / img_h
+                            x_max = float(bbox_xyxy[2]) / img_w
+                            y_max = float(bbox_xyxy[3]) / img_h
+                            width = x_max - x_min
+                            height = y_max - y_min
+                            bbox = [x_min, y_min, width, height]
                         else:
-                            img_class = "animal"
-                    elif megadetector_class == "person":
-                        img_class = "human"
-                    elif megadetector_class == "vehicle":
-                        img_class = "vehicle"
-                    elif megadetector_class is not None:
-                        img_class = "unknown"
-
-                    # Convert bbox to YOLO format [x_center, y_center, width, height]
-                    if bbox is not None:
-                        x_min, y_min, width, height = bbox
-                        x_center = x_min + width / 2
-                        y_center = y_min + height / 2
-                        box = [x_center, y_center, width, height]
-
-            # Detect lighting using already-loaded PIL image (inside with block)
-            lighting, brightness_value = detect_lighting(img_pil)
-
-            # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
-            if enable_ocr:
-                metadata = extract_metadata_ocr(image_path, ocr_failures_log, camera)
-            else:
-                metadata = {"timestamp": None, "temperature_celsius": None}
-        # Image is automatically closed here when exiting the with block
+                            # Fallback: try to handle as dict/list
+                            try:
+                                best_detection = max(
+                                    detections, key=lambda x: x.get("conf", 0)
+                                )
+                                confidence = float(best_detection["conf"])
+                                class_id = int(best_detection["category"])
+                                megadetector_class = MEGADETECTOR_CLASS_NAMES.get(
+                                    class_id, "unknown"
+                                )
+                                bbox = best_detection["bbox"]
+                            except:
+                                # Skip this detection if we can't parse it
+                                megadetector_class = None
+                                bbox = None
+    
+                        # If it's an animal and we have classification enabled, classify the species
+                        if (
+                            megadetector_class == "animal"
+                            and classification_model is not None
+                            and bbox is not None
+                        ):
+                            # Crop the detected animal from already-loaded image
+                            cropped_img = crop_detection(img_pil, bbox)
+    
+                            if cropped_img is not None:
+                                try:
+                                    # Run classification on the cropped image
+                                    classification_result = (
+                                        classification_model.single_image_classification(
+                                            np.array(cropped_img), img_id=image_file
+                                        )
+                                    )
+    
+                                    # Get top prediction - classification_result is already a dict, not a list!
+                                    if classification_result and isinstance(
+                                        classification_result, dict
+                                    ):
+                                        classifier_class = classification_result.get(
+                                            "prediction", "unknown"
+                                        )
+                                        classification_confidence = (
+                                            classification_result.get("confidence", 0.0)
+                                        )
+    
+                                        # Map the classifier output to our categories
+                                        classified_species = map_classifier_to_wildlife(
+                                            classifier_class
+                                        )
+    
+                                        # Always use the classified species, even if confidence is low
+                                        # This way users can see what the model thinks it is
+                                        img_class = classified_species
+                                    else:
+                                        img_class = "animal"
+                                except Exception as e:
+                                    print(f"    Classification error: {e}")
+                                    import traceback
+    
+                                    img_class = "animal"
+                                finally:
+                                    # Close the cropped image to free memory
+                                    cropped_img.close()
+                            else:
+                                img_class = "animal"
+                        elif megadetector_class == "person":
+                            img_class = "human"
+                        elif megadetector_class == "vehicle":
+                            img_class = "vehicle"
+                        elif megadetector_class is not None:
+                            img_class = "unknown"
+    
+                        # Convert bbox to YOLO format [x_center, y_center, width, height]
+                        if bbox is not None:
+                            x_min, y_min, width, height = bbox
+                            x_center = x_min + width / 2
+                            y_center = y_min + height / 2
+                            box = [x_center, y_center, width, height]
+    
+                # Detect lighting using already-loaded PIL image (inside with block)
+                lighting, brightness_value = detect_lighting(img_pil)
+    
+                # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
+                if enable_ocr:
+                    metadata = extract_metadata_ocr(image_path, ocr_failures_log, camera)
+                else:
+                    metadata = {"timestamp": None, "temperature_celsius": None}
+        except Exception as e:
+            print(f"    ⚠️  Skipping {image_file}: {e}")
+            continue
 
         result_dict = {
             "location_id": location_id,
