@@ -376,7 +376,7 @@ def extract_text_from_image(image_path):
     return ""
 
 
-def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
+def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None, camera=None):
     """Parse timestamp and temperature from camera metadata text.
 
     Supported formats:
@@ -446,8 +446,11 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
                         f.write(f"OCR Text: {normalized_text}\n")
                         f.write(f"Original: {ocr_text}\n")
 
-        # Detect camera brand from OCR text to select the correct timestamp format
-        is_seissiger = "SEISSIGER" in ocr_text.upper()
+        # Explicit camera arg takes precedence; fall back to brand name in OCR text
+        if camera is not None:
+            is_seissiger = camera.lower() == "seissiger"
+        else:
+            is_seissiger = "SEISSIGER" in ocr_text.upper()
 
         # Parse timestamp
         # Zeiss format: weekday DD.MM.YYYY HH:MM:SS (e.g. "Mo 10.11.2025 07:41:41")
@@ -494,7 +497,7 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
     }
 
 
-def extract_metadata_ocr(image_path, ocr_failures_log=None):
+def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
     """Extract timestamp and temperature from image using macOS OCR with EasyOCR fallback.
 
     Tries macOS Vision first, then falls back to EasyOCR if:
@@ -557,7 +560,7 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
                 raise Exception("Empty text result")
 
             # Try to parse the extracted text
-            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log, camera)
 
             # Check if parsing was successful (both fields extracted)
             if (
@@ -599,7 +602,7 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None):
             ocr_text = "\n".join(result)
 
             # Parse the EasyOCR result
-            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log)
+            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log, camera)
 
             # Check if EasyOCR parsing was successful
             missing_fields = []
@@ -756,7 +759,7 @@ def show_image_with_detection(
     plt.close(fig)
 
 
-def process_images_with_pytorch_wildlife():
+def process_images_with_pytorch_wildlife(camera=None):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
     Returns
@@ -1107,7 +1110,7 @@ def process_images_with_pytorch_wildlife():
 
             # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
             if enable_ocr:
-                metadata = extract_metadata_ocr(image_path, ocr_failures_log)
+                metadata = extract_metadata_ocr(image_path, ocr_failures_log, camera)
             else:
                 metadata = {"timestamp": None, "temperature_celsius": None}
         # Image is automatically closed here when exiting the with block

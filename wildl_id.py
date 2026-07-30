@@ -75,7 +75,7 @@ def download_images():
         return False
 
 
-def label_images():
+def label_images(camera=None):
     """Label and classify images using MegaDetector."""
     print("\n" + "=" * 70)
     print("🏷️  LABELING IMAGES")
@@ -87,7 +87,7 @@ def label_images():
     print()
 
     try:
-        process_images_with_pytorch_wildlife()
+        process_images_with_pytorch_wildlife(camera=camera)
         print("\n✓ Labeling completed successfully!")
         return True
     except Exception as e:
@@ -126,7 +126,7 @@ def generate_visualizations():
         return False
 
 
-def run_all():
+def run_all(camera=None):
     """Run all steps in sequence."""
     print("\n" + "=" * 70)
     print("🚀  RUNNING COMPLETE PIPELINE")
@@ -151,7 +151,7 @@ def run_all():
     print("\n\n" + "=" * 70)
     print("STEP 2/3: LABELING IMAGES")
     print("=" * 70)
-    success = label_images()
+    success = label_images(camera=camera)
     if not success:
         print("\n⚠️  Pipeline stopped due to labeling failure")
         return
@@ -184,7 +184,17 @@ Examples:
   %(prog)s --visualize        Generate visualizations
   %(prog)s --all              Run all steps in sequence
   %(prog)s -d -l -v           Run download, label, and visualize
+  %(prog)s -l --camera seissiger   Label with explicit Seissiger camera format
+  %(prog)s -l --camera zeiss       Label with explicit Zeiss camera format
         """,
+    )
+
+    parser.add_argument(
+        "-c",
+        "--camera",
+        choices=["zeiss", "seissiger"],
+        default=None,
+        help="Camera brand for timestamp parsing (default: auto-detect from OCR text)",
     )
 
     parser.add_argument(
@@ -231,14 +241,14 @@ def main():
 
         if args.all:
             # Run all steps in sequence
-            run_all()
+            run_all(camera=args.camera)
         else:
             # Run individual steps as specified
             if args.download:
                 download_images()
 
             if args.label:
-                label_images()
+                label_images(camera=args.camera)
 
             if args.visualize:
                 generate_visualizations()
