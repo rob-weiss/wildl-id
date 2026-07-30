@@ -1124,7 +1124,7 @@ def process_images_with_pytorch_wildlife(camera=None):
                 else:
                     metadata = {"timestamp": None, "temperature_celsius": None}
         except Exception as e:
-            print(f"    ⚠️  Skipping {image_file}: {e}")
+            print(f"    ⚠️  Skipping {image_path}: {e}")
             continue
 
         result_dict = {
