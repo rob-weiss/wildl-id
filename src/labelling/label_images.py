@@ -357,7 +357,7 @@ def extract_text_from_image(image_path):
             if not hasattr(extract_text_from_image, "easyocr_reader"):
                 print("    Initializing EasyOCR reader (one-time setup)...")
                 extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"], gpu=torch.cuda.is_available()
+                    ["en"], gpu=torch.cuda.is_available() or torch.backends.mps.is_available()
                 )
 
             # Read text from image
@@ -589,7 +589,7 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
             if not hasattr(extract_text_from_image, "easyocr_reader"):
                 print("    Initializing EasyOCR reader (one-time setup)...")
                 extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"], gpu=torch.cuda.is_available()
+                    ["en"], gpu=torch.cuda.is_available() or torch.backends.mps.is_available()
                 )
 
             # Read text from image
