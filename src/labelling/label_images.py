@@ -1124,7 +1124,11 @@ def process_images_with_pytorch_wildlife(camera=None):
                 else:
                     metadata = {"timestamp": None, "temperature_celsius": None}
         except Exception as e:
-            print(f"    ⚠️  Skipping {image_path}: {e}")
+            try:
+                image_path.unlink()
+                print(f"    🗑️  Deleted corrupt image: {image_path} ({e})")
+            except Exception as del_err:
+                print(f"    ⚠️  Could not delete {image_path}: {del_err}")
             continue
 
         result_dict = {
