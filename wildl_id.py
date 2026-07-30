@@ -193,8 +193,8 @@ Examples:
         "-c",
         "--camera",
         choices=["zeiss", "seissiger"],
-        default=None,
-        help="Camera brand for timestamp parsing (default: auto-detect from OCR text)",
+        default="seissiger",
+        help="Camera brand for timestamp parsing (default: seissiger)",
     )
 
     parser.add_argument(

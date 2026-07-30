@@ -376,20 +376,22 @@ def extract_text_from_image(image_path):
     return ""
 
 
-def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None, camera=None):
+def parse_camera_metadata(
+    ocr_text, image_path=None, ocr_failures_log=None, camera="seissiger"
+):
     """Parse timestamp and temperature from camera metadata text.
 
     Supported formats:
+    SEISSIGER (slash-separated, DD/MM/YYYY) — default:
+      SEISSIGER
+      WILDKAMERA®
+      10/08/2024 16:28:22
+      • 025°C
     ZEISS (dot-separated, weekday prefix):
       ZEISS
       AMPHIKANZEL
       • 3°C
       Mo 10.11.2025 07:41:41
-    SEISSIGER (slash-separated, DD/MM/YYYY):
-      SEISSIGER
-      WILDKAMERA®
-      10/08/2024 16:28:22
-      • 025°C
 
     Parameters
     ----------
@@ -446,15 +448,10 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None, came
                         f.write(f"OCR Text: {normalized_text}\n")
                         f.write(f"Original: {ocr_text}\n")
 
-        # Explicit camera arg takes precedence; fall back to brand name in OCR text
-        if camera is not None:
-            is_seissiger = camera.lower() == "seissiger"
-        else:
-            is_seissiger = "SEISSIGER" in ocr_text.upper()
-
         # Parse timestamp
         # Zeiss format: weekday DD.MM.YYYY HH:MM:SS (e.g. "Mo 10.11.2025 07:41:41")
         # Seissiger format: DD/MM/YYYY HH:MM:SS  (e.g. "10/08/2024 16:28:22")
+        is_seissiger = camera.lower() == "seissiger"
         if is_seissiger:
             date_match = re.search(
                 r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
@@ -560,7 +557,9 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
                 raise Exception("Empty text result")
 
             # Try to parse the extracted text
-            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log, camera)
+            metadata = parse_camera_metadata(
+                ocr_text, image_path, ocr_failures_log, camera
+            )
 
             # Check if parsing was successful (both fields extracted)
             if (
@@ -602,7 +601,9 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
             ocr_text = "\n".join(result)
 
             # Parse the EasyOCR result
-            metadata = parse_camera_metadata(ocr_text, image_path, ocr_failures_log, camera)
+            metadata = parse_camera_metadata(
+                ocr_text, image_path, ocr_failures_log, camera
+            )
 
             # Check if EasyOCR parsing was successful
             missing_fields = []
