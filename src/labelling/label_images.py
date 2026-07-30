@@ -425,12 +425,12 @@ def parse_camera_metadata(
             normalized_text.replace("б", "6").replace("С", "C").replace("з", "3")
         )
 
-        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C", "025°C")
-        # Match the number immediately before °C or C, regardless of what precedes it
+        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C", "025°C", "006*C")
+        # Match the number immediately before °C, *C, or C, regardless of what precedes it
         # Uses \D (non-digit) or start of string to avoid matching numbers that aren't temperatures
-        # Allow optional leading zeros (Seissiger cameras emit e.g. "025°C")
+        # Allow optional leading zeros and asterisk in place of degree symbol
         temp_match = re.search(
-            r"(?:^|\D)-?0*(\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
+            r"(?:^|\D)-?0*(\d{1,2})\s*(?:[°*]?C|°)", normalized_text, re.IGNORECASE
         )
         if temp_match:
             temperature = int(temp_match.group(1))
@@ -451,11 +451,11 @@ def parse_camera_metadata(
 
         # Parse timestamp
         # Zeiss format: weekday DD.MM.YYYY HH:MM:SS (e.g. "Mo 10.11.2025 07:41:41")
-        # Seissiger format: DD/MM/YYYY HH:MM:SS  (e.g. "10/08/2024 16:28:22")
+        # Seissiger format: DD/MM/YYYY HH:MM:SS (colons, dots, or asterisks as separators)
         is_seissiger = camera.lower() == "seissiger"
         if is_seissiger:
             date_match = re.search(
-                r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
+                r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2})[:.* ](\d{2})[:.* ](\d{2})",
                 normalized_text,
             )
         else:
