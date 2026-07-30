@@ -379,11 +379,17 @@ def extract_text_from_image(image_path):
 def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
     """Parse timestamp and temperature from camera metadata text.
 
-    Expected format:
-    ZEISS
-    AMPHIKANZEL
-    • 3°C
-    Mo 10.11.2025 07:41:41
+    Supported formats:
+    ZEISS (dot-separated, weekday prefix):
+      ZEISS
+      AMPHIKANZEL
+      • 3°C
+      Mo 10.11.2025 07:41:41
+    SEISSIGER (slash-separated, DD/MM/YYYY):
+      SEISSIGER
+      WILDKAMERA®
+      10/08/2024 16:28:22
+      • 025°C
 
     Parameters
     ----------
@@ -416,11 +422,12 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
             normalized_text.replace("б", "6").replace("С", "C").replace("з", "3")
         )
 
-        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C")
+        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C", "025°C")
         # Match the number immediately before °C or C, regardless of what precedes it
         # Uses \D (non-digit) or start of string to avoid matching numbers that aren't temperatures
+        # Allow optional leading zeros (Seissiger cameras emit e.g. "025°C")
         temp_match = re.search(
-            r"(?:^|\D)(-?\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
+            r"(?:^|\D)-?0*(\d{1,2})\s*(?:°C?|C)", normalized_text, re.IGNORECASE
         )
         if temp_match:
             temperature = int(temp_match.group(1))
@@ -439,14 +446,23 @@ def parse_camera_metadata(ocr_text, image_path=None, ocr_failures_log=None):
                         f.write(f"OCR Text: {normalized_text}\n")
                         f.write(f"Original: {ocr_text}\n")
 
-        # Parse timestamp (e.g., "Mo 10.11.2025 07:41:41" or "Sa 29.11.2025 08:15:47")
-        # Format: weekday DD.MM.YYYY HH:MM:SS
-        # Allow random OCR artifacts anywhere between weekday, date, and time
-        # Use non-greedy .*? to skip any garbage including stray digits
-        date_match = re.search(
-            r"\w+\s*.*?(\d{1,2})\.(\d{1,2})\.(\d{4}).*?(\d{1,2}):(\d{2}):(\d{2})",
-            normalized_text,
-        )
+        # Detect camera brand from OCR text to select the correct timestamp format
+        is_seissiger = "SEISSIGER" in ocr_text.upper()
+
+        # Parse timestamp
+        # Zeiss format: weekday DD.MM.YYYY HH:MM:SS (e.g. "Mo 10.11.2025 07:41:41")
+        # Seissiger format: DD/MM/YYYY HH:MM:SS  (e.g. "10/08/2024 16:28:22")
+        if is_seissiger:
+            date_match = re.search(
+                r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})",
+                normalized_text,
+            )
+        else:
+            # Zeiss: allow OCR artifacts between weekday abbreviation, date, and time
+            date_match = re.search(
+                r"\w+\s*.*?(\d{1,2})\.(\d{1,2})\.(\d{4}).*?(\d{1,2}):(\d{2}):(\d{2})",
+                normalized_text,
+            )
         if date_match:
             day, month, year, hour, minute, second = date_match.groups()
             try:
