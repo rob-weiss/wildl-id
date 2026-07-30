@@ -985,6 +985,12 @@ def process_images_with_pytorch_wildlife(camera=None):
 
         # Load image once and reuse for multiple operations (with statement ensures cleanup)
         try:
+            # Detect incomplete JPEGs (missing FF D9 end marker) before PIL silently loads them
+            if image_path.suffix.lower() in (".jpg", ".jpeg"):
+                with open(image_path, "rb") as _f:
+                    _f.seek(-2, 2)
+                    if _f.read(2) != b"\xff\xd9":
+                        raise OSError("corrupt JPEG: premature end of data")
             with Image.open(image_path) as img_pil:
                 img_w, img_h = img_pil.size
 
