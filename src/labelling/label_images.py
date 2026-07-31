@@ -762,7 +762,7 @@ def show_image_with_detection(
     plt.close(fig)
 
 
-def process_images_with_pytorch_wildlife(camera=None):
+def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
     Returns
@@ -770,6 +770,10 @@ def process_images_with_pytorch_wildlife(camera=None):
     None
         Saves results to CSV and parquet files.
     """
+    # Determine whether to reprocess incomplete rows for this run.
+    # Keep backward compatibility with the module-level default when flag is not set.
+    reprocess_current_run = reprocess_incomplete or reprocess_missing
+
     # Determine device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if torch.backends.mps.is_available():
@@ -927,7 +931,7 @@ def process_images_with_pytorch_wildlife(camera=None):
         )
         complete_df = existing_df[complete_mask]
 
-        if reprocess_incomplete:
+        if reprocess_current_run:
             # Mark only complete entries as processed; incomplete ones will be reprocessed
             processed_images = set(
                 zip(complete_df["location_id"], complete_df["image_file"])
