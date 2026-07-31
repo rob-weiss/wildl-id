@@ -446,6 +446,7 @@ def parse_camera_metadata(
                 if image_path and ocr_failures_log:
                     with open(ocr_failures_log, "a", encoding="utf-8") as f:
                         f.write(f"\n[TEMP FAIL] {image_path.name}\n")
+                        f.write(f"Image Path: {image_path.resolve()}\n")
                         f.write(f"OCR Text: {normalized_text}\n")
                         f.write(f"Original: {ocr_text}\n")
 
@@ -484,6 +485,7 @@ def parse_camera_metadata(
                 if image_path and ocr_failures_log:
                     with open(ocr_failures_log, "a", encoding="utf-8") as f:
                         f.write(f"\n[DATE FAIL] {image_path.name}\n")
+                        f.write(f"Image Path: {image_path.resolve()}\n")
                         f.write(f"OCR Text: {normalized_text}\n")
                         f.write(f"Original: {ocr_text}\n")
     except Exception as e:
