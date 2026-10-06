@@ -84,8 +84,13 @@ def main():
     print("\nFirst few rows:")
     print(df.head())
 
-    # Parse timestamps
-    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    # Parse timestamps (EXIF preferred, OCR as fallback where EXIF is missing)
+    timestamp_source = (
+        df["timestamp_exif"].fillna(df["timestamp"])
+        if "timestamp_exif" in df.columns
+        else df["timestamp"]
+    )
+    df["timestamp"] = pd.to_datetime(timestamp_source, errors="coerce")
     df["hour"] = df["timestamp"].dt.hour
     df["date"] = df["timestamp"].dt.date
     df["weekday"] = df["timestamp"].dt.day_name()
@@ -1813,8 +1818,7 @@ def main():
                     print(
                         f"  Avg minutes from sunset: {species_data['minutes_from_sunset'].mean():.1f}"
                     )
-            else:
-                print("\nNo data found for roe deer or wild boar")
+            print("\nNo data found for roe deer or wild boar")
         else:
             print("\nNo valid sunrise/sunset data available for analysis")
     else:
