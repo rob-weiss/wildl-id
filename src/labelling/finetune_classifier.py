@@ -32,6 +32,7 @@ from sklearn.metrics import balanced_accuracy_score, classification_report
 from sklearn.model_selection import StratifiedGroupKFold
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 from tqdm import tqdm
@@ -298,6 +299,7 @@ def main():
         )
     out_dir = MODELS_DIR / run_name
     out_dir.mkdir(parents=True)
+    writer = SummaryWriter(log_dir=str(out_dir / "tensorboard"))
 
     df = load_labelled_rows()
     class_names = sorted(df["manual_label"].unique())
@@ -384,6 +386,9 @@ def main():
             f"Epoch {epoch:2d}: train_loss={train_loss:.4f} val_loss={val_loss:.4f} "
             f"val_acc={val_acc:.3f} val_bal_acc={val_bal_acc:.3f}"
         )
+        writer.add_scalar("loss/train", train_loss, epoch)
+        writer.add_scalar("loss/validation", val_loss, epoch)
+        writer.flush()
         if val_bal_acc > best_score:
             best_score, best_epoch = val_bal_acc, epoch
             best_state = {
@@ -392,6 +397,7 @@ def main():
                 if k in trainable_keys
             }
 
+    writer.close()
     model.load_state_dict(best_state, strict=False)
     _, preds, targets = evaluate(model, val_loader, criterion, device)
     report = classification_report(
