@@ -1085,10 +1085,15 @@ def main():
         )
 
         def get_sun_times(date):
-            """Get sunrise and sunset as naive local times (Europe/Berlin, DST-aware)."""
+            """Get sunrise and sunset times in standard time (CET, UTC+1)."""
             try:
-                s = sun(location.observer, date=date, tzinfo=location.tzinfo)
-                return s["sunrise"].replace(tzinfo=None), s["sunset"].replace(
+                import pytz
+
+                s = sun(location.observer, date=date)
+                standard_tz = pytz.timezone("Etc/GMT-1")
+                sunrise_standard = s["sunrise"].astimezone(standard_tz)
+                sunset_standard = s["sunset"].astimezone(standard_tz)
+                return sunrise_standard.replace(tzinfo=None), sunset_standard.replace(
                     tzinfo=None
                 )
             except Exception:
@@ -1189,7 +1194,7 @@ def main():
                     )
 
                     ax_main.set_title(
-                        f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
+                        f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
                         fontsize=13,
                         fontweight="bold",
                     )
@@ -1324,7 +1329,7 @@ def main():
                 )
 
                 ax_main.set_title(
-                    f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
+                    f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
                     fontsize=13,
                     fontweight="bold",
                 )
