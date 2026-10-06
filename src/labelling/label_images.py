@@ -667,10 +667,10 @@ def in_dst_transition(dt):
     )
 
 
-def resolve_exif_timestamp(exif_ts, ocr_ts, image_path):
+def resolve_exif_timestamp(exif_ts, ocr_ts, image_path, ocr_failures_log=None):
     """Validate the EXIF timestamp against the OCR timestamp and return the value to store.
 
-    Raises ValueError if both exist and differ by more than TIMESTAMP_TOLERANCE.
+    Mismatches beyond TIMESTAMP_TOLERANCE are logged and the EXIF value is kept.
     During DST transition hours the OCR timestamp is used.
     """
     if not exif_ts or not ocr_ts:
@@ -680,9 +680,15 @@ def resolve_exif_timestamp(exif_ts, ocr_ts, image_path):
     if in_dst_transition(exif_dt) or in_dst_transition(ocr_dt):
         return ocr_ts
     if abs(exif_dt - ocr_dt) > TIMESTAMP_TOLERANCE:
-        raise ValueError(
-            f"Timestamp mismatch for {image_path}: EXIF={exif_ts}, OCR={ocr_ts}"
+        print(
+            f"    ⚠️  Timestamp mismatch for {image_path}: EXIF={exif_ts}, OCR={ocr_ts}"
         )
+        if ocr_failures_log:
+            with open(ocr_failures_log, "a", encoding="utf-8") as f:
+                f.write(f"\n[TIMESTAMP MISMATCH] {image_path.name}\n")
+                f.write(f"Image Path: {image_path.resolve()}\n")
+                f.write(f"EXIF: {exif_ts}\n")
+                f.write(f"OCR: {ocr_ts}\n")
     return exif_ts
 
 
@@ -991,6 +997,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
                     extract_exif_timestamp(image_dir / loc / name),
                     ocr_ts,
                     image_dir / loc / name,
+                    ocr_failures_log,
                 )
                 for loc, name, ocr_ts in zip(
                     existing_df.loc[missing_exif, "location_id"],
@@ -1223,6 +1230,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
                 extract_exif_timestamp(image_path),
                 metadata["timestamp"] or "",
                 image_path,
+                ocr_failures_log,
             ),
             "image_file": image_file,
             "class": img_class,
