@@ -1085,24 +1085,10 @@ def main():
         )
 
         def get_sun_times(date):
-            """Get sunrise and sunset times for a given date, adjusted to standard time (no DST jump).
-
-            ⚠ NOTE: Times are in standard time (CET, UTC+1) WITHOUT daylight saving adjustments.
-            This may be ~1 hour off local time during DST periods (late March to late October).
-            This approach creates smooth curves but trades accuracy during summer months.
-            """
+            """Get sunrise and sunset as naive local times (Europe/Berlin, DST-aware)."""
             try:
-                import pytz
-
-                # Get sun times in UTC
-                s = sun(location.observer, date=date)
-                # Convert to standard time (CET, UTC+1) to avoid DST discontinuity in plots
-                # This ensures smooth curves for sunrise/sunset times throughout the year
-                standard_tz = pytz.timezone("Etc/GMT-1")  # CET (UTC+1, no DST)
-                sunrise_standard = s["sunrise"].astimezone(standard_tz)
-                sunset_standard = s["sunset"].astimezone(standard_tz)
-                # Remove timezone info to get naive datetime in standard time
-                return sunrise_standard.replace(tzinfo=None), sunset_standard.replace(
+                s = sun(location.observer, date=date, tzinfo=location.tzinfo)
+                return s["sunrise"].replace(tzinfo=None), s["sunset"].replace(
                     tzinfo=None
                 )
             except Exception:
@@ -1111,8 +1097,6 @@ def main():
         # Add sunrise/sunset times to dataframe
         df_valid["sunrise"] = df_valid["date"].apply(lambda d: get_sun_times(d)[0])
         df_valid["sunset"] = df_valid["date"].apply(lambda d: get_sun_times(d)[1])
-
-        # Times are already in local time (naive datetimes) from get_sun_times
 
         # Filter out rows where sunrise/sunset calculation failed
         df_valid = df_valid[
@@ -1205,7 +1189,7 @@ def main():
                     )
 
                     ax_main.set_title(
-                        f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
+                        f"{species.capitalize()} Activity Relative to Sunset (n={len(species_data)})",
                         fontsize=13,
                         fontweight="bold",
                     )
@@ -1340,7 +1324,7 @@ def main():
                 )
 
                 ax_main.set_title(
-                    f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})\nNote: Times in standard time (may be ~1h off during DST)",
+                    f"{species.capitalize()} Activity Relative to Sunrise (n={len(species_data)})",
                     fontsize=13,
                     fontweight="bold",
                 )
@@ -1840,10 +1824,20 @@ def main():
         observer.lon = str(LONGITUDE)
         observer.elevation = 0
 
+        def to_utc(local_ts):
+            """Convert a naive local (Europe/Berlin) timestamp to naive UTC for ephem."""
+            return (
+                pd.Timestamp(local_ts)
+                .tz_localize(TIMEZONE, ambiguous=True, nonexistent="shift_forward")
+                .tz_convert("UTC")
+                .tz_localize(None)
+                .to_pydatetime()
+            )
+
         def get_moon_data(timestamp):
             """Calculate moon phase, illumination, and position for a given timestamp."""
             try:
-                observer.date = timestamp
+                observer.date = to_utc(timestamp)
                 moon = ephem.Moon(observer)
 
                 # Moon illumination (0-100%)
@@ -1877,7 +1871,7 @@ def main():
 
                 # Calculate moonrise and moonset
                 try:
-                    observer.date = timestamp.date()
+                    observer.date = to_utc(timestamp.normalize())
                     moonrise = observer.next_rising(moon).datetime()
                     moonset = observer.next_setting(moon).datetime()
                 except (ephem.AlwaysUpError, ephem.NeverUpError):
