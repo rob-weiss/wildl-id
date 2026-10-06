@@ -2,7 +2,7 @@ WILDLIFE CAMERA ACTIVITY ANALYSIS
 ======================================================================
 
 Total Images: 20626
-Images with Timestamps: 20118
+Images with Timestamps: 20626
 Unique Species: 10
 Unique Locations: 9
 Date Range: 2024-08-03 to 2026-08-23
