@@ -29,7 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import the main functions from each module
-from labelling.download_images import main as download_main
+# from labelling.download_images import main as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
 from visualisation.evaluate_labels import main as visualisation_main
 
