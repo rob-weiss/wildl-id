@@ -42,6 +42,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from io import StringIO
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # Suppress pkg_resources deprecation warning from dependencies (must be before imports)
 warnings.filterwarnings("ignore", message=".*pkg_resources.*")
@@ -631,6 +632,34 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
     return {"timestamp": None, "temperature_celsius": None}
 
 
+CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
+
+
+def extract_exif_timestamp(image_path):
+    """Read the capture time from EXIF and return it as ISO 8601 with UTC offset.
+
+    Uses OffsetTimeOriginal if present, otherwise assumes German local time
+    (CET/CEST, DST-aware). Returns "" if no timestamp is available.
+    """
+    try:
+        with Image.open(image_path) as img:
+            exif = img.getexif()
+        exif_ifd = exif.get_ifd(0x8769)
+        raw = exif_ifd.get(0x9003) or exif_ifd.get(0x9004) or exif.get(0x0132)
+        if not raw:
+            return ""
+        dt = datetime.strptime(str(raw).strip().rstrip("\x00"), "%Y:%m:%d %H:%M:%S")
+        offset = exif_ifd.get(0x9011)
+        if offset:
+            dt = datetime.fromisoformat(f"{dt.isoformat()}{str(offset).strip()}")
+        else:
+            dt = dt.replace(tzinfo=CAMERA_TIMEZONE)
+        return dt.isoformat()
+    except Exception as e:
+        print(f"    EXIF timestamp error for {image_path}: {e}")
+        return ""
+
+
 def detect_lighting(img_input, dim=10, thresh=0.5):
     """Detect whether image is bright or dark using LAB color space.
 
@@ -875,6 +904,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     COLUMN_DTYPES = {
         "location_id": str,
         "timestamp": str,
+        "timestamp_exif": str,
         "image_file": str,
         "class": str,
         "box": str,
@@ -894,6 +924,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         expected_columns = {
             "location_id": "",
             "timestamp": "",
+            "timestamp_exif": "",
             "image_file": "",
             "class": "none",
             "box": "",
@@ -920,7 +951,23 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
 
         # Now convert to proper dtypes
         # Now convert to proper dtypes
-        existing_df = existing_df.astype(COLUMN_DTYPES)
+        existing_df = existing_df.astype(COLUMN_DTYPES)[list(COLUMN_DTYPES)]
+
+        # Backfill EXIF timestamps for existing rows without rerunning detection/OCR
+        missing_exif = existing_df["timestamp_exif"] == ""
+        if missing_exif.any():
+            print(f"Backfilling EXIF timestamps for {missing_exif.sum()} entries...")
+            existing_df.loc[missing_exif, "timestamp_exif"] = [
+                extract_exif_timestamp(image_dir / loc / name)
+                if (image_dir / loc / name).exists()
+                else ""
+                for loc, name in zip(
+                    existing_df.loc[missing_exif, "location_id"],
+                    existing_df.loc[missing_exif, "image_file"],
+                )
+            ]
+        # Rewrite so the header matches the column order used when appending new rows
+        existing_df.to_csv(csv_path, index=False)
 
         # Only mark as processed if the entry is complete (has class, timestamp, AND temperature)
         # Check for complete entries: all required fields are present
@@ -1140,6 +1187,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         result_dict = {
             "location_id": location_id,
             "timestamp": metadata["timestamp"] if metadata["timestamp"] else "",
+            "timestamp_exif": extract_exif_timestamp(image_path),
             "image_file": image_file,
             "class": img_class,
             "box": str(box) if box is not None else "",
