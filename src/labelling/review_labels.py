@@ -30,7 +30,7 @@ SHORTCUTS = {
     "h": "hare",
     "s": "squirrel",
     "j": "jay",
-    "o": "racoon",
+    "o": "raccoon",
     "c": "crow",
     "a": "human",
     "n": "none",
