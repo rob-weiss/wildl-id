@@ -26,7 +26,7 @@ import numpy as np
 import pandas as pd
 import timm
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 from PytorchWildlife.models.classification import DeepfauneClassifier
 from sklearn.metrics import balanced_accuracy_score, classification_report
 from sklearn.model_selection import StratifiedGroupKFold
@@ -222,6 +222,54 @@ def export_training_data(df, data_dir):
     return crop_paths
 
 
+def save_validation_predictions(rows, targets, predictions, class_names, output_dir):
+    for row, target, prediction in tqdm(
+        zip(rows.itertuples(), targets, predictions, strict=True),
+        total=len(rows),
+        desc="Saving validation images",
+    ):
+        is_correct = target == prediction
+        status = "correct" if is_correct else "incorrect"
+        color = (46, 125, 50) if is_correct else (198, 40, 40)
+        label = f"True: {class_names[target]} | Predicted: {class_names[prediction]}"
+        image_path = IMAGE_DIR / row.location_id / row.image_file
+        output_path = (
+            output_dir / status / (f"{image_path.parent.name}_{image_path.name}")
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with Image.open(image_path) as source:
+            image = source.convert("RGB")
+        draw = ImageDraw.Draw(image)
+        try:
+            box = literal_eval(row.box)
+            if (
+                isinstance(box, (list, tuple))
+                and len(box) == 4
+                and all(0 <= value <= 1 for value in box)
+            ):
+                x_center, y_center, width, height = box
+                left = max(0, int((x_center - width / 2) * image.width))
+                top = max(0, int((y_center - height / 2) * image.height))
+                right = min(image.width - 1, int((x_center + width / 2) * image.width))
+                bottom = min(
+                    image.height - 1, int((y_center + height / 2) * image.height)
+                )
+                if right > left and bottom > top:
+                    draw.rectangle((left, top, right, bottom), outline=color, width=3)
+        except (ValueError, SyntaxError, TypeError):
+            pass
+        text_bounds = draw.textbbox((0, 0), label)
+        banner_height = int(text_bounds[3] - text_bounds[1] + 12)
+        output_width = max(image.width, int(text_bounds[2]) + 12)
+        annotated = Image.new(
+            "RGB", (output_width, image.height + banner_height), color
+        )
+        annotated.paste(image, (0, banner_height))
+        ImageDraw.Draw(annotated).text((6, 6), label, fill="white")
+        annotated.save(output_path, quality=95)
+
+
 def build_model(class_names, device):
     pretrained = DeepfauneClassifier(device="cpu", class_name_lang="en")
     model = pretrained.predictor
@@ -400,6 +448,12 @@ def main():
     writer.close()
     model.load_state_dict(best_state, strict=False)
     _, preds, targets = evaluate(model, val_loader, criterion, device)
+    val_df = df[~train_mask]
+    validation_images_dir = out_dir / "validation_predictions"
+    save_validation_predictions(
+        val_df, targets, preds, class_names, validation_images_dir
+    )
+    print(f"Validation prediction images saved to {validation_images_dir}")
     report = classification_report(
         targets,
         preds,
@@ -408,7 +462,6 @@ def main():
         zero_division=0,
         output_dict=True,
     )
-    val_df = df[~train_mask]
     baseline_acc = float((val_df["class"] == val_df["manual_label"]).mean())
     print(f"\nBest epoch: {best_epoch} (val balanced accuracy {best_score:.3f})")
     print(f"Original pipeline accuracy on the same val set: {baseline_acc:.3f}")
