@@ -81,8 +81,10 @@ Run the lightweight reviewer using the existing Matplotlib and Pillow dependenci
 conda run --no-capture-output -n wildlife python src/labelling/review_labels.py
 ```
 
-The reviewer displays the annotated images one at a time, with the machine label
-above each image. Click **Correct** or press **Space** to accept it. Click a species
+The reviewer displays images one at a time, with the machine label above the CSV
+bounding box. It uses original photos when available so the box coordinates align,
+and falls back to saved annotated images otherwise. Click **Correct** or press **Space**
+to accept it. Click a species
 button or press its displayed letter to correct it. Click **Other label** or press
 **Enter**, type a custom label, then press **Enter** to save. **Backspace** or **Undo**
 revisits the last choice in this session. **Escape** or **Close** exits.

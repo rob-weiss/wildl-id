@@ -1,13 +1,16 @@
 """Review machine labels with Matplotlib; save each choice to manual_label."""
 
 import argparse
+import ast
 import csv
+import math
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, TextBox
 from PIL import Image
 
@@ -169,9 +172,17 @@ class LabelReview:
         else:
             row = self.rows[self.pending[self.position]]
             image_path = self.images_dir / f"{row['location_id']}_{row['image_file']}"
+            original_path = (
+                self.csv_path.parent.parent / row["location_id"] / row["image_file"]
+            )
+            use_original = original_path.is_file()
+            if use_original:
+                image_path = original_path
             try:
                 with Image.open(image_path) as image:
                     self.image_axes.imshow(image.convert("RGB"))
+                    if use_original:
+                        self.draw_box_label(row, image.size)
             except (OSError, ValueError) as error:
                 self.image_axes.text(
                     0.5, 0.5, f"Cannot open image:\n{error}", ha="center", wrap=True
@@ -182,6 +193,47 @@ class LabelReview:
                 fontsize=12,
             )
         self.figure.canvas.draw_idle()
+
+    def draw_box_label(self, row, image_size):
+        try:
+            box = ast.literal_eval(row.get("box", ""))
+            if not isinstance(box, (list, tuple)) or len(box) != 4:
+                return
+            if not all(
+                isinstance(value, (int, float)) and math.isfinite(value)
+                for value in box
+            ):
+                return
+            x_center, y_center, width, height = box
+            if not all(0 <= value <= 1 for value in box) or width == 0 or height == 0:
+                return
+        except (ValueError, SyntaxError, TypeError):
+            return
+        image_width, image_height = image_size
+        left = max(0, (x_center - width / 2) * image_width)
+        top = max(0, (y_center - height / 2) * image_height)
+        self.image_axes.add_patch(
+            Rectangle(
+                (left, top),
+                width * image_width,
+                height * image_height,
+                linewidth=2,
+                edgecolor="red",
+                facecolor="none",
+            )
+        )
+        self.image_axes.annotate(
+            row["class"],
+            (left, top),
+            xytext=(0, -3 if top < 30 else 3),
+            textcoords="offset points",
+            ha="left",
+            va="top" if top < 30 else "bottom",
+            color="white",
+            fontsize=12,
+            fontweight="bold",
+            bbox={"facecolor": "red", "edgecolor": "none", "pad": 3},
+        )
 
     def record(self, label):
         try:
