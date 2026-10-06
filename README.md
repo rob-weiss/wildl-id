@@ -73,6 +73,36 @@ python src/labelling/download_images.py
 python src/labelling/label_images.py
 ```
 
+### Review Machine Labels
+
+Run the lightweight reviewer using the existing Matplotlib and Pillow dependencies:
+
+```bash
+conda run --no-capture-output -n wildlife python src/labelling/review_labels.py
+```
+
+The reviewer displays the annotated images one at a time, with the machine label
+above each image. Click **Correct** or press **Space** to accept it. Click a species
+button or press its displayed letter to correct it. Click **Other label** or press
+**Enter**, type a custom label, then press **Enter** to save. **Backspace** or **Undo**
+revisits the last choice in this session. **Escape** or **Close** exits.
+
+Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
+`d` dog, `f` fox, `h` hare, `s` squirrel, `j` jay, `o` racoon, `c` crow,
+`a` human, `n` none, `u` unknown, `l` owl, `t` cat, `v` vehicle.
+The exceptions avoid overlapping first letters.
+
+Each choice is saved immediately in a new `manual_label` column in the same CSV.
+The original `class` column remains unchanged: an empty manual label means unchecked,
+a matching label means confirmed, and a different label means corrected. Reopening
+automatically skips checked rows. A `.csv.before-review.bak` backup is created before
+the first save. Machine-labelling runs preserve the manual column and skip reviewed
+images, even if their metadata is incomplete. Do not run both tools simultaneously.
+
+To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
+By default, the reviewer uses the MegaDetector V6 yolov10-e classified CSV and its
+adjacent annotated images directory.
+
 ### Generate Visualizations
 
 ```bash

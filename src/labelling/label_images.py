@@ -944,6 +944,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         "confidence": float,
         "classification_confidence": float,
         "temperature_celsius": float,
+        "manual_label": str,
     }
 
     processed_images = set()
@@ -964,6 +965,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             "confidence": 0.0,
             "classification_confidence": 0.0,
             "temperature_celsius": np.nan,
+            "manual_label": "",
         }
 
         # Add missing columns with default values
@@ -1017,6 +1019,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             & (existing_df["timestamp"] != "")
             & (existing_df["temperature_celsius"].notna())
         )
+        complete_mask |= existing_df["manual_label"] != ""
         complete_df = existing_df[complete_mask]
 
         if reprocess_current_run:
@@ -1243,6 +1246,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             "temperature_celsius": float(metadata["temperature_celsius"])
             if metadata["temperature_celsius"] is not None
             else np.nan,
+            "manual_label": "",
         }
         results.append(result_dict)
 
