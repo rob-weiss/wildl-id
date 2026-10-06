@@ -39,7 +39,7 @@ import sys
 import time
 import warnings
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import StringIO
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -635,12 +635,16 @@ def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
 CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
-def extract_exif_timestamp(image_path):
-    """Read the capture time from EXIF and return it as ISO 8601 with UTC offset.
+TIMESTAMP_TOLERANCE = timedelta(minutes=1)
 
-    Uses OffsetTimeOriginal if present, otherwise assumes German local time
-    (CET/CEST, DST-aware). Returns "" if no timestamp is available.
+
+def extract_exif_timestamp(image_path):
+    """Read the EXIF capture time as German local wall time (same format as OCR).
+
+    Returns "" if the file or timestamp is missing.
     """
+    if not image_path.exists():
+        return ""
     try:
         with Image.open(image_path) as img:
             exif = img.getexif()
@@ -649,15 +653,37 @@ def extract_exif_timestamp(image_path):
         if not raw:
             return ""
         dt = datetime.strptime(str(raw).strip().rstrip("\x00"), "%Y:%m:%d %H:%M:%S")
-        offset = exif_ifd.get(0x9011)
-        if offset:
-            dt = datetime.fromisoformat(f"{dt.isoformat()}{str(offset).strip()}")
-        else:
-            dt = dt.replace(tzinfo=CAMERA_TIMEZONE)
         return dt.isoformat()
     except Exception as e:
         print(f"    EXIF timestamp error for {image_path}: {e}")
         return ""
+
+
+def in_dst_transition(dt):
+    """True if a naive local time is ambiguous or non-existent due to a DST switch."""
+    return (
+        dt.replace(tzinfo=CAMERA_TIMEZONE, fold=0).utcoffset()
+        != dt.replace(tzinfo=CAMERA_TIMEZONE, fold=1).utcoffset()
+    )
+
+
+def resolve_exif_timestamp(exif_ts, ocr_ts, image_path):
+    """Validate the EXIF timestamp against the OCR timestamp and return the value to store.
+
+    Raises ValueError if both exist and differ by more than TIMESTAMP_TOLERANCE.
+    During DST transition hours the OCR timestamp is used.
+    """
+    if not exif_ts or not ocr_ts:
+        return exif_ts
+    exif_dt = datetime.fromisoformat(exif_ts)
+    ocr_dt = datetime.fromisoformat(ocr_ts)
+    if in_dst_transition(exif_dt) or in_dst_transition(ocr_dt):
+        return ocr_ts
+    if abs(exif_dt - ocr_dt) > TIMESTAMP_TOLERANCE:
+        raise ValueError(
+            f"Timestamp mismatch for {image_path}: EXIF={exif_ts}, OCR={ocr_ts}"
+        )
+    return exif_ts
 
 
 def detect_lighting(img_input, dim=10, thresh=0.5):
@@ -954,16 +980,22 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         existing_df = existing_df.astype(COLUMN_DTYPES)[list(COLUMN_DTYPES)]
 
         # Backfill EXIF timestamps for existing rows without rerunning detection/OCR
-        missing_exif = existing_df["timestamp_exif"] == ""
+        # Values with a UTC offset come from an earlier version and are recomputed
+        missing_exif = (existing_df["timestamp_exif"] == "") | existing_df[
+            "timestamp_exif"
+        ].str.contains(r"[+-]\d{2}:\d{2}$")
         if missing_exif.any():
             print(f"Backfilling EXIF timestamps for {missing_exif.sum()} entries...")
             existing_df.loc[missing_exif, "timestamp_exif"] = [
-                extract_exif_timestamp(image_dir / loc / name)
-                if (image_dir / loc / name).exists()
-                else ""
-                for loc, name in zip(
+                resolve_exif_timestamp(
+                    extract_exif_timestamp(image_dir / loc / name),
+                    ocr_ts,
+                    image_dir / loc / name,
+                )
+                for loc, name, ocr_ts in zip(
                     existing_df.loc[missing_exif, "location_id"],
                     existing_df.loc[missing_exif, "image_file"],
+                    existing_df.loc[missing_exif, "timestamp"],
                 )
             ]
         # Rewrite so the header matches the column order used when appending new rows
@@ -1187,7 +1219,11 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         result_dict = {
             "location_id": location_id,
             "timestamp": metadata["timestamp"] if metadata["timestamp"] else "",
-            "timestamp_exif": extract_exif_timestamp(image_path),
+            "timestamp_exif": resolve_exif_timestamp(
+                extract_exif_timestamp(image_path),
+                metadata["timestamp"] or "",
+                image_path,
+            ),
             "image_file": image_file,
             "class": img_class,
             "box": str(box) if box is not None else "",
