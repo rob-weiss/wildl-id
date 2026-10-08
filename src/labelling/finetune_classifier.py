@@ -11,7 +11,7 @@ Each run writes to models/deepfaune_finetuned_<date>_<git hash>/:
 - finetune_classifier.py and git_diff.patch (if the work tree was dirty)
 
 Usage:
-    conda run --no-capture-output -n wildlife python src/labelling/finetune_classifier.py
+    uv run src/labelling/finetune_classifier.py
 """
 
 import json

@@ -4,10 +4,17 @@ As a conservationist, hunter, and software developer I've been curious about wha
 
 ## Quick Start
 
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then create
+the Python 3.10 environment from the lockfile:
+
+```bash
+uv sync --locked
+```
+
 The easiest way to use this system is through the main interface:
 
 ```bash
-python wildl_id.py
+uv run wildl_id.py
 ```
 
 This will present an interactive menu where you can:
@@ -23,7 +30,7 @@ Simply run the main script and follow the prompts:
 
 ```bash
 cd wildl-id
-python wildl_id.py
+uv run wildl_id.py
 ```
 
 The interface will guide you through each step with clear instructions and confirmations.
@@ -64,13 +71,13 @@ If you prefer to run individual components:
 ### Download Images
 
 ```bash
-python src/labelling/download_images.py
+uv run src/labelling/download_images.py
 ```
 
 ### Label Images
 
 ```bash
-python src/labelling/label_images.py
+uv run src/labelling/label_images.py
 ```
 
 ### Review Machine Labels
@@ -78,7 +85,7 @@ python src/labelling/label_images.py
 Run the lightweight reviewer using the existing Matplotlib and Pillow dependencies:
 
 ```bash
-conda run --no-capture-output -n wildlife python src/labelling/review_labels.py
+uv run src/labelling/review_labels.py
 ```
 
 The reviewer displays images one at a time, with the machine label above the CSV
@@ -108,7 +115,7 @@ adjacent annotated images directory.
 ### Generate Visualizations
 
 ```bash
-python src/visualisation/evaluate_labels.py
+uv run src/visualisation/evaluate_labels.py
 ```
 
 ## Configuration
