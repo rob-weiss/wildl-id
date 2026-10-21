@@ -11,7 +11,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.widgets import Button, TextBox
+from matplotlib.widgets import Button, CheckButtons, TextBox
 from PIL import Image
 
 DEFAULT_CSV = (
@@ -19,6 +19,7 @@ DEFAULT_CSV = (
     / "data/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
     / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 )
+MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 SHORTCUTS = {
     "r": "roe deer",
     "w": "wild boar",
@@ -41,6 +42,22 @@ SHORTCUTS = {
 }
 
 
+def latest_incorrect_predictions(models_dir=None):
+    models_dir = Path(models_dir or MODELS_DIR)
+    run_dirs = sorted(
+        (path for path in models_dir.glob("deepfaune_finetuned_*") if path.is_dir()),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for run_dir in run_dirs:
+        incorrect_dir = run_dir / "validation_predictions" / "incorrect"
+        if incorrect_dir.is_dir():
+            return run_dir.name, {
+                path.name for path in incorrect_dir.iterdir() if path.is_file()
+            }
+    return None, set()
+
+
 class LabelReview:
     def __init__(self, csv_path, images_dir=None, include_reviewed=False):
         self.csv_path = Path(csv_path)
@@ -57,16 +74,54 @@ class LabelReview:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
-        self.pending = (
-            list(range(len(self.rows)))
-            if include_reviewed
-            else [
-                index for index, row in enumerate(self.rows) if not row["manual_label"]
-            ]
+        self.latest_model_name, self.latest_incorrect_filenames = (
+            latest_incorrect_predictions()
         )
+        self.filters = {
+            "Unseen": True,
+            "Latest model incorrect": True,
+            "Seen": include_reviewed,
+        }
+        self.pending = self.filtered_indices()
         self.position = 0
         self.history = []
         self.original_bytes = self.csv_path.read_bytes()
+
+    def filtered_indices(self):
+        indices = []
+        for index, row in enumerate(self.rows):
+            manual_label = str(row.get("manual_label") or "").strip()
+            image_name = f"{row['location_id']}_{row['image_file']}"
+            if (
+                (self.filters["Unseen"] and not manual_label)
+                or (
+                    self.filters["Latest model incorrect"]
+                    and image_name in self.latest_incorrect_filenames
+                )
+                or (self.filters["Seen"] and manual_label)
+            ):
+                indices.append(index)
+        return indices
+
+    def set_filter(self, name, enabled):
+        current_index = (
+            self.pending[self.position] if self.position < len(self.pending) else None
+        )
+        self.filters[name] = enabled
+        self.pending = self.filtered_indices()
+        if current_index is None:
+            self.position = 0
+        elif current_index in self.pending:
+            self.position = self.pending.index(current_index)
+        else:
+            self.position = next(
+                (
+                    position
+                    for position, index in enumerate(self.pending)
+                    if index > current_index
+                ),
+                len(self.pending),
+            )
 
     def save(self):
         if self.csv_path.read_bytes() != self.original_bytes:
@@ -109,14 +164,14 @@ class LabelReview:
         except Exception:
             self.rows[index]["manual_label"] = previous
             raise
-        self.history.append((self.position, previous))
+        self.history.append((index, previous))
         self.position += 1
 
     def undo(self):
         if not self.history:
             return
-        position, previous = self.history[-1]
-        row = self.rows[self.pending[position]]
+        index, previous = self.history[-1]
+        row = self.rows[index]
         current = row["manual_label"]
         row["manual_label"] = previous
         try:
@@ -124,7 +179,12 @@ class LabelReview:
         except Exception:
             row["manual_label"] = current
             raise
-        self.position = self.history.pop()[0]
+        self.history.pop()
+        self.pending = self.filtered_indices()
+        if index not in self.pending:
+            self.pending.append(index)
+            self.pending.sort()
+        self.position = self.pending.index(index)
 
     def show(self):
         for setting in plt.rcParams:
@@ -140,17 +200,30 @@ class LabelReview:
         self.add_button(
             (0.58, 0.035, 0.12, 0.055), "Close", lambda: plt.close(self.figure)
         )
+        self.filter_axes = self.figure.add_axes((0.76, 0.80, 0.22, 0.15))
+        latest_run = (
+            self.latest_model_name.removeprefix("deepfaune_finetuned_").split("_")[0]
+            if self.latest_model_name
+            else "none found"
+        )
+        self.filter_axes.set_title(f"Latest run: {latest_run}", fontsize=9)
+        self.filter_buttons = CheckButtons(
+            self.filter_axes,
+            list(self.filters),
+            list(self.filters.values()),
+        )
+        self.filter_buttons.on_clicked(self.on_filter_change)
         labels = list(
             dict.fromkeys([*SHORTCUTS.values(), *(row["class"] for row in self.rows)])
         )
         keys = {label: key for key, label in SHORTCUTS.items()}
-        height = min(0.055, 0.74 / ((len(labels) + 1) // 2))
+        height = min(0.055, 0.55 / ((len(labels) + 1) // 2))
         for index, label in enumerate(labels):
             caption = f"{label} [{keys[label]}]" if label in keys else label
             self.add_button(
                 (
                     0.76 + (index % 2) * 0.115,
-                    0.86 - (index // 2) * height,
+                    0.73 - (index // 2) * height,
                     0.11,
                     height * 0.85,
                 ),
@@ -168,10 +241,17 @@ class LabelReview:
         button.on_clicked(lambda event: callback())
         self.buttons.append(button)
 
+    def on_filter_change(self, name):
+        index = list(self.filters).index(name)
+        self.set_filter(name, self.filter_buttons.get_status()[index])
+        self.draw()
+
     def draw(self):
         self.image_axes.clear()
         self.image_axes.axis("off")
-        if self.position >= len(self.pending):
+        if not self.pending:
+            self.image_axes.set_title("No images match selected filters")
+        elif self.position >= len(self.pending):
             self.image_axes.set_title("All labels checked")
         else:
             row = self.rows[self.pending[self.position]]
@@ -192,7 +272,7 @@ class LabelReview:
                     0.5, 0.5, f"Cannot open image:\n{error}", ha="center", wrap=True
                 )
             title = (
-                f"{self.position + 1}/{len(self.pending)} images | "
+                f"{self.position + 1}/{len(self.pending)} selected images | "
                 f"{row['location_id']} / {row['image_file']}\n"
                 f"Machine label: {row['class']}"
             )

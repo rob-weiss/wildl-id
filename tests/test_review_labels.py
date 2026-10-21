@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from importlib import import_module
 from pathlib import Path
+from unittest.mock import patch
 
 import matplotlib
 
@@ -13,7 +14,8 @@ import pandas as pd
 from matplotlib.colors import to_rgba
 from PIL import Image
 
-LabelReview = import_module("src.labelling.review_labels").LabelReview
+review_module = import_module("src.labelling.review_labels")
+LabelReview = review_module.LabelReview
 
 
 class LabelReviewTests(unittest.TestCase):
@@ -66,6 +68,69 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(
             LabelReview(self.csv_path, include_reviewed=True).pending, [0, 1, 2]
         )
+
+    def test_latest_incorrect_predictions_come_from_newest_run(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        older = models_dir / "deepfaune_finetuned_20261019-200723_old"
+        latest = models_dir / "deepfaune_finetuned_20261020-191127_new"
+        for run_dir, filename in (
+            (older, "camera1_old.jpg"),
+            (latest, "camera1_latest.jpg"),
+        ):
+            incorrect_dir = run_dir / "validation_predictions" / "incorrect"
+            incorrect_dir.mkdir(parents=True)
+            (incorrect_dir / filename).touch()
+
+        run_name, filenames = review_module.latest_incorrect_predictions(models_dir)
+
+        self.assertEqual(run_name, latest.name)
+        self.assertEqual(filenames, {"camera1_latest.jpg"})
+
+    def test_filter_toggles_combine_groups_and_preserve_current_row(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        incorrect_dir = (
+            models_dir
+            / "deepfaune_finetuned_20261020-191127_latest"
+            / "validation_predictions"
+            / "incorrect"
+        )
+        incorrect_dir.mkdir(parents=True)
+        (incorrect_dir / "camera1_correct.jpg").touch()
+
+        with patch.object(review_module, "MODELS_DIR", models_dir):
+            review = LabelReview(self.csv_path)
+
+        self.assertEqual(review.pending, [0, 1])
+        review.position = 1
+        review.set_filter("Seen", True)
+        self.assertEqual(review.pending, [0, 1, 2])
+        self.assertEqual(review.pending[review.position], 1)
+
+        review.set_filter("Unseen", False)
+        self.assertEqual(review.pending, [1, 2])
+        self.assertEqual(review.pending[review.position], 1)
+
+    def test_gui_filter_checkbox_updates_the_review_queue(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        incorrect_dir = (
+            models_dir
+            / "deepfaune_finetuned_20261020-191127_latest"
+            / "validation_predictions"
+            / "incorrect"
+        )
+        incorrect_dir.mkdir(parents=True)
+        (incorrect_dir / "camera1_correct.jpg").touch()
+
+        with patch.object(review_module, "MODELS_DIR", models_dir):
+            review = LabelReview(self.csv_path)
+        with patch.object(review_module.plt, "show"):
+            review.show()
+        self.addCleanup(plt.close, review.figure)
+
+        review.filter_buttons.set_active(2)
+
+        self.assertEqual(review.pending, [0, 1, 2])
+        self.assertTrue(review.filters["Seen"])
 
     def test_box_and_annotation_are_green_and_keep_true_label_when_correct(self):
         review = LabelReview(self.csv_path, include_reviewed=True)
