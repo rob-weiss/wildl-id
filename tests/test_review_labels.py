@@ -100,6 +100,14 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.pending, [1])
         self.assertEqual(review.position, 0)
 
+    def test_drag_box_normalizes_reversed_and_out_of_bounds_coordinates(self):
+        box = review_module.box_from_drag((120, 60), (-20, -10), (100, 80))
+
+        self.assertEqual(box, (0.5, 0.375, 1.0, 0.75))
+
+    def test_drag_box_rejects_tiny_selections(self):
+        self.assertIsNone(review_module.box_from_drag((10, 20), (12, 25), (100, 80)))
+
     def test_latest_incorrect_predictions_come_from_newest_run(self):
         models_dir = Path(self.temp_dir.name) / "models"
         older = models_dir / "deepfaune_finetuned_20261019-200723_old"

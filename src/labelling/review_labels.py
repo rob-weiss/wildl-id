@@ -1,4 +1,4 @@
-"""Review machine labels with Matplotlib; save each choice to manual_label."""
+"""Review machine labels in a local browser app and save choices to manual_label."""
 
 import argparse
 import ast
@@ -6,6 +6,7 @@ import csv
 import math
 import os
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -63,6 +64,32 @@ def latest_incorrect_predictions(models_dir=None):
                 path.name for path in incorrect_dir.iterdir() if path.is_file()
             }
     return None, set()
+
+
+def box_from_drag(start, end, image_size):
+    image_width, image_height = image_size
+    if image_width <= 0 or image_height <= 0:
+        return None
+    coordinates = (*start, *end)
+    if not all(math.isfinite(value) for value in coordinates):
+        return None
+    x_start, y_start, x_end, y_end = coordinates
+    left, right = sorted(
+        (max(0, min(image_width, x_start)), max(0, min(image_width, x_end)))
+    )
+    top, bottom = sorted(
+        (max(0, min(image_height, y_start)), max(0, min(image_height, y_end)))
+    )
+    box_width = right - left
+    box_height = bottom - top
+    if box_width < 4 or box_height < 4:
+        return None
+    return (
+        (left + right) / (2 * image_width),
+        (top + bottom) / (2 * image_height),
+        box_width / image_width,
+        box_height / image_height,
+    )
 
 
 class LabelReview:
@@ -428,4 +455,7 @@ if __name__ == "__main__":
         "--images", type=Path, help="Annotated images directory (default: beside CSV)"
     )
     arguments = parser.parse_args()
-    LabelReview(arguments.csv, arguments.images).show()
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.labelling.review_app import run_review_app
+
+    run_review_app(arguments.csv, arguments.images)

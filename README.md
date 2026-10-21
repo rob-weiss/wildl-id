@@ -82,19 +82,16 @@ uv run src/labelling/label_images.py
 
 ### Review Machine Labels
 
-Run the lightweight reviewer using the existing Matplotlib and Pillow dependencies:
+Run the browser-based reviewer locally:
 
 ```bash
 uv run src/labelling/review_labels.py
 ```
 
-The reviewer displays images one at a time, with the machine label above the CSV
-bounding box. It uses original photos when available so the box coordinates align,
-and falls back to saved annotated images otherwise. Click **Correct** or press **Space**
-to accept it. Click a species
-button or press its displayed letter to correct it. Click **Other label** or press
-**Enter**, type a custom label, then press **Enter** to save. **Backspace** or **Undo**
-revisits the last choice in this session. **Escape** or **Close** exits.
+The reviewer opens at `http://127.0.0.1:8080`. It uses original photos when available
+and saved annotated images otherwise. Choose a mode, accept the prediction, or select
+a label. Drag on the image to add or replace its bounding box; changes save to the CSV.
+Use **Undo label** or **Undo box** to revert the last change of that kind.
 
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
 `d` dog, `f` fox, `h` hare, `s` squirrel, `j` jay, `o` racoon, `c` crow,
