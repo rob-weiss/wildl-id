@@ -32,7 +32,7 @@ def parse_box(value):
     return box
 
 
-def box_overlay_svg(row, image_size):
+def box_overlay_svg(row, image_size, prediction=None):
     image_width, image_height = image_size
     box = parse_box(row.get("box", ""))
     if box is None:
@@ -43,11 +43,19 @@ def box_overlay_svg(row, image_size):
     box_width = width * image_width
     box_height = height * image_height
     manual_label = str(row.get("manual_label") or "").strip()
-    color = "#2e7d32" if manual_label == row["class"] and manual_label else "#c62828"
+    if prediction:
+        true_label = prediction["true_label"]
+        predicted_label = prediction["predicted_label"]
+        is_correct = prediction["status"] == "correct"
+    else:
+        true_label = manual_label
+        predicted_label = row["class"]
+        is_correct = bool(manual_label) and manual_label == row["class"]
+    color = "#2e7d32" if is_correct else "#c62828"
     label = (
-        f"True: {manual_label} | Predicted: {row['class']}"
-        if manual_label
-        else f"Predicted: {row['class']}"
+        f"True: {true_label} | Predicted: {predicted_label}"
+        if true_label
+        else f"Predicted: {predicted_label}"
     )
     label_width = min(image_width, max(140, len(label) * 8 + 16))
     label_left = min(max(0, left), image_width - label_width)
@@ -203,7 +211,14 @@ class ReviewApp:
             f"{self.review.position + 1} / {len(self.review.pending)}"
         )
         self.image_name.set_text(f"{row['location_id']} / {row['image_file']}")
-        self.prediction.set_text(f"Predicted: {row['class']}")
+        prediction = self.prediction_for_row(row)
+        if prediction:
+            self.prediction.set_text(
+                f"True: {prediction['true_label']} | "
+                f"Predicted: {prediction['predicted_label']}"
+            )
+        else:
+            self.prediction.set_text(f"Predicted: {row['class']}")
         self.empty_message.set_visibility(self.current_image_path is None)
         if self.current_image_path is None:
             self.empty_message.set_text("Image file not found")
@@ -213,7 +228,9 @@ class ReviewApp:
                 with Image.open(self.current_image_path) as source:
                     self.image_size = source.size
                 self.image.set_source(self.current_image_path)
-                self.image.set_content(box_overlay_svg(row, self.image_size))
+                self.image.set_content(
+                    box_overlay_svg(row, self.image_size, prediction)
+                )
                 self.image.set_visibility(True)
             except (OSError, ValueError) as error:
                 self.empty_message.set_text(f"Cannot open image: {error}")
@@ -222,6 +239,10 @@ class ReviewApp:
         self.accept_button.enable()
         for button in self.label_buttons:
             button.enable()
+
+    def prediction_for_row(self, row):
+        image_name = f"{row['location_id']}_{row['image_file']}"
+        return self.review.latest_predictions.get(image_name)
 
     def on_image_mouse(self, event: events.MouseEventArguments):
         if self.current_index is None or self.image_size is None:
@@ -264,7 +285,10 @@ class ReviewApp:
 
     def accept(self):
         if self.current_index is not None:
-            self.choose_label(self.review.rows[self.current_index]["class"])
+            row = self.review.rows[self.current_index]
+            prediction = self.prediction_for_row(row)
+            label = prediction["predicted_label"] if prediction else row["class"]
+            self.choose_label(label)
 
     def save_custom_label(self):
         self.choose_label(self.custom_label.value or "")

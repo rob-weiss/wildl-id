@@ -16,6 +16,7 @@ from PIL import Image
 
 review_module = import_module("src.labelling.review_labels")
 LabelReview = review_module.LabelReview
+review_app_module = import_module("src.labelling.review_app")
 
 
 class LabelReviewTests(unittest.TestCase):
@@ -124,6 +125,117 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(run_name, latest.name)
         self.assertEqual(filenames, {"camera1_latest.jpg"})
+
+    def test_latest_run_without_errors_does_not_fall_back_to_older_run(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        older = models_dir / "deepfaune_finetuned_20261019-200723_old"
+        incorrect_dir = older / "validation_predictions" / "incorrect"
+        incorrect_dir.mkdir(parents=True)
+        (incorrect_dir / "camera1_old.jpg").touch()
+        latest = models_dir / "deepfaune_finetuned_20261020-191127_latest"
+        validation_dir = latest / "validation_predictions"
+        validation_dir.mkdir(parents=True)
+        with (validation_dir / "predictions.csv").open(
+            "w", newline="", encoding="utf-8"
+        ) as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=[
+                    "location_id",
+                    "image_file",
+                    "true_label",
+                    "predicted_label",
+                    "status",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "location_id": "camera1",
+                    "image_file": "correct.jpg",
+                    "true_label": "fox",
+                    "predicted_label": "fox",
+                    "status": "correct",
+                }
+            )
+
+        run_name, filenames = review_module.latest_incorrect_predictions(models_dir)
+
+        self.assertEqual(run_name, latest.name)
+        self.assertEqual(filenames, set())
+
+    def test_latest_validation_predictions_are_loaded_for_csv_rows(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        run_dir = models_dir / "deepfaune_finetuned_20261020-191127_latest"
+        validation_dir = run_dir / "validation_predictions"
+        incorrect_dir = validation_dir / "incorrect"
+        incorrect_dir.mkdir(parents=True)
+        (incorrect_dir / "camera1_incorrect.jpg").touch()
+        with (validation_dir / "predictions.csv").open(
+            "w", newline="", encoding="utf-8"
+        ) as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=[
+                    "location_id",
+                    "image_file",
+                    "true_label",
+                    "predicted_label",
+                    "status",
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "location_id": "camera1",
+                    "image_file": "incorrect.jpg",
+                    "true_label": "jay",
+                    "predicted_label": "song bird",
+                    "status": "incorrect",
+                }
+            )
+
+        with patch.object(review_module, "MODELS_DIR", models_dir):
+            review = LabelReview(self.csv_path)
+
+        self.assertEqual(
+            review.latest_predictions["camera1_incorrect.jpg"]["predicted_label"],
+            "song bird",
+        )
+
+    def test_box_overlay_displays_latest_finetuned_prediction(self):
+        row = {
+            "class": "jay",
+            "manual_label": "jay",
+            "box": "[0.5, 0.5, 0.4, 0.4]",
+        }
+        prediction = {
+            "true_label": "jay",
+            "predicted_label": "song bird",
+            "status": "incorrect",
+        }
+
+        overlay = review_app_module.box_overlay_svg(row, (100, 100), prediction)
+
+        self.assertIn("True: jay | Predicted: song bird", overlay)
+        self.assertNotIn("True: jay | Predicted: jay", overlay)
+
+    def test_accept_prediction_uses_latest_finetuned_class(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        app.current_index = 0
+        app.review.latest_predictions = {
+            "camera1_unchecked.jpg": {
+                "true_label": "fox",
+                "predicted_label": "song bird",
+                "status": "incorrect",
+            }
+        }
+        chosen = []
+        app.choose_label = chosen.append
+
+        app.accept()
+
+        self.assertEqual(chosen, ["song bird"])
 
     def test_modes_select_rows_and_preserve_current_row(self):
         models_dir = Path(self.temp_dir.name) / "models"
@@ -246,6 +358,12 @@ class LabelReviewTests(unittest.TestCase):
             finetune_classifier.save_validation_predictions(
                 rows, [0, 1], [0, 0], ["fox", "hare"], output_dir
             )
+
+        with (output_dir / "predictions.csv").open(encoding="utf-8") as source:
+            predictions = list(csv.DictReader(source))
+        self.assertEqual(predictions[1]["true_label"], "hare")
+        self.assertEqual(predictions[1]["predicted_label"], "fox")
+        self.assertEqual(predictions[1]["status"], "incorrect")
 
         correct = Image.open(output_dir / "correct" / "camera1_correct.jpg")
         incorrect = Image.open(output_dir / "incorrect" / "camera1_incorrect.jpg")

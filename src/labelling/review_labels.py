@@ -58,12 +58,41 @@ def latest_incorrect_predictions(models_dir=None):
         reverse=True,
     )
     for run_dir in run_dirs:
+        validation_dir = run_dir / "validation_predictions"
+        if not validation_dir.is_dir():
+            continue
+        manifest = validation_dir / "predictions.csv"
+        if manifest.is_file():
+            with manifest.open(newline="", encoding="utf-8") as source:
+                filenames = {
+                    f"{row['location_id']}_{row['image_file']}"
+                    for row in csv.DictReader(source)
+                    if row.get("status") == "incorrect"
+                }
+            return run_dir.name, filenames
         incorrect_dir = run_dir / "validation_predictions" / "incorrect"
         if incorrect_dir.is_dir():
             return run_dir.name, {
                 path.name for path in incorrect_dir.iterdir() if path.is_file()
             }
+        return run_dir.name, set()
     return None, set()
+
+
+def load_validation_predictions(run_name, models_dir=None):
+    if not run_name:
+        return {}
+    models_dir = Path(models_dir or MODELS_DIR)
+    predictions_path = (
+        models_dir / run_name / "validation_predictions" / "predictions.csv"
+    )
+    if not predictions_path.is_file():
+        return {}
+    with predictions_path.open(newline="", encoding="utf-8") as source:
+        return {
+            f"{row['location_id']}_{row['image_file']}": row
+            for row in csv.DictReader(source)
+        }
 
 
 def box_from_drag(start, end, image_size):
@@ -111,6 +140,7 @@ class LabelReview:
         self.latest_model_name, self.latest_incorrect_filenames = (
             latest_incorrect_predictions()
         )
+        self.latest_predictions = load_validation_predictions(self.latest_model_name)
         self.mode = "Unseen"
         self.pending = self.filtered_indices()
         self.position = 0

@@ -8,12 +8,14 @@ Each run writes to models/deepfaune_finetuned_<date>_<git hash>/:
 - weights.pt          state dict plus class names, git hash, date and hyperparameters
 - metadata.json       the same metadata without the weights, plus training history
 - training_data/      the exact crops used for training and validation, with labels.csv
+- validation_predictions/predictions.csv  true and predicted class for each validation image
 - finetune_classifier.py and git_diff.patch (if the work tree was dirty)
 
 Usage:
     uv run src/labelling/finetune_classifier.py
 """
 
+import csv
 import json
 import random
 import shutil
@@ -223,6 +225,8 @@ def export_training_data(df, data_dir):
 
 
 def save_validation_predictions(rows, targets, predictions, class_names, output_dir):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    prediction_rows = []
     for row, target, prediction in tqdm(
         zip(rows.itertuples(), targets, predictions, strict=True),
         total=len(rows),
@@ -231,6 +235,15 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
         is_correct = target == prediction
         status = "correct" if is_correct else "incorrect"
         color = (46, 125, 50) if is_correct else (198, 40, 40)
+        prediction_rows.append(
+            {
+                "location_id": row.location_id,
+                "image_file": row.image_file,
+                "true_label": class_names[target],
+                "predicted_label": class_names[prediction],
+                "status": status,
+            }
+        )
         label = f"True: {class_names[target]} | Predicted: {class_names[prediction]}"
         image_path = IMAGE_DIR / row.location_id / row.image_file
         output_path = (
@@ -278,6 +291,22 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
         )
         draw.text((label_left + 3, label_top + 3), label, fill="white")
         image.save(output_path, quality=95)
+
+    with (output_dir / "predictions.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as target:
+        writer = csv.DictWriter(
+            target,
+            fieldnames=[
+                "location_id",
+                "image_file",
+                "true_label",
+                "predicted_label",
+                "status",
+            ],
+        )
+        writer.writeheader()
+        writer.writerows(prediction_rows)
 
 
 def build_model(class_names, device):
