@@ -63,11 +63,42 @@ class LabelReviewTests(unittest.TestCase):
     def tearDown(self):
         self.temp_dir.cleanup()
 
-    def test_reviewed_mode_includes_all_rows_and_default_skips_reviewed(self):
-        self.assertEqual(LabelReview(self.csv_path).pending, [0])
-        self.assertEqual(
-            LabelReview(self.csv_path, include_reviewed=True).pending, [0, 1, 2]
-        )
+    def test_unseen_is_default_mode(self):
+        review = LabelReview(self.csv_path)
+
+        self.assertEqual(review.mode, "Unseen")
+        self.assertEqual(review.pending, [0])
+
+    def test_unseen_mode_advances_after_labeling_removes_current_row(self):
+        csv_path = Path(self.temp_dir.name) / "unseen.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=["location_id", "image_file", "class", "manual_label"],
+            )
+            writer.writeheader()
+            writer.writerows(
+                [
+                    {
+                        "location_id": "camera1",
+                        "image_file": "first.jpg",
+                        "class": "fox",
+                        "manual_label": "",
+                    },
+                    {
+                        "location_id": "camera1",
+                        "image_file": "second.jpg",
+                        "class": "hare",
+                        "manual_label": "",
+                    },
+                ]
+            )
+        review = LabelReview(csv_path)
+
+        review.choose("fox")
+
+        self.assertEqual(review.pending, [1])
+        self.assertEqual(review.position, 0)
 
     def test_latest_incorrect_predictions_come_from_newest_run(self):
         models_dir = Path(self.temp_dir.name) / "models"
@@ -86,7 +117,7 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(run_name, latest.name)
         self.assertEqual(filenames, {"camera1_latest.jpg"})
 
-    def test_filter_toggles_combine_groups_and_preserve_current_row(self):
+    def test_modes_select_rows_and_preserve_current_row(self):
         models_dir = Path(self.temp_dir.name) / "models"
         incorrect_dir = (
             models_dir
@@ -100,17 +131,19 @@ class LabelReviewTests(unittest.TestCase):
         with patch.object(review_module, "MODELS_DIR", models_dir):
             review = LabelReview(self.csv_path)
 
+        self.assertEqual(review.pending, [0])
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(review.pending, [1])
+        review.set_mode("Unseen + errors")
         self.assertEqual(review.pending, [0, 1])
-        review.position = 1
-        review.set_filter("Seen", True)
-        self.assertEqual(review.pending, [0, 1, 2])
         self.assertEqual(review.pending[review.position], 1)
-
-        review.set_filter("Unseen", False)
+        review.set_mode("Seen")
         self.assertEqual(review.pending, [1, 2])
-        self.assertEqual(review.pending[review.position], 1)
+        self.assertEqual(review.position, 0)
+        review.set_mode("All")
+        self.assertEqual(review.pending, [0, 1, 2])
 
-    def test_gui_filter_checkbox_updates_the_review_queue(self):
+    def test_gui_dropdown_selects_review_mode(self):
         models_dir = Path(self.temp_dir.name) / "models"
         incorrect_dir = (
             models_dir
@@ -127,13 +160,16 @@ class LabelReviewTests(unittest.TestCase):
             review.show()
         self.addCleanup(plt.close, review.figure)
 
-        review.filter_buttons.set_active(2)
+        review.toggle_mode_menu()
+        review.select_mode("Seen")
 
-        self.assertEqual(review.pending, [0, 1, 2])
-        self.assertTrue(review.filters["Seen"])
+        self.assertEqual(review.pending, [1, 2])
+        self.assertEqual(review.mode, "Seen")
+        self.assertEqual(review.mode_button.label.get_text(), "Mode: Seen v")
 
     def test_box_and_annotation_are_green_and_keep_true_label_when_correct(self):
-        review = LabelReview(self.csv_path, include_reviewed=True)
+        review = LabelReview(self.csv_path)
+        review.set_mode("All")
         figure, axes = plt.subplots()
         self.addCleanup(plt.close, figure)
         review.image_axes = axes
@@ -144,7 +180,8 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(axes.texts[0].get_text(), "True: fox | Predicted: fox")
 
     def test_box_and_annotation_are_red_and_keep_true_label_when_incorrect(self):
-        review = LabelReview(self.csv_path, include_reviewed=True)
+        review = LabelReview(self.csv_path)
+        review.set_mode("All")
         figure, axes = plt.subplots()
         self.addCleanup(plt.close, figure)
         review.image_axes = axes
@@ -155,7 +192,8 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(axes.texts[0].get_text(), "True: hare | Predicted: fox")
 
     def test_undo_restores_manual_label_that_existed_before_review(self):
-        review = LabelReview(self.csv_path, include_reviewed=True)
+        review = LabelReview(self.csv_path)
+        review.set_mode("All")
 
         review.choose("fox")
         review.undo()

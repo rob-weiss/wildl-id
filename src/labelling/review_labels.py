@@ -11,7 +11,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-from matplotlib.widgets import Button, CheckButtons, TextBox
+from matplotlib.widgets import Button, TextBox
 from PIL import Image
 
 DEFAULT_CSV = (
@@ -20,6 +20,13 @@ DEFAULT_CSV = (
     / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 )
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+MODE_OPTIONS = (
+    "Unseen",
+    "Latest model incorrect",
+    "Unseen + errors",
+    "Seen",
+    "All",
+)
 SHORTCUTS = {
     "r": "roe deer",
     "w": "wild boar",
@@ -59,7 +66,7 @@ def latest_incorrect_predictions(models_dir=None):
 
 
 class LabelReview:
-    def __init__(self, csv_path, images_dir=None, include_reviewed=False):
+    def __init__(self, csv_path, images_dir=None):
         self.csv_path = Path(csv_path)
         self.images_dir = (
             Path(images_dir) if images_dir else self.csv_path.parent / "images"
@@ -77,11 +84,7 @@ class LabelReview:
         self.latest_model_name, self.latest_incorrect_filenames = (
             latest_incorrect_predictions()
         )
-        self.filters = {
-            "Unseen": True,
-            "Latest model incorrect": True,
-            "Seen": include_reviewed,
-        }
+        self.mode = "Unseen"
         self.pending = self.filtered_indices()
         self.position = 0
         self.history = []
@@ -92,22 +95,29 @@ class LabelReview:
         for index, row in enumerate(self.rows):
             manual_label = str(row.get("manual_label") or "").strip()
             image_name = f"{row['location_id']}_{row['image_file']}"
+            is_unseen = not manual_label
+            is_latest_error = image_name in self.latest_incorrect_filenames
             if (
-                (self.filters["Unseen"] and not manual_label)
-                or (
-                    self.filters["Latest model incorrect"]
-                    and image_name in self.latest_incorrect_filenames
-                )
-                or (self.filters["Seen"] and manual_label)
+                self.mode == "Unseen"
+                and is_unseen
+                or self.mode == "Latest model incorrect"
+                and is_latest_error
+                or self.mode == "Unseen + errors"
+                and (is_unseen or is_latest_error)
+                or self.mode == "Seen"
+                and not is_unseen
+                or self.mode == "All"
             ):
                 indices.append(index)
         return indices
 
-    def set_filter(self, name, enabled):
+    def set_mode(self, mode):
+        if mode not in MODE_OPTIONS:
+            raise ValueError(f"Unknown review mode: {mode}")
         current_index = (
             self.pending[self.position] if self.position < len(self.pending) else None
         )
-        self.filters[name] = enabled
+        self.mode = mode
         self.pending = self.filtered_indices()
         if current_index is None:
             self.position = 0
@@ -157,6 +167,7 @@ class LabelReview:
         if not label or self.position >= len(self.pending):
             return
         index = self.pending[self.position]
+        old_position = self.position
         previous = self.rows[index]["manual_label"]
         self.rows[index]["manual_label"] = label
         try:
@@ -165,7 +176,18 @@ class LabelReview:
             self.rows[index]["manual_label"] = previous
             raise
         self.history.append((index, previous))
-        self.position += 1
+        self.pending = self.filtered_indices()
+        if index in self.pending:
+            self.position = self.pending.index(index) + 1
+        else:
+            self.position = next(
+                (
+                    position
+                    for position, pending_index in enumerate(self.pending)
+                    if pending_index > index
+                ),
+                min(old_position, len(self.pending)),
+            )
 
     def undo(self):
         if not self.history:
@@ -200,19 +222,18 @@ class LabelReview:
         self.add_button(
             (0.58, 0.035, 0.12, 0.055), "Close", lambda: plt.close(self.figure)
         )
-        self.filter_axes = self.figure.add_axes((0.76, 0.80, 0.22, 0.15))
         latest_run = (
             self.latest_model_name.removeprefix("deepfaune_finetuned_").split("_")[0]
             if self.latest_model_name
             else "none found"
         )
-        self.filter_axes.set_title(f"Latest run: {latest_run}", fontsize=9)
-        self.filter_buttons = CheckButtons(
-            self.filter_axes,
-            list(self.filters),
-            list(self.filters.values()),
-        )
-        self.filter_buttons.on_clicked(self.on_filter_change)
+        self.mode_axes = self.figure.add_axes((0.76, 0.86, 0.22, 0.07))
+        self.mode_axes.set_title(f"Latest run: {latest_run}", fontsize=9)
+        self.mode_button = Button(self.mode_axes, f"Mode: {self.mode} v")
+        self.mode_button.on_clicked(lambda event: self.toggle_mode_menu())
+        self.mode_menu_axes = []
+        self.mode_menu_buttons = []
+        self.mode_menu_open = False
         labels = list(
             dict.fromkeys([*SHORTCUTS.values(), *(row["class"] for row in self.rows)])
         )
@@ -241,9 +262,27 @@ class LabelReview:
         button.on_clicked(lambda event: callback())
         self.buttons.append(button)
 
-    def on_filter_change(self, name):
-        index = list(self.filters).index(name)
-        self.set_filter(name, self.filter_buttons.get_status()[index])
+    def toggle_mode_menu(self):
+        if not self.mode_menu_axes:
+            for index, mode in enumerate(MODE_OPTIONS):
+                axes = self.figure.add_axes(
+                    (0.76, 0.80 - index * 0.05, 0.22, 0.045), zorder=10
+                )
+                button = Button(axes, mode)
+                button.on_clicked(lambda event, mode=mode: self.select_mode(mode))
+                self.mode_menu_axes.append(axes)
+                self.mode_menu_buttons.append(button)
+        self.mode_menu_open = not self.mode_menu_open
+        for axes in self.mode_menu_axes:
+            axes.set_visible(self.mode_menu_open)
+        self.figure.canvas.draw_idle()
+
+    def select_mode(self, mode):
+        self.set_mode(mode)
+        self.mode_button.label.set_text(f"Mode: {mode} v")
+        self.mode_menu_open = False
+        for axes in self.mode_menu_axes:
+            axes.set_visible(False)
         self.draw()
 
     def draw(self):
@@ -388,12 +427,5 @@ if __name__ == "__main__":
     parser.add_argument(
         "--images", type=Path, help="Annotated images directory (default: beside CSV)"
     )
-    parser.add_argument(
-        "--include-reviewed",
-        action="store_true",
-        help="Also show rows that already have a manual label",
-    )
     arguments = parser.parse_args()
-    LabelReview(
-        arguments.csv, arguments.images, include_reviewed=arguments.include_reviewed
-    ).show()
+    LabelReview(arguments.csv, arguments.images).show()

@@ -104,14 +104,12 @@ The exceptions avoid overlapping first letters.
 Each choice is saved immediately in a new `manual_label` column in the same CSV.
 The original `class` column remains unchanged: an empty manual label means unchecked,
 a matching label means confirmed, and a different label means corrected. By default,
-the reviewer includes unchecked rows and validation images marked incorrect by the
-latest fine-tuned model. The **Seen** filter adds rows that already have a manual
-label. Selected filters combine. A `.csv.before-review.bak` backup is created before
-the first save. Machine-labelling runs preserve the manual column and skip reviewed
-images, even if their metadata is incomplete. Do not run both tools simultaneously.
-
-Use `--include-reviewed` to start with **Seen** enabled. The reviewer finds the newest
-timestamped fine-tuning run under `models/` for its incorrect-prediction filter.
+the reviewer shows unchecked rows. Use the in-window mode dropdown to select **Latest
+model incorrect**, **Unseen + errors**, **Seen**, or **All**. The incorrect-prediction
+mode uses validation images from the newest timestamped fine-tuning run under `models/`.
+A `.csv.before-review.bak` backup is created before the first save. Machine-labelling
+runs preserve the manual column and skip reviewed images, even if their metadata is
+incomplete. Do not run both tools simultaneously.
 
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
 By default, the reviewer uses the MegaDetector V6 yolov10-e classified CSV and its
