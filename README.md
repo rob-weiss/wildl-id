@@ -93,6 +93,10 @@ and saved annotated images otherwise. Choose a mode, accept the prediction, or s
 a label. Drag on the image to add or replace its bounding box; changes save to the CSV.
 Use **Undo label** or **Undo box** to revert the last change of that kind.
 
+Press **Space** to accept the current prediction. Press a displayed shortcut letter to
+choose its label. Press **Enter** to focus the custom-label field; press **Enter** there
+to save it. Press **Backspace** to undo the last label.
+
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
 `d` dog, `f` fox, `h` hare, `s` squirrel, `j` jay, `o` racoon, `c` crow,
 `a` human, `n` none, `u` unknown, `l` owl, `t` cat, `v` vehicle.

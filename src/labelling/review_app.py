@@ -85,6 +85,7 @@ class ReviewApp:
 
     def build(self):
         ui.colors(primary="#2e7d32", secondary="#c62828")
+        self.keyboard = ui.keyboard(on_key=self.on_key, repeating=False)
         ui.add_head_html(
             """<style>
             body { background: #f4f6f4; }
@@ -161,6 +162,9 @@ class ReviewApp:
                             ).props("outline no-caps dense")
                             self.label_buttons.append(button)
                     self.custom_label = ui.input(label="Other label").classes("w-full")
+                    self.custom_label.on(
+                        "keydown.enter", lambda event: self.save_custom_label()
+                    )
                     ui.button(
                         "Save label", icon="save", on_click=self.save_custom_label
                     ).props("no-caps")
@@ -275,6 +279,22 @@ class ReviewApp:
     def change_mode(self, mode):
         self.review.set_mode(mode)
         self.refresh()
+
+    def on_key(self, event: events.KeyEventArguments):
+        if not event.action.keydown or event.action.repeat:
+            return
+        if event.modifiers.alt or event.modifiers.ctrl or event.modifiers.meta:
+            return
+        if event.key.space:
+            self.accept()
+        elif event.key.backspace:
+            self.undo_label()
+        elif event.key.enter:
+            self.custom_label.run_method("focus")
+        else:
+            label = SHORTCUTS.get(event.key.name.lower())
+            if label:
+                self.choose_label(label)
 
     def choose_label(self, label):
         try:

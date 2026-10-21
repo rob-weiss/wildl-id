@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import matplotlib
@@ -236,6 +237,42 @@ class LabelReviewTests(unittest.TestCase):
         app.accept()
 
         self.assertEqual(chosen, ["song bird"])
+
+    def test_space_shortcut_accepts_current_prediction(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        app.current_index = 0
+        app.review.latest_predictions = {
+            "camera1_unchecked.jpg": {
+                "true_label": "fox",
+                "predicted_label": "song bird",
+                "status": "incorrect",
+            }
+        }
+        chosen = []
+        app.choose_label = chosen.append
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=False),
+            key=SimpleNamespace(name=" ", space=True, backspace=False, enter=False),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+
+        app.on_key(event)
+
+        self.assertEqual(chosen, ["song bird"])
+
+    def test_letter_shortcut_selects_matching_label(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        chosen = []
+        app.choose_label = chosen.append
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=False),
+            key=SimpleNamespace(name="r", space=False, backspace=False, enter=False),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+
+        app.on_key(event)
+
+        self.assertEqual(chosen, ["roe deer"])
 
     def test_modes_select_rows_and_preserve_current_row(self):
         models_dir = Path(self.temp_dir.name) / "models"
