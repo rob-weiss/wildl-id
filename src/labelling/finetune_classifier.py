@@ -241,6 +241,10 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
         with Image.open(image_path) as source:
             image = source.convert("RGB")
         draw = ImageDraw.Draw(image)
+        label_bounds = draw.textbbox((0, 0), label)
+        label_width = int(label_bounds[2] - label_bounds[0])
+        label_height = int(label_bounds[3] - label_bounds[1])
+        label_left, label_top = 6, 6
         try:
             box = literal_eval(row.box)
             if (
@@ -256,18 +260,24 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
                     image.height - 1, int((y_center + height / 2) * image.height)
                 )
                 if right > left and bottom > top:
-                    draw.rectangle((left, top, right, bottom), outline=color, width=3)
+                    draw.rectangle((left, top, right, bottom), outline=color, width=2)
+                    label_left = left
+                    label_top = max(0, top - label_height - 6)
         except (ValueError, SyntaxError, TypeError):
             pass
-        text_bounds = draw.textbbox((0, 0), label)
-        banner_height = int(text_bounds[3] - text_bounds[1] + 12)
-        output_width = max(image.width, int(text_bounds[2]) + 12)
-        annotated = Image.new(
-            "RGB", (output_width, image.height + banner_height), color
+        label_left = min(label_left, max(0, image.width - label_width - 6))
+        label_top = min(label_top, max(0, image.height - label_height - 6))
+        draw.rectangle(
+            (
+                label_left,
+                label_top,
+                label_left + label_width + 6,
+                label_top + label_height + 6,
+            ),
+            fill=color,
         )
-        annotated.paste(image, (0, banner_height))
-        ImageDraw.Draw(annotated).text((6, 6), label, fill="white")
-        annotated.save(output_path, quality=95)
+        draw.text((label_left + 3, label_top + 3), label, fill="white")
+        image.save(output_path, quality=95)
 
 
 def build_model(class_names, device):

@@ -108,6 +108,9 @@ automatically skips checked rows. A `.csv.before-review.bak` backup is created b
 the first save. Machine-labelling runs preserve the manual column and skip reviewed
 images, even if their metadata is incomplete. Do not run both tools simultaneously.
 
+Pass `--include-reviewed` to include checked rows for comparison. The reviewer then
+traverses all CSV rows and lets you update existing manual labels.
+
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
 By default, the reviewer uses the MegaDetector V6 yolov10-e classified CSV and its
 adjacent annotated images directory.

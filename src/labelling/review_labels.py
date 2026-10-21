@@ -42,7 +42,7 @@ SHORTCUTS = {
 
 
 class LabelReview:
-    def __init__(self, csv_path, images_dir=None):
+    def __init__(self, csv_path, images_dir=None, include_reviewed=False):
         self.csv_path = Path(csv_path)
         self.images_dir = (
             Path(images_dir) if images_dir else self.csv_path.parent / "images"
@@ -57,9 +57,13 @@ class LabelReview:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
-        self.pending = [
-            index for index, row in enumerate(self.rows) if not row["manual_label"]
-        ]
+        self.pending = (
+            list(range(len(self.rows)))
+            if include_reviewed
+            else [
+                index for index, row in enumerate(self.rows) if not row["manual_label"]
+            ]
+        )
         self.position = 0
         self.history = []
         self.original_bytes = self.csv_path.read_bytes()
@@ -105,22 +109,22 @@ class LabelReview:
         except Exception:
             self.rows[index]["manual_label"] = previous
             raise
-        self.history.append(self.position)
+        self.history.append((self.position, previous))
         self.position += 1
 
     def undo(self):
         if not self.history:
             return
-        position = self.history[-1]
+        position, previous = self.history[-1]
         row = self.rows[self.pending[position]]
-        previous = row["manual_label"]
-        row["manual_label"] = ""
+        current = row["manual_label"]
+        row["manual_label"] = previous
         try:
             self.save()
         except Exception:
-            row["manual_label"] = previous
+            row["manual_label"] = current
             raise
-        self.position = self.history.pop()
+        self.position = self.history.pop()[0]
 
     def show(self):
         for setting in plt.rcParams:
@@ -187,11 +191,15 @@ class LabelReview:
                 self.image_axes.text(
                     0.5, 0.5, f"Cannot open image:\n{error}", ha="center", wrap=True
                 )
-            self.image_axes.set_title(
-                f"{self.position + 1}/{len(self.pending)} unchecked images | "
-                f"{row['location_id']} / {row['image_file']}\nMachine label: {row['class']}",
-                fontsize=12,
+            title = (
+                f"{self.position + 1}/{len(self.pending)} images | "
+                f"{row['location_id']} / {row['image_file']}\n"
+                f"Machine label: {row['class']}"
             )
+            manual_label = str(row.get("manual_label") or "").strip()
+            if manual_label:
+                title += f"\nManual label: {manual_label}"
+            self.image_axes.set_title(title, fontsize=12)
         self.figure.canvas.draw_idle()
 
     def draw_box_label(self, row, image_size):
@@ -212,18 +220,26 @@ class LabelReview:
         image_width, image_height = image_size
         left = max(0, (x_center - width / 2) * image_width)
         top = max(0, (y_center - height / 2) * image_height)
+        manual_label = str(row.get("manual_label") or "").strip()
+        is_correct = bool(manual_label) and manual_label == row["class"]
+        color = "#2e7d32" if is_correct else "#c62828"
+        label = (
+            f"True: {manual_label} | Predicted: {row['class']}"
+            if manual_label
+            else f"Predicted: {row['class']}"
+        )
         self.image_axes.add_patch(
             Rectangle(
                 (left, top),
                 width * image_width,
                 height * image_height,
                 linewidth=2,
-                edgecolor="red",
+                edgecolor=color,
                 facecolor="none",
             )
         )
         self.image_axes.annotate(
-            row["class"],
+            label,
             (left, top),
             xytext=(0, -3 if top < 30 else 3),
             textcoords="offset points",
@@ -232,7 +248,7 @@ class LabelReview:
             color="white",
             fontsize=12,
             fontweight="bold",
-            bbox={"facecolor": "red", "edgecolor": "none", "pad": 3},
+            bbox={"facecolor": color, "edgecolor": "none", "pad": 3},
         )
 
     def record(self, label):
@@ -292,5 +308,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--images", type=Path, help="Annotated images directory (default: beside CSV)"
     )
+    parser.add_argument(
+        "--include-reviewed",
+        action="store_true",
+        help="Also show rows that already have a manual label",
+    )
     arguments = parser.parse_args()
-    LabelReview(arguments.csv, arguments.images).show()
+    LabelReview(
+        arguments.csv, arguments.images, include_reviewed=arguments.include_reviewed
+    ).show()
