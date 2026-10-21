@@ -216,10 +216,13 @@ class LabelReviewTests(unittest.TestCase):
             "status": "incorrect",
         }
 
-        overlay = review_app_module.box_overlay_svg(row, (100, 100), prediction)
+        overlay = review_app_module.box_overlay_svg(row, (4000, 3000), prediction)
 
         self.assertIn("True: jay | Predicted: song bird", overlay)
         self.assertNotIn("True: jay | Predicted: jay", overlay)
+        self.assertIn('stroke-width="8"', overlay)
+        self.assertIn('vector-effect="non-scaling-stroke"', overlay)
+        self.assertIn('font-size="112"', overlay)
 
     def test_accept_prediction_uses_latest_finetuned_class(self):
         app = review_app_module.ReviewApp(self.csv_path)

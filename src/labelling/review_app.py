@@ -57,18 +57,26 @@ def box_overlay_svg(row, image_size, prediction=None):
         if true_label
         else f"Predicted: {predicted_label}"
     )
-    label_width = min(image_width, max(140, len(label) * 8 + 16))
+    font_size = min(112, max(24, round(image_width * 0.028)))
+    padding_x = round(font_size * 0.45)
+    label_height = round(font_size * 1.5)
+    label_width = min(
+        image_width,
+        max(font_size * 6, len(label) * font_size * 0.58 + padding_x * 2),
+    )
     label_left = min(max(0, left), image_width - label_width)
-    label_top = max(0, top - 30)
+    label_top = max(0, top - label_height - round(font_size * 0.25))
     escaped_label = html.escape(label, quote=False)
     return (
         f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
         f'height="{box_height:.1f}" fill="none" stroke="{color}" '
-        'stroke-width="3" />'
+        'stroke-width="8" vector-effect="non-scaling-stroke" />'
         f'<rect x="{label_left:.1f}" y="{label_top:.1f}" '
-        f'width="{label_width:.1f}" height="26" rx="2" fill="{color}" />'
-        f'<text x="{label_left + 7:.1f}" y="{label_top + 18:.1f}" '
-        'fill="white" font-size="14" font-weight="bold">'
+        f'width="{label_width:.1f}" height="{label_height}" rx="2" '
+        f'fill="{color}" />'
+        f'<text x="{label_left + padding_x:.1f}" '
+        f'y="{label_top + round(font_size * 1.12):.1f}" '
+        f'fill="white" font-size="{font_size}" font-weight="bold">'
         f"{escaped_label}</text>"
     )
 
