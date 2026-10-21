@@ -157,7 +157,7 @@ class LabelReview:
                     for position, index in enumerate(self.pending)
                     if index > current_index
                 ),
-                len(self.pending),
+                0,
             )
 
     def save(self):

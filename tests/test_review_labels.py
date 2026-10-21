@@ -150,6 +150,10 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.position, 0)
         review.set_mode("All")
         self.assertEqual(review.pending, [0, 1, 2])
+        review.position = 2
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(review.pending, [1])
+        self.assertEqual(review.position, 0)
 
     def test_gui_dropdown_selects_review_mode(self):
         models_dir = Path(self.temp_dir.name) / "models"
