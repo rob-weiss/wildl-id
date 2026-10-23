@@ -1,11 +1,11 @@
 WILDLIFE CAMERA ACTIVITY ANALYSIS
 ======================================================================
 
-Total Images: 20626
-Images with Timestamps: 20626
-Unique Species: 10
+Total Images: 17172
+Images with Timestamps: 17172
+Unique Species: 9
 Unique Locations: 9
-Date Range: 2024-08-03 to 2026-08-23
+Date Range: 2024-08-04 to 2026-08-23
 Most Common Species: wild boar
 Most Active Location: Wendeplatte
 
@@ -13,27 +13,26 @@ Most Active Location: Wendeplatte
 
 SPECIES COUNTS:
 class
-wild boar    6185
-jay          5235
-roe deer     4455
-fox          1929
-badger       1831
-human         555
-squirrel      364
-dog            40
-cat            23
-vehicle         9
+wild boar    6223
+roe deer     4478
+fox          1939
+badger       1832
+pigeon       1514
+crow          508
+marten        403
+raccoon       170
+hare          105
 
 ======================================================================
 
 LOCATION COUNTS:
 location_id
-Wendeplatte       4005
-Douglasien        3836
-Madenhäule       3771
-Sauloch hinten    2790
-Eichelesgarten    2769
-Grenzweg          1979
-Sauloch vorne     1261
-Schelmentor        175
-Grenzwiese          40
+Wendeplatte       3383
+Madenhäule        3362
+Douglasien        3210
+Sauloch hinten    2535
+Eichelesgarten    1738
+Grenzweg          1516
+Sauloch vorne     1260
+Schelmentor        145
+Grenzwiese          23

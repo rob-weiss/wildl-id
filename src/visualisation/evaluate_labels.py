@@ -45,10 +45,25 @@ VISUALIZATION_CLASSES = frozenset(
         "crow",
     }
 )
+BAITING_CLASSES = frozenset({"human", "roe deer", "wild boar"})
+
+
+def _apply_manual_labels(dataframe: pd.DataFrame) -> pd.DataFrame:
+    filtered = dataframe.copy()
+    if "manual_label" in filtered.columns:
+        manual_labels = filtered["manual_label"].replace(r"^\s*$", pd.NA, regex=True)
+        filtered["class"] = manual_labels.combine_first(filtered["class"])
+    return filtered
 
 
 def filter_visualization_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
-    return dataframe.loc[dataframe["class"].isin(VISUALIZATION_CLASSES)].copy()
+    labeled = _apply_manual_labels(dataframe)
+    return labeled.loc[labeled["class"].isin(VISUALIZATION_CLASSES)].copy()
+
+
+def filter_baiting_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
+    labeled = _apply_manual_labels(dataframe)
+    return labeled.loc[labeled["class"].isin(BAITING_CLASSES)].copy()
 
 
 def main():
@@ -118,6 +133,8 @@ def main():
     # Filter out invalid data
     df_valid = df[df["timestamp"].notna()].copy()
     print(f"\n{len(df_valid)} images with valid timestamps")
+
+    df_baiting_valid = filter_baiting_classes(df_valid)
 
     # Keep only requested wildlife classes
     df = filter_visualization_classes(df)
@@ -356,10 +373,7 @@ def main():
     except Exception:
         pass
     plot_num += 1
-    plt.savefig(
-        output_dir / f"{plot_num:02d}_lighting_analysis.svg", bbox_inches="tight"
-    )
-    print(f"✓ Saved: {plot_num:02d}_lighting_analysis.svg")
+    print("Skipping lighting analysis plot")
     plt.close()
 
     # ============================================================================
@@ -452,15 +466,21 @@ def main():
     print("BAITING EFFECT ANALYSIS (ROE DEER & WILD BOAR)")
     print("=" * 70)
 
-    if len(df_valid) > 0:
+    if len(df_baiting_valid) > 0:
         # Separate human and target wildlife sightings
-        df_humans = df_valid[df_valid["class"] == "human"].copy()
+        df_humans = df_baiting_valid[df_baiting_valid["class"] == "human"].copy()
         target_species = ["roe deer", "wild boar"]
-        df_target_wildlife = df_valid[df_valid["class"].isin(target_species)].copy()
+        df_target_wildlife = df_baiting_valid[
+            df_baiting_valid["class"].isin(target_species)
+        ].copy()
 
         print(f"\nHuman sightings: {len(df_humans)}")
-        print(f"Roe deer sightings: {len(df_valid[df_valid['class'] == 'roe deer'])}")
-        print(f"Wild boar sightings: {len(df_valid[df_valid['class'] == 'wild boar'])}")
+        print(
+            f"Roe deer sightings: {len(df_baiting_valid[df_baiting_valid['class'] == 'roe deer'])}"
+        )
+        print(
+            f"Wild boar sightings: {len(df_baiting_valid[df_baiting_valid['class'] == 'wild boar'])}"
+        )
         print(f"Combined target wildlife sightings: {len(df_target_wildlife)}")
 
         if len(df_humans) > 0 and len(df_target_wildlife) > 0:
@@ -507,11 +527,15 @@ def main():
             target_species_data = {
                 "roe deer": {
                     "color": "steelblue",
-                    "data": df_valid[df_valid["class"] == "roe deer"].copy(),
+                    "data": df_baiting_valid[
+                        df_baiting_valid["class"] == "roe deer"
+                    ].copy(),
                 },
                 "wild boar": {
                     "color": "darkgreen",
-                    "data": df_valid[df_valid["class"] == "wild boar"].copy(),
+                    "data": df_baiting_valid[
+                        df_baiting_valid["class"] == "wild boar"
+                    ].copy(),
                 },
             }
 
@@ -537,7 +561,9 @@ def main():
 
                 # Merge to have all dates
                 date_range = pd.date_range(
-                    start=df_valid["date"].min(), end=df_valid["date"].max(), freq="D"
+                    start=df_baiting_valid["date"].min(),
+                    end=df_baiting_valid["date"].max(),
+                    freq="D",
                 )
                 all_dates = pd.DataFrame({"date": date_range})
                 daily_data = all_dates.merge(
@@ -687,6 +713,7 @@ def main():
                 plt.close()
         else:
             print("\nInsufficient data for baiting effect analysis")
+            plot_num += 2
 
     # Store temperature range for later use in species-specific plots
     df_temp = df[df["temperature_celsius"].notna()].copy()
@@ -726,6 +753,11 @@ def main():
         target_species = ["roe deer", "wild boar"]
 
         for species in target_species:
+            if species in {"roe deer", "wild boar"}:
+                plot_num += 1
+                print(f"Skipping {species} temperature-activity plot")
+                continue
+
             species_data = df_temp[df_temp["class"] == species].copy()
 
             if len(species_data) >= 10:  # Only create plot if sufficient data
@@ -1432,6 +1464,11 @@ def main():
 
             # ========== Seasonal patterns ==========
             for species in target_species:
+                if species in {"roe deer", "wild boar"}:
+                    plot_num += 1
+                    print(f"Skipping {species} monthly sunset plot")
+                    continue
+
                 species_data = df_target[df_target["class"] == species].copy()
                 if len(species_data) == 0:
                     continue
@@ -2030,12 +2067,6 @@ def main():
                 fig.tight_layout(rect=[0, 0, 1, 0.98])
             except Exception:
                 pass
-            plot_num += 1
-            plt.savefig(
-                output_dir / f"{plot_num:02d}_solunar_comparison.svg",
-                bbox_inches="tight",
-            )
-            print(f"✓ Saved: {plot_num:02d}_solunar_comparison.svg")
             plt.close()
 
             # Print summary statistics
