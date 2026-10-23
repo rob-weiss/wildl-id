@@ -180,10 +180,8 @@ class ReviewApp:
         self.refresh()
 
     def image_path_for(self, row):
-        original = (
-            self.review.csv_path.parent.parent / row["location_id"] / row["image_file"]
-        )
-        if original.is_file():
+        original = self.review.original_path(row)
+        if original is not None:
             return original
         annotated = self.review.images_dir / f"{row['location_id']}_{row['image_file']}"
         return annotated if annotated.is_file() else None

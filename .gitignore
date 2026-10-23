@@ -178,4 +178,5 @@ docs/diagrams/*.png
 models/*
 
 data/
+images/
 labels/

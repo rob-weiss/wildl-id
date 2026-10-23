@@ -74,6 +74,20 @@ If you prefer to run individual components:
 uv run src/labelling/download_images.py
 ```
 
+### Organize Images
+
+Put new images into `data/<location>/`, then run:
+
+```bash
+uv run src/labelling/organize_images.py [--dry-run]
+```
+
+The script deletes videos and corrupt images, then moves images to
+`images/<year>/<location>/image_XXXXXXX.jpg`, numbered by EXIF capture time.
+Images without an EXIF timestamp stay in `data/`. The labels CSV, annotated images,
+and fine-tuning artifacts in `models/` are renamed to match. A mapping of old to new
+paths is written to `logs/`.
+
 ### Label Images
 
 ```bash

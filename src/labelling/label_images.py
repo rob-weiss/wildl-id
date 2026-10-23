@@ -65,8 +65,12 @@ from PytorchWildlife.models import classification as pw_classification
 from PytorchWildlife.models import detection as pw_detection
 from tqdm import tqdm
 
+try:
+    from .organize_images import image_paths, nfc
+except ImportError:
+    from organize_images import image_paths, nfc
+
 # Configuration (must be defined before OCR framework checks)
-image_dir = Path(__file__).parent.parent.parent / "data"
 repo_dir = Path(__file__).resolve().parents[2]
 # MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
 # MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
@@ -904,28 +908,17 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
             f.write("=" * 80 + "\\n")
 
-    # Get all subfolders (locations)
-    subfolders = [
-        d
-        for d in image_dir.iterdir()
-        if d.is_dir() and d.name != "labels" and not d.name.startswith("labels_")
+    # Collect all images with location info from images/<year>/<location>/ and data/<location>/
+    indexed_paths = image_paths()
+    image_info_list = [
+        {"path": path, "name": name, "location_id": location_id}
+        for (location_id, name), path in indexed_paths.items()
+        if name.lower().endswith((".jpg", ".jpeg", ".png"))
     ]
+    locations = {info["location_id"] for info in image_info_list}
 
-    # Collect all images with location info
-    image_info_list = []
-    for subfolder in subfolders:
-        location_id = subfolder.name
-        for image_file in subfolder.iterdir():
-            if image_file.is_file() and image_file.name.lower().endswith(
-                (".jpg", ".jpeg", ".png")
-            ):
-                image_info_list.append(
-                    {
-                        "path": image_file,
-                        "name": image_file.name,
-                        "location_id": location_id,
-                    }
-                )
+    def path_of(loc, name):
+        return indexed_paths.get((nfc(loc), name), repo_dir / "images" / loc / name)
 
     image_info_list.sort(key=lambda x: (x["location_id"], x["name"]))
 
@@ -999,9 +992,9 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             print(f"Backfilling EXIF timestamps for {missing_exif.sum()} entries...")
             existing_df.loc[missing_exif, "timestamp_exif"] = [
                 resolve_exif_timestamp(
-                    extract_exif_timestamp(image_dir / loc / name),
+                    extract_exif_timestamp(path_of(loc, name)),
                     ocr_ts,
-                    image_dir / loc / name,
+                    path_of(loc, name),
                     ocr_failures_log,
                 )
                 for loc, name, ocr_ts in zip(
@@ -1028,7 +1021,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         if reprocess_current_run:
             # Mark only complete entries as processed; incomplete ones will be reprocessed
             processed_images = set(
-                zip(complete_df["location_id"], complete_df["image_file"])
+                zip(complete_df["location_id"].map(nfc), complete_df["image_file"])
             )
 
             incomplete_count = len(existing_df) - len(complete_df)
@@ -1046,7 +1039,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         else:
             # Mark all entries (complete and incomplete) as processed
             processed_images = set(
-                zip(existing_df["location_id"], existing_df["image_file"])
+                zip(existing_df["location_id"].map(nfc), existing_df["image_file"])
             )
 
             incomplete_count = len(existing_df) - len(complete_df)
@@ -1065,7 +1058,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     ]
 
     print(
-        f"Found {len(image_info_list)} total images in {len(subfolders)} locations, "
+        f"Found {len(image_info_list)} total images in {len(locations)} locations, "
         f"{len(processed_images)} already processed, {len(images_to_process)} to process\n"
     )
 

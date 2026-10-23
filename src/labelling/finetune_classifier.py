@@ -39,8 +39,12 @@ from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 from tqdm import tqdm
 
+try:
+    from .organize_images import image_paths, nfc
+except ImportError:
+    from organize_images import image_paths, nfc
+
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
-IMAGE_DIR = REPO_DIR / "data"
 LABELS_DIR = REPO_DIR / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
 CSV_PATH = LABELS_DIR / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 MODELS_DIR = REPO_DIR / "models"
@@ -158,12 +162,15 @@ def load_labelled_rows():
         )
     df = df[df["manual_label"].isin(counts[counts >= MIN_SAMPLES_PER_CLASS].index)]
 
+    indexed_paths = image_paths()
     paths = [
-        IMAGE_DIR / loc / name for loc, name in zip(df["location_id"], df["image_file"])
+        indexed_paths.get((nfc(loc), name))
+        for loc, name in zip(df["location_id"], df["image_file"])
     ]
-    exists = np.array([p.exists() for p in paths])
+    exists = np.array([p is not None for p in paths])
     if not exists.all():
         print(f"Skipping {(~exists).sum()} rows whose image file is missing")
+    df = df.assign(image_path=[str(p) for p in paths])
     return df[exists].reset_index(drop=True)
 
 
@@ -214,7 +221,7 @@ def export_training_data(df, data_dir):
         label_dir = data_dir / row.split / row.manual_label.replace(" ", "_")
         label_dir.mkdir(parents=True, exist_ok=True)
         crop_path = label_dir / f"{row.location_id}_{Path(row.image_file).stem}.jpg"
-        with Image.open(IMAGE_DIR / row.location_id / row.image_file) as img:
+        with Image.open(row.image_path) as img:
             crop_box(img.convert("RGB"), literal_eval(row.box)).save(
                 crop_path, quality=95
             )
@@ -245,10 +252,8 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
             }
         )
         label = f"True: {class_names[target]} | Predicted: {class_names[prediction]}"
-        image_path = IMAGE_DIR / row.location_id / row.image_file
-        output_path = (
-            output_dir / status / (f"{image_path.parent.name}_{image_path.name}")
-        )
+        image_path = Path(row.image_path)
+        output_path = output_dir / status / f"{row.location_id}_{row.image_file}"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with Image.open(image_path) as source:

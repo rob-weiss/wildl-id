@@ -15,6 +15,11 @@ from matplotlib.patches import Rectangle
 from matplotlib.widgets import Button, TextBox
 from PIL import Image
 
+try:
+    from .organize_images import image_paths, nfc
+except ImportError:
+    from organize_images import image_paths, nfc
+
 DEFAULT_CSV = (
     Path(__file__).resolve().parents[2]
     / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
@@ -146,6 +151,13 @@ class LabelReview:
         self.position = 0
         self.history = []
         self.original_bytes = self.csv_path.read_bytes()
+        self._image_paths = None
+
+    def original_path(self, row):
+        """Return the original photo under images/<year>/<location>/, if present."""
+        if self._image_paths is None:
+            self._image_paths = image_paths()
+        return self._image_paths.get((nfc(row["location_id"]), row["image_file"]))
 
     def filtered_indices(self):
         indices = []
@@ -352,10 +364,8 @@ class LabelReview:
         else:
             row = self.rows[self.pending[self.position]]
             image_path = self.images_dir / f"{row['location_id']}_{row['image_file']}"
-            original_path = (
-                self.csv_path.parent.parent / row["location_id"] / row["image_file"]
-            )
-            use_original = original_path.is_file()
+            original_path = self.original_path(row)
+            use_original = original_path is not None
             if use_original:
                 image_path = original_path
             try:

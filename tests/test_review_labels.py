@@ -366,11 +366,9 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.rows[1]["manual_label"], "fox")
 
     def test_validation_images_use_reviewer_box_style_and_status_colors(self):
-        from unittest.mock import patch
-
         finetune_classifier = import_module("src.labelling.finetune_classifier")
 
-        image_dir = Path(self.temp_dir.name) / "images"
+        image_dir = Path(self.temp_dir.name) / "images" / "2024"
         (image_dir / "camera1").mkdir(parents=True)
         Image.new("RGB", (100, 100), "black").save(
             image_dir / "camera1" / "correct.jpg"
@@ -383,21 +381,22 @@ class LabelReviewTests(unittest.TestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "correct.jpg",
+                    "image_path": str(image_dir / "camera1" / "correct.jpg"),
                     "box": "[0.5, 0.5, 0.4, 0.4]",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "incorrect.jpg",
+                    "image_path": str(image_dir / "camera1" / "incorrect.jpg"),
                     "box": "[0.5, 0.5, 0.4, 0.4]",
                 },
             ]
         )
         output_dir = Path(self.temp_dir.name) / "validation"
 
-        with patch.object(finetune_classifier, "IMAGE_DIR", image_dir):
-            finetune_classifier.save_validation_predictions(
-                rows, [0, 1], [0, 0], ["fox", "hare"], output_dir
-            )
+        finetune_classifier.save_validation_predictions(
+            rows, [0, 1], [0, 0], ["fox", "hare"], output_dir
+        )
 
         with (output_dir / "predictions.csv").open(encoding="utf-8") as source:
             predictions = list(csv.DictReader(source))
