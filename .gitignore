@@ -179,6 +179,9 @@ models/*
 
 data/
 images/
-labels/
+labels/*
+!labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/
+labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/*
+!labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/*.csv
 logs/
 .DS_Store
