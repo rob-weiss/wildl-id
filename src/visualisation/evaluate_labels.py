@@ -32,6 +32,24 @@ from astral import LocationInfo
 from astral.moon import phase
 from astral.sun import sun
 
+VISUALIZATION_CLASSES = frozenset(
+    {
+        "roe deer",
+        "wild boar",
+        "pigeon",
+        "badger",
+        "marten",
+        "fox",
+        "hare",
+        "raccoon",
+        "crow",
+    }
+)
+
+
+def filter_visualization_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
+    return dataframe.loc[dataframe["class"].isin(VISUALIZATION_CLASSES)].copy()
+
 
 def main():
     """Main function to generate all visualizations."""
@@ -101,10 +119,10 @@ def main():
     df_valid = df[df["timestamp"].notna()].copy()
     print(f"\n{len(df_valid)} images with valid timestamps")
 
-    # Filter out 'none' and 'unknown' classes
-    df = df[~df["class"].isin(["none", "unknown"])].copy()
-    df_valid = df_valid[~df_valid["class"].isin(["none", "unknown"])].copy()
-    print(f"{len(df_valid)} images after filtering out 'none' and 'unknown' classes")
+    # Keep only requested wildlife classes
+    df = filter_visualization_classes(df)
+    df_valid = filter_visualization_classes(df_valid)
+    print(f"{len(df_valid)} images after filtering to requested wildlife classes")
 
     # Data Quality Summary
     print("\n" + "=" * 70)
