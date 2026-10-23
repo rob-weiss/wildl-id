@@ -180,3 +180,5 @@ models/*
 data/
 images/
 labels/
+logs/
+.DS_Store
