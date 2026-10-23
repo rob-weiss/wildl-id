@@ -108,6 +108,17 @@ and saved annotated images otherwise. Choose a mode, accept the prediction, or s
 a label. Drag on the image to add or replace its bounding box; changes save to the CSV.
 Use **Undo label** or **Undo box** to revert the last change of that kind.
 
+### Remove Empty Images
+
+Delete images a human confirmed as empty (`class` and `manual_label` both `none`):
+
+```bash
+uv run src/labelling/remove_empty_images.py [--dry-run]
+```
+
+The original images, annotated images and CSV rows are removed. Deleted paths are
+written to `logs/` and the CSV is backed up first.
+
 Press **Space** to accept the current prediction. Press a displayed shortcut letter to
 choose its label. Press **Enter** to focus the custom-label field; press **Enter** there
 to save it. Press **Backspace** to undo the last label.
