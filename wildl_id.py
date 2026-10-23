@@ -5,9 +5,10 @@ Wildlife Camera Image Analysis - Main Interface
 This is the main entry point for the wildlife camera analysis system.
 It provides a user-friendly interface to:
 1. Download new images from camera gallery
-2. Label/classify images using MegaDetector and species classifier
-3. Generate visualizations and analysis reports
-4. Run all steps in sequence
+2. Organize new images from data/ into images/<year>/<location>/
+3. Label/classify images using MegaDetector and species classifier
+4. Generate visualizations and analysis reports
+5. Run all steps in sequence
 
 Usage:
     # Interactive menu:
@@ -15,10 +16,11 @@ Usage:
 
     # Command-line arguments:
     python wildl_id.py --download         # Download images
+    python wildl_id.py --organize         # Organize images
     python wildl_id.py --label            # Label images
     python wildl_id.py --visualize        # Generate visualizations
     python wildl_id.py --all              # Run all steps
-    python wildl_id.py -d -l -v           # Same as --all (short form)
+    python wildl_id.py -d -o -l -v        # Same as --all (short form)
 """
 
 import argparse
@@ -31,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 # Import the main functions from each module
 # from labelling.download_images import main as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
+from labelling.organize_images import organize_images as organize_main
 from visualisation.evaluate_labels import main as visualisation_main
 
 
@@ -47,10 +50,11 @@ def print_menu():
     print("\n📋 MAIN MENU")
     print("-" * 70)
     print("1. Download new images from camera gallery")
-    print("2. Label/classify images (MegaDetector + Species Classifier)")
-    print("3. Generate visualizations and analysis reports")
-    print("4. Run all steps in sequence (Download → Label → Visualize)")
-    print("5. Exit")
+    print("2. Organize new images (data/ → images/<year>/<location>/)")
+    print("3. Label/classify images (MegaDetector + Species Classifier)")
+    print("4. Generate visualizations and analysis reports")
+    print("5. Run all steps in sequence (Download → Organize → Label → Visualize)")
+    print("6. Exit")
     print("-" * 70)
 
 
@@ -72,6 +76,25 @@ def download_images():
         return False
     except KeyboardInterrupt:
         print("\n\n⚠️  Download interrupted by user")
+        return False
+
+
+def organize_images():
+    """Move new images from data/ into images/<year>/<location>/."""
+    print("\n" + "=" * 70)
+    print("🗂️  ORGANIZING IMAGES")
+    print("=" * 70)
+    print()
+
+    try:
+        organize_main()
+        print("\n✓ Organizing completed successfully!")
+        return True
+    except Exception as e:
+        print(f"\n✗ Organizing failed: {e}")
+        return False
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Organizing interrupted by user")
         return False
 
 
@@ -136,31 +159,41 @@ def run_all(camera=None, reprocess_missing=False):
     print()
     print("This will run all steps in sequence:")
     print("  1. Download images")
-    print("  2. Label/classify images")
-    print("  3. Generate visualizations")
+    print("  2. Organize images")
+    print("  3. Label/classify images")
+    print("  4. Generate visualizations")
     print()
 
     # Step 1: Download
     print("\n\n" + "=" * 70)
-    print("STEP 1/3: DOWNLOADING IMAGES")
+    print("STEP 1/4: DOWNLOADING IMAGES")
     print("=" * 70)
     success = download_images()
     if not success:
         print("\n⚠️  Pipeline stopped due to download failure")
         return
 
-    # Step 2: Label
+    # Step 2: Organize
     print("\n\n" + "=" * 70)
-    print("STEP 2/3: LABELING IMAGES")
+    print("STEP 2/4: ORGANIZING IMAGES")
+    print("=" * 70)
+    success = organize_images()
+    if not success:
+        print("\n⚠️  Pipeline stopped due to organizing failure")
+        return
+
+    # Step 3: Label
+    print("\n\n" + "=" * 70)
+    print("STEP 3/4: LABELING IMAGES")
     print("=" * 70)
     success = label_images(camera=camera, reprocess_missing=reprocess_missing)
     if not success:
         print("\n⚠️  Pipeline stopped due to labeling failure")
         return
 
-    # Step 3: Visualize
+    # Step 4: Visualize
     print("\n\n" + "=" * 70)
-    print("STEP 3/3: GENERATING VISUALIZATIONS")
+    print("STEP 4/4: GENERATING VISUALIZATIONS")
     print("=" * 70)
     success = generate_visualizations()
     if not success:
@@ -208,6 +241,13 @@ Examples:
     )
 
     parser.add_argument(
+        "-o",
+        "--organize",
+        action="store_true",
+        help="Move new images from data/ into images/<year>/<location>/",
+    )
+
+    parser.add_argument(
         "-l",
         "--label",
         action="store_true",
@@ -225,7 +265,7 @@ Examples:
         "-a",
         "--all",
         action="store_true",
-        help="Run all steps in sequence (download, label, visualize)",
+        help="Run all steps in sequence (download, organize, label, visualize)",
     )
 
     parser.add_argument(
@@ -242,7 +282,9 @@ def main():
     args = parse_arguments()
 
     # Check if any action flags were provided
-    has_action = args.download or args.label or args.visualize or args.all
+    has_action = (
+        args.download or args.organize or args.label or args.visualize or args.all
+    )
 
     if has_action:
         # Command-line mode: run specified actions
@@ -255,6 +297,9 @@ def main():
             # Run individual steps as specified
             if args.download:
                 download_images()
+
+            if args.organize:
+                organize_images()
 
             if args.label:
                 label_images(
@@ -273,21 +318,23 @@ def main():
             print_menu()
 
             try:
-                choice = input("\nEnter your choice (1-5): ").strip()
+                choice = input("\nEnter your choice (1-6): ").strip()
 
                 if choice == "1":
                     download_images()
                 elif choice == "2":
-                    label_images()
+                    organize_images()
                 elif choice == "3":
-                    generate_visualizations()
+                    label_images()
                 elif choice == "4":
-                    run_all()
+                    generate_visualizations()
                 elif choice == "5":
+                    run_all()
+                elif choice == "6":
                     print("\n👋  Goodbye!")
                     break
                 else:
-                    print("\n⚠️  Invalid choice. Please enter 1-5.")
+                    print("\n⚠️  Invalid choice. Please enter 1-6.")
 
             except KeyboardInterrupt:
                 print("\n\n👋  Goodbye!")

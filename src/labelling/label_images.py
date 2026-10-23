@@ -908,7 +908,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
             f.write("=" * 80 + "\\n")
 
-    # Collect all images with location info from images/<year>/<location>/ and data/<location>/
+    # Collect all images with location info from images/<year>/<location>/
     indexed_paths = image_paths()
     image_info_list = [
         {"path": path, "name": name, "location_id": location_id}

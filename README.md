@@ -20,9 +20,10 @@ uv run wildl_id.py
 This will present an interactive menu where you can:
 
 1. **Download new images** from your camera gallery (ZEISS Secacam)
-2. **Label/classify images** using MegaDetector and DeepFaune species classifier
-3. **Generate visualizations** and analysis reports
-4. **Run all steps** in sequence (complete pipeline)
+2. **Organize new images** from `data/` into `images/<year>/<location>/`
+3. **Label/classify images** using MegaDetector and DeepFaune species classifier
+4. **Generate visualizations** and analysis reports
+5. **Run all steps** in sequence (complete pipeline)
 
 ### Usage
 
@@ -84,8 +85,8 @@ uv run src/labelling/organize_images.py [--dry-run]
 
 The script deletes videos and corrupt images, then moves images to
 `images/<year>/<location>/image_XXXXXXX.jpg`, numbered by EXIF capture time.
-Images without an EXIF timestamp stay in `data/`. The labels CSV, annotated images,
-and fine-tuning artifacts in `models/` are renamed to match. A mapping of old to new
+Images without an EXIF timestamp stay in `data/` and are ignored by the other tools.
+The labels CSV and annotated images are renamed to match. A mapping of old to new
 paths is written to `logs/`.
 
 ### Label Images

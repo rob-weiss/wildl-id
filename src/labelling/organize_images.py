@@ -7,8 +7,6 @@ Steps:
    Images without an EXIF timestamp stay in data/.
 3. Update image_file in the detection CSV and rename the matching annotated images
    (<location>_<image_file>) so both stay consistent with the moved files.
-4. Apply the same renames to fine-tuning runs in models/ (validation predictions
-   and exported training crops).
 
 A mapping of old to new paths is written to logs/ before anything is moved.
 
@@ -36,7 +34,6 @@ LOG_DIR = REPO_DIR / "logs"
 LABEL_DIR = REPO_DIR / "labels" / "labels_MegaDetectorV6_MDV6-yolov10-e_classified"
 CSV_PATH = LABEL_DIR / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 ANNOTATED_DIR = LABEL_DIR / "images"
-MODELS_DIR = REPO_DIR / "models"
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 VIDEO_EXTENSIONS = {
@@ -91,21 +88,19 @@ def next_free_number():
     return max(numbers, default=0) + 1
 
 
-def image_paths(images_dir=IMAGES_DIR, data_dir=DATA_DIR):
-    """Map (location, image_file) to images/<year>/<location>/<file>.
-
-    Files still in data/<location>/ (e.g. without timestamp) are included as well.
-    """
-    paths = {}
-    for root, pattern in ((data_dir, "*/*"), (images_dir, "*/*/*")):
-        for path in root.glob(pattern):
-            if path.is_file() and not path.name.startswith("."):
-                paths[(nfc(path.parent.name), path.name)] = path
-    return paths
+def image_paths(images_dir=IMAGES_DIR):
+    """Map (location, image_file) to images/<year>/<location>/<file>."""
+    return {
+        (nfc(path.parent.name), path.name): path
+        for path in images_dir.glob("*/*/*")
+        if path.is_file() and not path.name.startswith(".")
+    }
 
 
 def collect_files():
     images, videos, others = [], [], []
+    if not DATA_DIR.is_dir():
+        return images, videos, others
     for location_dir in sorted(p for p in DATA_DIR.iterdir() if p.is_dir()):
         for path in sorted(location_dir.rglob("*")):
             if not path.is_file() or path.name.startswith("."):
@@ -125,29 +120,17 @@ def location_of(path):
 
 
 def rename_row(row, renames):
-    """Apply renames to image_file (and crop_path of exported training data)."""
     location = nfc(row["location_id"])
     row["location_id"] = location
-    new_name = renames.get((location, row["image_file"]))
-    if new_name:
-        if row.get("crop_path"):
-            crop = Path(nfc(row["crop_path"]))
-            row["crop_path"] = crop.with_name(crop_name(location, new_name)).as_posix()
-        row["image_file"] = new_name
+    row["image_file"] = renames.get((location, row["image_file"]), row["image_file"])
     return row
-
-
-def crop_name(location, image_file):
-    return f"{location}_{Path(image_file).stem}.jpg"
 
 
 def annotated_name(location, image_file):
     return f"{location}_{image_file}"
 
 
-def rewrite_csv(path, rows, fieldnames, dry_run):
-    if dry_run:
-        return
+def rewrite_csv(path, rows, fieldnames):
     tmp_path = path.with_name(path.name + ".tmp")
     with tmp_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames, lineterminator="\n")
@@ -185,7 +168,7 @@ def update_csv(renames, removed, dry_run):
         f"{CSV_PATH.name}.before-organize-{datetime.now():%Y%m%d-%H%M%S}.bak"
     )
     shutil.copy2(CSV_PATH, backup)
-    rewrite_csv(CSV_PATH, kept, fieldnames, dry_run)
+    rewrite_csv(CSV_PATH, kept, fieldnames)
     print(f"CSV updated, backup at {backup.name}")
 
 
@@ -222,45 +205,7 @@ def rename_annotated(renames, removed, dry_run):
     print(f"Annotated images: {moved} renamed, {deleted} deleted")
 
 
-def update_models(renames, dry_run):
-    """Rename validation predictions and training crops of every fine-tuning run."""
-    if not MODELS_DIR.is_dir():
-        return
-    for run_dir in sorted(p for p in MODELS_DIR.iterdir() if p.is_dir()):
-        validation_dir = run_dir / "validation_predictions"
-        training_dir = run_dir / "training_data"
-        for csv_path in (
-            validation_dir / "predictions.csv",
-            training_dir / "labels.csv",
-        ):
-            if csv_path.is_file():
-                fieldnames, rows = read_csv(csv_path)
-                rows = [rename_row(row, renames) for row in rows]
-                rewrite_csv(csv_path, rows, fieldnames, dry_run)
-        predictions = crops = 0
-        if validation_dir.is_dir():
-            predictions, _ = rename_files(
-                validation_dir, renames, annotated_name, dry_run
-            )
-        if training_dir.is_dir():
-            crops, _ = rename_files(training_dir, renames, crop_name, dry_run)
-        print(
-            f"{run_dir.name}: {predictions} validation images, "
-            f"{crops} training crops renamed"
-        )
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--dry-run", action="store_true", help="report planned changes only"
-    )
-    parser.add_argument(
-        "--workers", type=int, default=os.cpu_count(), help="parallel image checks"
-    )
-    args = parser.parse_args()
-    dry_run = args.dry_run
-
+def organize_images(dry_run=False, workers=None):
     images, videos, others = collect_files()
     print(
         f"Found {len(images)} images, {len(videos)} videos, "
@@ -274,7 +219,7 @@ def main():
             path.unlink()
     print(f"{'Would delete' if dry_run else 'Deleted'} {len(videos)} videos")
 
-    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+    with ThreadPoolExecutor(max_workers=workers or os.cpu_count()) as pool:
         results = list(
             tqdm(
                 pool.map(inspect_image, images),
@@ -343,7 +288,18 @@ def main():
         return
     update_csv(renames, removed, dry_run)
     rename_annotated(renames, removed, dry_run)
-    update_models(renames, dry_run)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--dry-run", action="store_true", help="report planned changes only"
+    )
+    parser.add_argument(
+        "--workers", type=int, default=os.cpu_count(), help="parallel image checks"
+    )
+    args = parser.parse_args()
+    organize_images(args.dry_run, args.workers)
 
 
 if __name__ == "__main__":
