@@ -41,7 +41,7 @@ from tqdm import tqdm
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
 IMAGE_DIR = REPO_DIR / "data"
-LABELS_DIR = IMAGE_DIR / "labels_MegaDetectorV6_MDV6-yolov10-e_classified"
+LABELS_DIR = REPO_DIR / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
 CSV_PATH = LABELS_DIR / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 MODELS_DIR = REPO_DIR / "models"
 

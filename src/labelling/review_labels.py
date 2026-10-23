@@ -17,7 +17,7 @@ from PIL import Image
 
 DEFAULT_CSV = (
     Path(__file__).resolve().parents[2]
-    / "data/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
+    / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
     / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 )
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"

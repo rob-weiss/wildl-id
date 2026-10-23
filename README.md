@@ -113,8 +113,8 @@ runs preserve the manual column and skip reviewed images, even if their metadata
 incomplete. Do not run both tools simultaneously.
 
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
-By default, the reviewer uses the MegaDetector V6 yolov10-e classified CSV and its
-adjacent annotated images directory.
+By default, the reviewer uses the MegaDetector V6 yolov10-e and DeepFaune labels under
+`labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/`.
 
 ### Generate Visualizations
 

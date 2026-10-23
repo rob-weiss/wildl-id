@@ -67,6 +67,7 @@ from tqdm import tqdm
 
 # Configuration (must be defined before OCR framework checks)
 image_dir = Path(__file__).parent.parent.parent / "data"
+repo_dir = Path(__file__).resolve().parents[2]
 # MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
 # MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
 model_version = "MegaDetectorV6"
@@ -889,8 +890,10 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
 
     # Create output directories
     classifier_suffix = "_classified" if use_classification else ""
-    labels_dir = image_dir / f"labels_{model_version}_{model_name}{classifier_suffix}"
-    labels_dir.mkdir(exist_ok=True)
+    labels_dir = (
+        repo_dir / "labels" / f"labels_{model_version}_{model_name}{classifier_suffix}"
+    )
+    labels_dir.mkdir(parents=True, exist_ok=True)
     images_output_dir = labels_dir / "images"
     images_output_dir.mkdir(exist_ok=True)
 
@@ -905,7 +908,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     subfolders = [
         d
         for d in image_dir.iterdir()
-        if d.is_dir() and not d.name.startswith("labels_")
+        if d.is_dir() and d.name != "labels" and not d.name.startswith("labels_")
     ]
 
     # Collect all images with location info

@@ -38,9 +38,9 @@ def main():
     # Configuration
     model = "MegaDetectorV6_MDV6-yolov10-e_classified"
     image_dir = Path(__file__).parent.parent.parent / "data"
-    labels_dir = image_dir / f"labels_{model}"
     # Put visualizations in docs/diagrams at repo root
     repo_root = Path(__file__).parent.parent.parent
+    labels_dir = repo_root / "labels" / f"labels_{model}"
     output_dir = repo_root / "docs" / "diagrams"
 
     # Delete old visualizations directory and recreate it
