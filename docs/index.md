@@ -16,10 +16,11 @@ See the [README](../README.md) for installation and usage instructions.
 
 - [Visualisations](visualisations.md)
 - [Project README](../README.md)
+- [Contributing](../CONTRIBUTING.md)
+- [Dataset licence and provenance](../DATA-LICENCE.md)
 
 ## Data and Licensing
 
 The tracked CSV contains labels and camera metadata; original photographs are not
-included. The data is intended for public reuse, but has no separate data licence or
-provenance statement. The [MIT licence](../LICENSE) applies to code only; attribution
-and redistribution terms for the CSV remain unspecified.
+included. It is licensed under [CC BY 4.0](../DATA-LICENCE.md). The [MIT licence](../LICENSE)
+applies to code only; neither licence covers third-party model software or weights.

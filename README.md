@@ -157,6 +157,10 @@ Edit [src/visualisation/evaluate_labels.py](src/visualisation/evaluate_labels.py
 ## Data and Licensing
 
 The tracked CSV contains labels and camera metadata; original photographs are not
-included. The data is intended for public reuse, but no separate data licence or
-provenance statement is provided. The MIT licence applies to the code; attribution
-and redistribution terms for the CSV remain unspecified.
+included. The CSV is licensed under [CC BY 4.0](DATA-LICENCE.md). The MIT licence
+applies to the code only; neither licence covers third-party model software or
+weights.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, tests, and data guidance.
