@@ -110,6 +110,12 @@ Use **Undo label** or **Undo box** to revert the last change of that kind.
 Use **Remove empty** to delete all confirmed-empty images in the active CSV after
 confirmation. Cleanup keeps a CSV backup and deletion log, then clears undo history.
 
+Use the zoom icons, mouse wheel, or a pinch gesture to inspect the image. Choose
+**Pan** to move the zoomed image or **Box** to edit its bounding box. **Focus subject**
+toggles between the whole image and its saved bounding-box area, with padding.
+This preference stays active across images; images without a valid box show in full.
+Manual zoom resets for each new image. **Fit image** turns subject focus off.
+
 ### Remove Empty Images
 
 Delete images a human confirmed as empty (`class` and `manual_label` both `none`):

@@ -263,6 +263,63 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_subject_focus_persists_between_images_and_handles_missing_boxes(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        with patch.object(app, "image_path_for", return_value=None):
+            self.assertFalse(app.focus_subject)
+            app.toggle_subject_focus()
+            self.assertTrue(app.viewer._props["focusSubject"])
+            app.change_mode("All")
+            app.choose_label("fox")
+            self.assertEqual(app.current_index, 1)
+            self.assertTrue(app.focus_subject)
+            self.assertEqual(app.viewer._props["subject"], [0.5, 0.5, 0.4, 0.4])
+            self.assertEqual(app.viewer._props["imageKey"], "camera1/correct.jpg")
+
+            app.review.rows[1]["box"] = ""
+            app.refresh()
+            self.assertIsNone(app.viewer._props["subject"])
+            self.assertTrue(app.viewer._props["focusSubject"])
+
+            app.fit_image()
+            self.assertFalse(app.focus_subject)
+            self.assertFalse(app.viewer._props["focusSubject"])
+
+    def test_pan_mode_does_not_edit_bounding_boxes(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        app.image_size = (100, 100)
+        original_box = app.review.rows[0]["box"]
+        app.set_image_mode("pan")
+        with patch.object(app.review, "save") as save:
+            app.on_image_mouse(
+                SimpleNamespace(type="mousedown", image_x=10, image_y=10)
+            )
+            app.on_image_mouse(SimpleNamespace(type="mouseup", image_x=80, image_y=80))
+        save.assert_not_called()
+        self.assertEqual(app.review.rows[0]["box"], original_box)
+        self.assertIsNone(app.drag_start)
+        app.set_image_mode("box")
+        self.assertEqual(app.viewer._props["interactionMode"], "box")
+
+    def test_zoomed_overlay_keeps_four_pixel_outline(self):
+        row = {"class": "fox", "box": "[0.5, 0.5, 0.4, 0.4]"}
+        overlay = review_app_module.box_overlay_svg(
+            row, (2000, 1500), display_size=(2400, 1800), zoom_scale=3
+        )
+        root = ET.fromstring(f"<svg>{overlay}</svg>")
+        self.assertAlmostEqual(
+            float(root.find("rect").get("stroke-width")) * 3, 4, places=4
+        )
+        self.assertEqual(root.find("g/text").get("font-size"), "16")
+
     def test_browser_label_buttons_include_unique_nonempty_manual_classes(self):
         with self.csv_path.open("a", newline="", encoding="utf-8") as target:
             csv.writer(target).writerows(

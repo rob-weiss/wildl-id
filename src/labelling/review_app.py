@@ -34,7 +34,7 @@ def parse_box(value):
     return box
 
 
-def box_overlay_svg(row, image_size, prediction=None, display_size=None):
+def box_overlay_svg(row, image_size, prediction=None, display_size=None, zoom_scale=1):
     image_width, image_height = image_size
     display_width, display_height = display_size or image_size
     scale_x = image_width / display_width
@@ -84,7 +84,7 @@ def box_overlay_svg(row, image_size, prediction=None, display_size=None):
     return (
         f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
         f'height="{box_height:.1f}" fill="none" stroke="{color}" '
-        'stroke-width="4" vector-effect="non-scaling-stroke" />'
+        f'stroke-width="{4 / zoom_scale:g}" vector-effect="non-scaling-stroke" />'
         f'<g transform="translate({label_left * scale_x:.1f} '
         f'{label_top * scale_y:.1f}) scale({scale_x} {scale_y})">'
         '<rect x="0" y="0" '
@@ -96,6 +96,14 @@ def box_overlay_svg(row, image_size, prediction=None, display_size=None):
     )
 
 
+class ZoomViewer(
+    ui.element,
+    component="review_zoom.js",
+    esm={"@panzoom/panzoom": "vendor"},
+):
+    pass
+
+
 class ReviewApp:
     def __init__(self, csv_path, images_dir=None):
         self.review = LabelReview(csv_path, images_dir)
@@ -103,10 +111,13 @@ class ReviewApp:
         self.current_image_path = None
         self.image_size = None
         self.display_size = None
+        self.zoom_scale = 1
         self.drag_start = None
         self.box_history = []
         self.label_buttons = []
         self.cleanup_dialog_open = False
+        self.focus_subject = False
+        self.image_mode = "box"
 
     def build(self):
         ui.colors(primary="#2e7d32", secondary="#c62828")
@@ -114,7 +125,7 @@ class ReviewApp:
         ui.add_head_html(
             """<style>
             body { background: #f4f6f4; }
-            .review-image { max-height: calc(100vh - 150px); }
+            .review-viewport { background: #e5e7e5; }
             </style>"""
         )
         with ui.column().classes("w-full min-h-screen p-4 gap-3"):
@@ -134,21 +145,54 @@ class ReviewApp:
                 )
 
             with ui.row().classes("w-full items-start gap-4 flex-wrap"):
-                with ui.column().classes("grow min-w-0"):
-                    self.image = (
-                        ui.interactive_image(
-                            size=(640, 480),
-                            events=["mousedown", "mouseup"],
-                            on_mouse=self.on_image_mouse,
+                with ui.column().classes("grow min-w-0").style("flex-basis: 600px"):
+                    with ui.row().classes("w-full items-center gap-1"):
+                        ui.button(
+                            icon="zoom_in",
+                            on_click=lambda: self.viewer.run_method("zoomIn"),
+                        ).props("flat round dense aria-label='Zoom in'").tooltip(
+                            "Zoom in"
                         )
-                        .classes("w-full review-image")
-                        .style("cursor: crosshair")
+                        ui.button(
+                            icon="zoom_out",
+                            on_click=lambda: self.viewer.run_method("zoomOut"),
+                        ).props("flat round dense aria-label='Zoom out'").tooltip(
+                            "Zoom out"
+                        )
+                        ui.button(icon="fit_screen", on_click=self.fit_image).props(
+                            "flat round dense aria-label='Fit image'"
+                        ).tooltip("Fit image")
+                        self.subject_zoom_button = (
+                            ui.button(
+                                icon="center_focus_strong",
+                                on_click=self.toggle_subject_focus,
+                            )
+                            .props(
+                                "flat round dense aria-label='Focus subject' aria-pressed=false"
+                            )
+                            .tooltip("Focus subject")
+                        )
+                        ui.toggle(
+                            {"box": "Box", "pan": "Pan"},
+                            value="box",
+                            on_change=lambda event: self.set_image_mode(event.value),
+                        ).props("dense no-caps").classes("ml-auto")
+                    self.viewer = (
+                        ZoomViewer()
+                        .classes("w-full")
+                        .style("height: min(70vh, 680px); cursor: crosshair")
                     )
-                    with self.image:
-                        ui.element("q-resize-observer").on(
-                            "resize", self.on_image_resize
+                    self.viewer.on("viewport", self.on_image_resize)
+                    with self.viewer:
+                        self.image = (
+                            ui.interactive_image(
+                                size=None,
+                                events=["mousedown", "mouseup"],
+                                on_mouse=self.on_image_mouse,
+                            )
+                            .classes("review-image")
+                            .style("width: 100%; height: 100%; cursor: inherit")
                         )
-                    self.image.tooltip("Drag to add or replace the bounding box")
                     self.empty_message = ui.label().classes("text-gray-700")
                 with ui.column().classes("w-80 max-w-full shrink-0 gap-2"):
                     self.counter = ui.label()
@@ -228,6 +272,7 @@ class ReviewApp:
             self.current_index = None
             self.current_image_path = None
             self.image.set_visibility(False)
+            self.viewer.set_visibility(False)
             self.empty_message.set_text("No images match this review mode")
             self.empty_message.set_visibility(True)
             self.counter.set_text("0 images")
@@ -241,6 +286,7 @@ class ReviewApp:
             self.current_index = None
             self.current_image_path = None
             self.image.set_visibility(False)
+            self.viewer.set_visibility(False)
             self.empty_message.set_text("All matching labels checked")
             self.empty_message.set_visibility(True)
             self.counter.set_text(f"{len(self.review.pending)} images")
@@ -253,6 +299,14 @@ class ReviewApp:
 
         self.current_index = self.review.pending[self.review.position]
         row = self.review.rows[self.current_index]
+        self.viewer._props.update(
+            {
+                "imageKey": f"{row['location_id']}/{row['image_file']}",
+                "subject": parse_box(row.get("box", "")),
+                "focusSubject": self.focus_subject,
+                "interactionMode": self.image_mode,
+            }
+        )
         self.current_image_path = self.image_path_for(row)
         self.counter.set_text(
             f"{self.review.position + 1} / {len(self.review.pending)}"
@@ -274,19 +328,30 @@ class ReviewApp:
         if self.current_image_path is None:
             self.empty_message.set_text("Image file not found")
             self.image.set_visibility(False)
+            self.viewer.set_visibility(False)
         else:
             try:
                 with Image.open(self.current_image_path) as source:
                     self.image_size = source.size
+                self.viewer._props["imageSize"] = list(self.image_size)
                 self.image.set_source(self.current_image_path)
                 self.image.set_content(
-                    box_overlay_svg(row, self.image_size, prediction, self.display_size)
+                    box_overlay_svg(
+                        row,
+                        self.image_size,
+                        prediction,
+                        self.display_size,
+                        self.zoom_scale,
+                    )
                 )
                 self.image.set_visibility(True)
+                self.viewer.set_visibility(True)
             except (OSError, ValueError) as error:
                 self.empty_message.set_text(f"Cannot open image: {error}")
                 self.empty_message.set_visibility(True)
                 self.image.set_visibility(False)
+                self.viewer.set_visibility(False)
+            self.viewer.update()
         self.accept_button.enable()
         for button in self.label_buttons:
             button.enable()
@@ -297,12 +362,44 @@ class ReviewApp:
 
     def on_image_resize(self, event):
         display_size = (event.args["width"], event.args["height"])
-        if min(display_size) <= 0 or display_size == self.display_size:
+        zoom_scale = event.args.get("scale", 1)
+        if min(display_size) <= 0 or zoom_scale <= 0:
+            return
+        if display_size == self.display_size and zoom_scale == self.zoom_scale:
             return
         self.display_size = display_size
+        self.zoom_scale = zoom_scale
         self.refresh()
 
+    def toggle_subject_focus(self):
+        self.focus_subject = not self.focus_subject
+        self.subject_zoom_button.props(
+            f"aria-pressed={str(self.focus_subject).lower()}"
+        )
+        self.subject_zoom_button.classes(
+            add="bg-green-100" if self.focus_subject else "",
+            remove="" if self.focus_subject else "bg-green-100",
+        )
+        self.viewer._props["focusSubject"] = self.focus_subject
+        self.viewer.update()
+
+    def fit_image(self):
+        if self.focus_subject:
+            self.toggle_subject_focus()
+        self.viewer.run_method("fit")
+
+    def set_image_mode(self, mode):
+        if mode not in ("box", "pan"):
+            raise ValueError(f"Unknown image mode: {mode}")
+        self.image_mode = mode
+        self.drag_start = None
+        self.viewer._props["interactionMode"] = mode
+        self.viewer.style(f"cursor: {'grab' if mode == 'pan' else 'crosshair'}")
+        self.viewer.update()
+
     def on_image_mouse(self, event: events.MouseEventArguments):
+        if self.image_mode != "box" or self.cleanup_dialog_open:
+            return
         if self.current_index is None or self.image_size is None:
             return
         point = (event.image_x, event.image_y)
