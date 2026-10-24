@@ -263,6 +263,28 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_browser_label_buttons_include_unique_nonempty_manual_classes(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerows(
+                [
+                    ["camera1", "manual.jpg", "machine class", "", " red deer "],
+                    ["camera1", "duplicate.jpg", "fox", "", "red deer"],
+                    ["camera1", "blank.jpg", "fox", "", "   "],
+                ]
+            )
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        captions = [button.text for button in app.label_buttons]
+
+        self.assertEqual(captions.count("red deer"), 1)
+        self.assertEqual(captions.count("fox [f]"), 1)
+        self.assertIn("machine class", captions)
+        self.assertTrue(all(caption.strip() for caption in captions))
+        self.assertNotIn(" red deer ", captions)
+
     def test_unseen_image_omits_prediction_prefix_in_overlay_and_sidebar(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:

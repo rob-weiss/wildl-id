@@ -176,11 +176,16 @@ class ReviewApp:
                         )
                     ui.label("Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
+                        manual_labels = (
+                            str(row.get("manual_label") or "").strip()
+                            for row in self.review.rows
+                        )
                         labels = list(
                             dict.fromkeys(
                                 [
                                     *SHORTCUTS.values(),
                                     *(row["class"] for row in self.review.rows),
+                                    *(label for label in manual_labels if label),
                                 ]
                             )
                         )
