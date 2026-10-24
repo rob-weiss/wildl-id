@@ -152,6 +152,7 @@ def git_info():
 
 def load_labelled_rows():
     df = pd.read_csv(CSV_PATH, keep_default_na=False)
+    df["manual_label"] = df["manual_label"].str.strip()
     df = df[(df["box"] != "") & ~df["manual_label"].isin(EXCLUDED_LABELS)].copy()
 
     counts = df["manual_label"].value_counts()

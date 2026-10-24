@@ -12,6 +12,7 @@ import argparse
 import csv
 import shutil
 from datetime import datetime
+from pathlib import Path
 
 try:
     from .organize_images import (
@@ -50,13 +51,14 @@ def is_confirmed_empty(row):
     )
 
 
-def annotated_paths(removed):
-    if not ANNOTATED_DIR.is_dir():
+def annotated_paths(removed, annotated_dir=None):
+    annotated_dir = Path(annotated_dir) if annotated_dir is not None else ANNOTATED_DIR
+    if not annotated_dir.is_dir():
         return []
     names = {annotated_name(location, name) for location, name in removed}
     return [
         path
-        for path in sorted(ANNOTATED_DIR.rglob("*"))
+        for path in sorted(annotated_dir.rglob("*"))
         if path.is_file() and nfc(path.name) in names
     ]
 
@@ -69,15 +71,24 @@ def format_size(size):
     return f"{size:.1f} TB"
 
 
-def remove_empty_images(dry_run=False):
-    if not CSV_PATH.exists():
-        print(f"CSV not found: {CSV_PATH}")
-        return
+def remove_empty_images(
+    dry_run=False, *, csv_path=None, annotated_dir=None, expected_bytes=None
+):
+    csv_path = Path(csv_path) if csv_path is not None else CSV_PATH
+    if not csv_path.exists():
+        print(f"CSV not found: {csv_path}")
+        return 0
 
-    fieldnames, rows = read_csv(CSV_PATH)
+    original_bytes = csv_path.read_bytes()
+    if expected_bytes is not None and original_bytes != expected_bytes:
+        raise RuntimeError(
+            "CSV changed outside this reviewer. "
+            "Close and reopen it before removing images."
+        )
+    fieldnames, rows = read_csv(csv_path)
     if "manual_label" not in fieldnames:
         print("CSV has no manual_label column, nothing to remove")
-        return
+        return 0
 
     kept, removed = [], set()
     for row in rows:
@@ -88,7 +99,7 @@ def remove_empty_images(dry_run=False):
 
     paths = image_paths(IMAGES_DIR)
     files = [paths[key] for key in sorted(removed) if key in paths]
-    annotated = annotated_paths(removed)
+    annotated = annotated_paths(removed, annotated_dir)
     size = sum(path.stat().st_size for path in files + annotated)
     verb = "Would delete" if dry_run else "Deleting"
     print(
@@ -98,12 +109,19 @@ def remove_empty_images(dry_run=False):
     )
     if dry_run:
         print(f"Would free {format_size(size)}")
-        return
+        return len(removed)
     if not removed:
-        return
+        return 0
+
+    if csv_path.read_bytes() != original_bytes:
+        raise RuntimeError(
+            "CSV changed during cleanup. Close and reopen it before removing images."
+        )
 
     LOG_DIR.mkdir(exist_ok=True)
-    stamp = f"{datetime.now():%Y%m%d-%H%M%S}"
+    stamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}"
+    backup = csv_path.with_name(f"{csv_path.name}.before-remove-empty-{stamp}.bak")
+    shutil.copy2(csv_path, backup)
     log_path = LOG_DIR / f"remove_empty_images_{stamp}.csv"
     with log_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, lineterminator="\n")
@@ -117,11 +135,10 @@ def remove_empty_images(dry_run=False):
     for path in files + annotated:
         path.unlink()
 
-    backup = CSV_PATH.with_name(f"{CSV_PATH.name}.before-remove-empty-{stamp}.bak")
-    shutil.copy2(CSV_PATH, backup)
-    rewrite_csv(CSV_PATH, kept, fieldnames)
+    rewrite_csv(csv_path, kept, fieldnames)
     print(f"CSV: {len(removed)} rows dropped, backup at {backup.name}")
     print(f"Freed {format_size(size)}")
+    return len(removed)
 
 
 def main():

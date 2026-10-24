@@ -1,10 +1,12 @@
+import asyncio
 import csv
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import matplotlib
 
@@ -18,6 +20,196 @@ from PIL import Image
 review_module = import_module("src.labelling.review_labels")
 LabelReview = review_module.LabelReview
 review_app_module = import_module("src.labelling.review_app")
+empty_images_module = import_module("src.labelling.remove_empty_images")
+
+
+class RemoveEmptyImagesTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.root = Path(self.temp_dir.name)
+        self.csv_path = self.root / "active.csv"
+        self.images_dir = self.root / "images"
+        self.annotated_dir = self.root / "active-annotations"
+        self.annotated_dir.mkdir()
+        self.original_dir = self.images_dir / "2024" / "camera1"
+        self.original_dir.mkdir(parents=True)
+        self.names = ["empty.jpg", "unseen.jpg", "corrected.jpg", "animal.jpg"]
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=["location_id", "image_file", "class", "manual_label"],
+            )
+            writer.writeheader()
+            for name, label, manual_label in zip(
+                self.names,
+                ["none", "none", "fox", "fox"],
+                ["none", "", "none", "fox"],
+            ):
+                writer.writerow(
+                    {
+                        "location_id": "camera1",
+                        "image_file": name,
+                        "class": label,
+                        "manual_label": manual_label,
+                    }
+                )
+                (self.original_dir / name).write_bytes(b"original image")
+                (self.annotated_dir / f"camera1_{name}").write_bytes(b"annotation")
+        self.default_csv = self.root / "default.csv"
+        self.default_csv.write_bytes(b"do not change")
+        patches = patch.multiple(
+            empty_images_module,
+            REPO_DIR=self.root,
+            IMAGES_DIR=self.images_dir,
+            ANNOTATED_DIR=self.root / "default-annotations",
+            CSV_PATH=self.default_csv,
+            LOG_DIR=self.root / "logs",
+        )
+        patches.start()
+        self.addCleanup(patches.stop)
+
+    def build_app(self):
+        app = review_app_module.ReviewApp(self.csv_path, self.annotated_dir)
+        image_patch = patch.object(app, "image_path_for", return_value=None)
+        image_patch.start()
+        self.addCleanup(image_patch.stop)
+        with review_app_module.ui.column() as container:
+            app.build()
+        self.addCleanup(container.delete)
+        return app
+
+    def test_remove_empty_uses_active_csv_and_keeps_unconfirmed_images(self):
+        before = self.csv_path.read_bytes()
+
+        count = empty_images_module.remove_empty_images(
+            csv_path=self.csv_path,
+            annotated_dir=self.annotated_dir,
+            expected_bytes=before,
+        )
+
+        self.assertEqual(count, 1)
+        self.assertFalse((self.original_dir / "empty.jpg").exists())
+        self.assertFalse((self.annotated_dir / "camera1_empty.jpg").exists())
+        for name in self.names[1:]:
+            self.assertTrue((self.original_dir / name).exists())
+            self.assertTrue((self.annotated_dir / f"camera1_{name}").exists())
+        _, rows = empty_images_module.read_csv(self.csv_path)
+        self.assertEqual([row["image_file"] for row in rows], self.names[1:])
+        backup = next(self.root.glob("active.csv.before-remove-empty-*.bak"))
+        self.assertEqual(backup.read_bytes(), before)
+        log = next((self.root / "logs").glob("remove_empty_images_*.csv"))
+        with log.open(newline="", encoding="utf-8") as source:
+            logged = list(csv.DictReader(source))
+        self.assertEqual([row["image_file"] for row in logged], ["empty.jpg"])
+        self.assertEqual(self.default_csv.read_bytes(), b"do not change")
+
+    def test_remove_empty_dry_run_does_not_change_files(self):
+        before = self.csv_path.read_bytes()
+        count = empty_images_module.remove_empty_images(
+            dry_run=True, csv_path=self.csv_path, annotated_dir=self.annotated_dir
+        )
+        self.assertEqual(count, 1)
+        self.assertEqual(self.csv_path.read_bytes(), before)
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+        self.assertTrue((self.annotated_dir / "camera1_empty.jpg").exists())
+        self.assertFalse((self.root / "logs").exists())
+        self.assertEqual(list(self.root.glob("*.bak")), [])
+
+    def test_remove_empty_rejects_stale_csv_before_deleting_files(self):
+        with self.assertRaisesRegex(RuntimeError, "CSV changed"):
+            empty_images_module.remove_empty_images(
+                csv_path=self.csv_path,
+                annotated_dir=self.annotated_dir,
+                expected_bytes=b"stale snapshot",
+            )
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+        self.assertTrue((self.annotated_dir / "camera1_empty.jpg").exists())
+        self.assertFalse((self.root / "logs").exists())
+
+    def test_remove_empty_backup_failure_does_not_delete_images(self):
+        with (
+            patch.object(
+                empty_images_module.shutil,
+                "copy2",
+                side_effect=OSError("backup failed"),
+            ),
+            self.assertRaisesRegex(OSError, "backup failed"),
+        ):
+            empty_images_module.remove_empty_images(
+                csv_path=self.csv_path, annotated_dir=self.annotated_dir
+            )
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+        self.assertTrue((self.annotated_dir / "camera1_empty.jpg").exists())
+
+    def test_gui_remove_empty_reloads_active_csv_and_clears_undo(self):
+        app = self.build_app()
+        app.change_mode("All")
+        app.review.history.append((0, "none"))
+        app.box_history.append((0, ""))
+        self.assertEqual(app.remove_empty_button.text, "Remove empty")
+
+        with patch.object(review_app_module.ui, "notify"):
+            asyncio.run(app.remove_empty())
+
+        self.assertEqual(app.review.mode, "All")
+        self.assertEqual([row["image_file"] for row in app.review.rows], self.names[1:])
+        self.assertEqual(app.review.original_bytes, self.csv_path.read_bytes())
+        self.assertEqual(app.review.history, [])
+        self.assertEqual(app.box_history, [])
+        self.assertFalse(app.undo_box_button.enabled)
+        self.assertFalse(app.undo_button.enabled)
+
+    def test_gui_remove_empty_requires_confirmation(self):
+        app = self.build_app()
+        before = self.csv_path.read_bytes()
+
+        for confirmed in (False, True):
+
+            async def answer():
+                self.assertTrue(app.cleanup_dialog_open)
+                return confirmed
+
+            async def confirm():
+                with app.remove_empty_button.parent_slot.parent:
+                    await app.confirm_remove_empty()
+
+            with (
+                patch.object(
+                    review_app_module.ui.dialog,
+                    "__await__",
+                    lambda dialog: answer().__await__(),
+                ),
+                patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
+            ):
+                asyncio.run(confirm())
+                self.assertEqual(remove.await_count, int(confirmed))
+                self.assertFalse(app.cleanup_dialog_open)
+        self.assertEqual(self.csv_path.read_bytes(), before)
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+
+    def test_gui_remove_empty_reports_stale_csv_without_deleting_images(self):
+        app = self.build_app()
+        self.csv_path.write_bytes(self.csv_path.read_bytes() + b"\n")
+
+        with patch.object(review_app_module.ui, "notify") as notify:
+            asyncio.run(app.remove_empty())
+
+        self.assertIn("CSV changed", notify.call_args.args[0])
+        self.assertEqual(notify.call_args.kwargs["type"], "negative")
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+
+    def test_gui_shortcuts_do_nothing_while_cleanup_dialog_is_open(self):
+        app = self.build_app()
+        app.cleanup_dialog_open = True
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=False),
+            key=SimpleNamespace(name=" ", space=True, backspace=False, enter=False),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+        with patch.object(app, "accept") as accept:
+            app.on_key(event)
+        accept.assert_not_called()
 
 
 class LabelReviewTests(unittest.TestCase):
@@ -70,6 +262,62 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
+
+    def test_unseen_image_omits_prediction_prefix_in_overlay_and_sidebar(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with (
+                patch.object(app, "image_path_for", return_value=None),
+                patch.object(app, "prediction_for_row", return_value=None),
+            ):
+                app.build()
+                self.addCleanup(container.delete)
+                self.assertEqual(app.prediction.text, "fox")
+                overlay = review_app_module.box_overlay_svg(
+                    app.review.rows[0], (4000, 3000)
+                )
+                root = ET.fromstring(f"<svg>{overlay}</svg>")
+                self.assertEqual("".join(root.find("g/text").itertext()), "fox")
+
+                app.change_mode("Seen")
+                self.assertEqual(app.prediction.text, "Predicted: fox")
+
+    def test_browser_model_name_is_visible_only_in_latest_model_incorrect_mode(self):
+        run_name = "deepfaune_finetuned_20261020-191127_latest"
+        with (
+            patch.object(
+                review_module,
+                "latest_incorrect_predictions",
+                return_value=(run_name, {"camera1_correct.jpg"}),
+            ),
+            patch.object(review_module, "load_validation_predictions", return_value={}),
+        ):
+            app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        header_items = app.mode_select.parent_slot.children
+        run_label = app.run_label
+
+        self.assertIs(header_items[-2], run_label)
+        self.assertIs(header_items[-1], app.mode_select)
+        self.assertEqual(run_label.text, run_name)
+        self.assertFalse(run_label.visible)
+        with patch.object(app, "image_path_for", return_value=None):
+            for mode in (
+                "Latest model incorrect",
+                "Unseen",
+                "Latest model incorrect",
+                "Unseen + errors",
+                "Seen",
+                "All",
+            ):
+                with self.subTest(mode=mode):
+                    app.change_mode(mode)
+                    self.assertEqual(
+                        run_label.visible, mode == "Latest model incorrect"
+                    )
 
     def test_unseen_mode_advances_after_labeling_removes_current_row(self):
         csv_path = Path(self.temp_dir.name) / "unseen.csv"
@@ -220,9 +468,64 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertIn("True: jay | Predicted: song bird", overlay)
         self.assertNotIn("True: jay | Predicted: jay", overlay)
-        self.assertIn('stroke-width="8"', overlay)
+        self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
-        self.assertIn('font-size="112"', overlay)
+        self.assertIn('font-size="16"', overlay)
+
+    def test_box_overlay_keeps_annotation_size_in_display_pixels(self):
+        row = {
+            "class": "fox",
+            "manual_label": "hare",
+            "box": "[0.5, 0.5, 0.4, 0.4]",
+        }
+        for image_size, display_size in (
+            ((640, 480), (800, 600)),
+            ((4000, 3000), (800, 600)),
+            ((6000, 4000), (400, 300)),
+        ):
+            with self.subTest(image_size=image_size, display_size=display_size):
+                overlay = review_app_module.box_overlay_svg(
+                    row, image_size, display_size=display_size
+                )
+                root = ET.fromstring(f"<svg>{overlay}</svg>")
+                outline = root.find("rect")
+                annotation = root.find("g")
+                self.assertEqual(outline.get("stroke-width"), "4")
+                self.assertEqual(outline.get("vector-effect"), "non-scaling-stroke")
+                scale_x = image_size[0] / display_size[0]
+                scale_y = image_size[1] / display_size[1]
+                self.assertIn(
+                    f"scale({scale_x} {scale_y})", annotation.get("transform")
+                )
+                self.assertEqual(annotation.find("text").get("font-size"), "16")
+                self.assertEqual(annotation.find("rect").get("height"), "24")
+
+    def test_browser_updates_overlay_when_display_size_changes(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        event = SimpleNamespace(args={"width": 800, "height": 600})
+        with patch.object(app, "refresh") as refresh:
+            app.on_image_resize(event)
+            self.assertEqual(app.display_size, (800, 600))
+            refresh.assert_called_once()
+            app.on_image_resize(event)
+            refresh.assert_called_once()
+
+    def test_box_overlay_wraps_long_annotation_without_shrinking_text(self):
+        row = {
+            "class": "jay",
+            "manual_label": "pigeon",
+            "box": "[0.5, 0.5, 0.4, 0.4]",
+        }
+        overlay = review_app_module.box_overlay_svg(
+            row, (4000, 3000), display_size=(248, 186)
+        )
+        root = ET.fromstring(f"<svg>{overlay}</svg>")
+        annotation = root.find("g")
+        text = annotation.find("text")
+        self.assertEqual(text.get("font-size"), "16")
+        self.assertEqual(len(text.findall("tspan")), 2)
+        self.assertEqual(annotation.find("rect").get("height"), "48")
+        self.assertEqual(" ".join(text.itertext()), "True: pigeon | Predicted: jay")
 
     def test_accept_prediction_uses_latest_finetuned_class(self):
         app = review_app_module.ReviewApp(self.csv_path)

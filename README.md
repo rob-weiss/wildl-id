@@ -107,6 +107,8 @@ The reviewer opens at `http://127.0.0.1:8080`. It uses original photos when avai
 and saved annotated images otherwise. Choose a mode, accept the prediction, or select
 a label. Drag on the image to add or replace its bounding box; changes save to the CSV.
 Use **Undo label** or **Undo box** to revert the last change of that kind.
+Use **Remove empty** to delete all confirmed-empty images in the active CSV after
+confirmation. Cleanup keeps a CSV backup and deletion log, then clears undo history.
 
 ### Remove Empty Images
 

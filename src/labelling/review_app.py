@@ -4,11 +4,13 @@ import argparse
 import ast
 import html
 import math
+import textwrap
 from pathlib import Path
 
-from nicegui import events, ui
+from nicegui import events, run, ui
 from PIL import Image
 
+from .remove_empty_images import is_confirmed_empty, remove_empty_images
 from .review_labels import (
     DEFAULT_CSV,
     MODE_OPTIONS,
@@ -32,8 +34,11 @@ def parse_box(value):
     return box
 
 
-def box_overlay_svg(row, image_size, prediction=None):
+def box_overlay_svg(row, image_size, prediction=None, display_size=None):
     image_width, image_height = image_size
+    display_width, display_height = display_size or image_size
+    scale_x = image_width / display_width
+    scale_y = image_height / display_height
     box = parse_box(row.get("box", ""))
     if box is None:
         return ""
@@ -55,29 +60,39 @@ def box_overlay_svg(row, image_size, prediction=None):
     label = (
         f"True: {true_label} | Predicted: {predicted_label}"
         if true_label
-        else f"Predicted: {predicted_label}"
+        else predicted_label
     )
-    font_size = min(112, max(24, round(image_width * 0.028)))
+    font_size = 16
     padding_x = round(font_size * 0.45)
-    label_height = round(font_size * 1.5)
-    label_width = min(
-        image_width,
-        max(font_size * 6, len(label) * font_size * 0.58 + padding_x * 2),
+    line_height = round(font_size * 1.5)
+    characters_per_line = max(
+        1, int((display_width - padding_x * 2) / (font_size * 0.65))
     )
-    label_left = min(max(0, left), image_width - label_width)
-    label_top = max(0, top - label_height - round(font_size * 0.25))
-    escaped_label = html.escape(label, quote=False)
+    lines = textwrap.wrap(label, width=characters_per_line)
+    label_height = line_height * len(lines)
+    label_width = min(
+        display_width,
+        max(font_size * 6, max(map(len, lines)) * font_size * 0.65 + padding_x * 2),
+    )
+    label_left = min(max(0, left / scale_x), display_width - label_width)
+    label_top = max(0, top / scale_y - label_height - round(font_size * 0.25))
+    escaped_label = "".join(
+        f'<tspan x="{padding_x}" dy="{line_height if index else 0}">'
+        f"{html.escape(line, quote=False)}</tspan>"
+        for index, line in enumerate(lines)
+    )
     return (
         f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
         f'height="{box_height:.1f}" fill="none" stroke="{color}" '
-        'stroke-width="8" vector-effect="non-scaling-stroke" />'
-        f'<rect x="{label_left:.1f}" y="{label_top:.1f}" '
+        'stroke-width="4" vector-effect="non-scaling-stroke" />'
+        f'<g transform="translate({label_left * scale_x:.1f} '
+        f'{label_top * scale_y:.1f}) scale({scale_x} {scale_y})">'
+        '<rect x="0" y="0" '
         f'width="{label_width:.1f}" height="{label_height}" rx="2" '
         f'fill="{color}" />'
-        f'<text x="{label_left + padding_x:.1f}" '
-        f'y="{label_top + round(font_size * 1.12):.1f}" '
-        f'fill="white" font-size="{font_size}" font-weight="bold">'
-        f"{escaped_label}</text>"
+        f'<text x="{padding_x}" y="{round(font_size * 1.12)}" '
+        f'fill="white" font-size="{font_size}" font-family="sans-serif" font-weight="bold">'
+        f"{escaped_label}</text></g>"
     )
 
 
@@ -87,9 +102,11 @@ class ReviewApp:
         self.current_index = None
         self.current_image_path = None
         self.image_size = None
+        self.display_size = None
         self.drag_start = None
         self.box_history = []
         self.label_buttons = []
+        self.cleanup_dialog_open = False
 
     def build(self):
         ui.colors(primary="#2e7d32", secondary="#c62828")
@@ -103,6 +120,8 @@ class ReviewApp:
         with ui.column().classes("w-full min-h-screen p-4 gap-3"):
             with ui.row().classes("w-full items-center justify-between gap-4"):
                 ui.label("Wildlife label review").classes("text-xl font-semibold")
+                run_name = self.review.latest_model_name or "No validation run found"
+                self.run_label = ui.label(run_name).classes("text-sm text-gray-600")
                 self.mode_select = (
                     ui.select(
                         list(MODE_OPTIONS),
@@ -113,8 +132,6 @@ class ReviewApp:
                     .props("outlined dense")
                     .classes("w-64")
                 )
-                run_name = self.review.latest_model_name or "No validation run found"
-                ui.label(run_name).classes("text-sm text-gray-600")
 
             with ui.row().classes("w-full items-start gap-4 flex-wrap"):
                 with ui.column().classes("grow min-w-0"):
@@ -127,6 +144,10 @@ class ReviewApp:
                         .classes("w-full review-image")
                         .style("cursor: crosshair")
                     )
+                    with self.image:
+                        ui.element("q-resize-observer").on(
+                            "resize", self.on_image_resize
+                        )
                     self.image.tooltip("Drag to add or replace the bounding box")
                     self.empty_message = ui.label().classes("text-gray-700")
                 with ui.column().classes("w-80 max-w-full shrink-0 gap-2"):
@@ -144,6 +165,15 @@ class ReviewApp:
                         self.undo_box_button = ui.button(
                             "Undo box", icon="crop_free", on_click=self.undo_box
                         ).props("no-caps")
+                        self.remove_empty_button = (
+                            ui.button(
+                                "Remove empty",
+                                icon="delete_sweep",
+                                on_click=self.confirm_remove_empty,
+                            )
+                            .props("outline no-caps")
+                            .classes("text-red-700")
+                        )
                     ui.label("Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
                         labels = list(
@@ -187,6 +217,8 @@ class ReviewApp:
         return annotated if annotated.is_file() else None
 
     def refresh(self):
+        self.run_label.set_visibility(self.review.mode == "Latest model incorrect")
+        self.undo_button.set_enabled(bool(self.review.history))
         if not self.review.pending:
             self.current_index = None
             self.current_image_path = None
@@ -228,7 +260,11 @@ class ReviewApp:
                 f"Predicted: {prediction['predicted_label']}"
             )
         else:
-            self.prediction.set_text(f"Predicted: {row['class']}")
+            self.prediction.set_text(
+                f"Predicted: {row['class']}"
+                if str(row.get("manual_label") or "").strip()
+                else row["class"]
+            )
         self.empty_message.set_visibility(self.current_image_path is None)
         if self.current_image_path is None:
             self.empty_message.set_text("Image file not found")
@@ -239,7 +275,7 @@ class ReviewApp:
                     self.image_size = source.size
                 self.image.set_source(self.current_image_path)
                 self.image.set_content(
-                    box_overlay_svg(row, self.image_size, prediction)
+                    box_overlay_svg(row, self.image_size, prediction, self.display_size)
                 )
                 self.image.set_visibility(True)
             except (OSError, ValueError) as error:
@@ -253,6 +289,13 @@ class ReviewApp:
     def prediction_for_row(self, row):
         image_name = f"{row['location_id']}_{row['image_file']}"
         return self.review.latest_predictions.get(image_name)
+
+    def on_image_resize(self, event):
+        display_size = (event.args["width"], event.args["height"])
+        if min(display_size) <= 0 or display_size == self.display_size:
+            return
+        self.display_size = display_size
+        self.refresh()
 
     def on_image_mouse(self, event: events.MouseEventArguments):
         if self.current_index is None or self.image_size is None:
@@ -287,6 +330,8 @@ class ReviewApp:
         self.refresh()
 
     def on_key(self, event: events.KeyEventArguments):
+        if self.cleanup_dialog_open:
+            return
         if not event.action.keydown or event.action.repeat:
             return
         if event.modifiers.alt or event.modifiers.ctrl or event.modifiers.meta:
@@ -326,6 +371,65 @@ class ReviewApp:
         except (OSError, RuntimeError) as error:
             ui.notify(f"Label undo failed: {error}", type="negative")
         self.refresh()
+
+    async def confirm_remove_empty(self):
+        if self.cleanup_dialog_open:
+            return
+        count = sum(is_confirmed_empty(row) for row in self.review.rows)
+        if not count:
+            ui.notify("No confirmed empty images to remove")
+            return
+        with ui.dialog().props("persistent") as dialog, ui.card():
+            ui.label(f"Remove {count} confirmed empty images?").classes(
+                "text-lg font-semibold"
+            )
+            ui.label(
+                "Original and annotated images will be permanently deleted. "
+                "The CSV will be backed up and deleted paths logged."
+            ).classes("max-w-md")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                    "flat no-caps"
+                )
+                ui.button(
+                    "Remove empty",
+                    icon="delete_sweep",
+                    color="negative",
+                    on_click=lambda: dialog.submit(True),
+                ).props("no-caps")
+        self.cleanup_dialog_open = True
+        try:
+            if await dialog:
+                dialog.clear()
+                with dialog, ui.card():
+                    ui.spinner()
+                    ui.label("Removing empty images...")
+                dialog.open()
+                await self.remove_empty()
+        finally:
+            self.cleanup_dialog_open = False
+            dialog.delete()
+
+    async def remove_empty(self):
+        try:
+            count = await run.io_bound(
+                remove_empty_images,
+                csv_path=self.review.csv_path,
+                annotated_dir=self.review.images_dir,
+                expected_bytes=self.review.original_bytes,
+            )
+            updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
+            updated_review.set_mode(self.review.mode)
+        except (OSError, RuntimeError, ValueError) as error:
+            ui.notify(f"Cleanup failed: {error}", type="negative")
+            return
+        self.review = updated_review
+        self.box_history.clear()
+        self.drag_start = None
+        self.image_size = None
+        self.undo_box_button.disable()
+        self.refresh()
+        ui.notify(f"Removed {count} confirmed empty images", type="positive")
 
     def undo_box(self):
         if not self.box_history:
