@@ -16,7 +16,7 @@ Read the [Getting Started guide](getting-started.md) for installation and usage 
 
 - [Visualisations](visualisations.md)
 - [Getting Started](getting-started.md)
-- [Contributing](contributing.md)
+- [Contributing](development.md)
 - [Dataset licence and provenance](data-licence.md)
 - [Code licence](code-licence.md)
 
