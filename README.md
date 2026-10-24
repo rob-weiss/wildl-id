@@ -5,11 +5,15 @@ Python tools for identifying wildlife in camera-trap images and analysing activi
 ## Quick Start
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then create
-the Python 3.10 environment from the lockfile:
+the default Python 3.14.9 environment from the lockfile:
 
 ```bash
 uv sync --locked
 ```
+
+Python 3.14.9 is the project default. Python 3.10 is also supported; CI tests both
+Python 3.10 and 3.14. Python 3.15 is not yet supported because PyTorch has no
+compatible wheel.
 
 Copy camera exports into `data/<location>/` before organising images.
 

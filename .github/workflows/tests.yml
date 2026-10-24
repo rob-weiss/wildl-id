@@ -10,20 +10,24 @@ permissions:
 jobs:
     tests:
         runs-on: ubuntu-24.04
+        strategy:
+            fail-fast: false
+            matrix:
+                python-version: ["3.10", "3.14"]
         steps:
             - uses: actions/checkout@v4
             - uses: astral-sh/setup-uv@v6
               with:
                   enable-cache: true
             - name: Install Python
-              run: uv python install 3.10
+              run: uv python install "${{ matrix.python-version }}"
             - name: Install locked dependencies
-              run: uv sync --locked --python 3.10
+              run: uv sync --locked --python "${{ matrix.python-version }}"
             - name: Check lockfile
               run: uv lock --check
             - name: Compile source and tests
-              run: uv run --locked python -m compileall -q src wildl_id.py tests
+              run: uv run --locked --python "${{ matrix.python-version }}" python -m compileall -q src wildl_id.py tests
             - name: Run tests
               env:
                   PYTHONPATH: .
-              run: uv run --locked python -m unittest discover -s tests
+              run: uv run --locked --python "${{ matrix.python-version }}" python -m unittest discover -s tests

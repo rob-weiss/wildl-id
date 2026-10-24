@@ -5,10 +5,16 @@ The tracked labelled CSV at
 is licensed under the [Creative Commons Attribution 4.0 International licence
 (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
 
-Attribute the dataset to Rob Weiss and link to this repository and the licence.
-Indicate whether you changed the data. This licence applies to the CSV and its
-annotations and metadata only. It does not cover third-party software or model
-weights. Original camera photographs are not included.
+Use this attribution when reusing the CSV:
+
+> Rob Weiss, *Wildlife Identification and Analysis camera-trap detections*,
+> [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/),
+> [project repository](https://github.com/rob-weiss/wildl-id). Changes made.
+
+Replace “Changes made” with a short description if you adapt the data. This
+licence applies to the CSV and its annotations and metadata only. It does not
+cover third-party software or model weights. Original camera photographs are
+not included.
 
 The CSV records camera-trap detections and related metadata, including location
 IDs, timestamps, species labels, bounding boxes, model confidence, lighting,
