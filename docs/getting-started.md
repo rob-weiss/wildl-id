@@ -24,4 +24,7 @@ The menu can organise images, detect and classify wildlife, generate visualisati
 
 See the [visualisations](visualisations.md) page for example analyses.
 
+For manual workflows, reviewer controls, configuration, and other details, see the
+[full project guide](project-guide.md).
+
 [Home](index.md)
