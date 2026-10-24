@@ -10,17 +10,17 @@ Tools for identifying wildlife in camera-trap images and analysing labelled dete
 
 ## Getting Started
 
-See the [README](../README.md) for installation and usage instructions.
+See the [README](https://github.com/rob-weiss/wildl-id/blob/main/README.md) for installation and usage instructions.
 
 ## Documentation
 
 - [Visualisations](visualisations.md)
-- [Project README](../README.md)
-- [Contributing](../CONTRIBUTING.md)
-- [Dataset licence and provenance](../DATA-LICENCE.md)
+- [Project README](https://github.com/rob-weiss/wildl-id/blob/main/README.md)
+- [Contributing](https://github.com/rob-weiss/wildl-id/blob/main/CONTRIBUTING.md)
+- [Dataset licence and provenance](https://github.com/rob-weiss/wildl-id/blob/main/DATA-LICENCE.md)
 
 ## Data and Licensing
 
 The tracked CSV contains labels and camera metadata; original photographs are not
-included. It is licensed under [CC BY 4.0](../DATA-LICENCE.md). The [MIT licence](../LICENSE)
+included. It is licensed under [CC BY 4.0](https://github.com/rob-weiss/wildl-id/blob/main/DATA-LICENCE.md). The [MIT licence](https://github.com/rob-weiss/wildl-id/blob/main/LICENSE)
 applies to code only; neither licence covers third-party model software or weights.
