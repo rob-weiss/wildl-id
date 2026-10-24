@@ -1,27 +1,25 @@
 # Wildlife Identification and Analysis
 
-Welcome to the Wildlife Identification and Analysis project.
-
-## Overview
-
-This project provides tools for wildlife identification and label evaluation.
+Tools for identifying wildlife in camera-trap images and analysing labelled detections.
 
 ## Features
 
-- Wildlife species identification
-- Label evaluation and validation
-- Data visualisation
+- Wildlife detection and species classification
+- Machine-label review
+- Activity and environmental visualisations
 
 ## Getting Started
 
-Check out the [README](../README.md) for installation and usage instructions.
+See the [README](../README.md) for installation and usage instructions.
 
 ## Documentation
 
 - [Visualisations](visualisations.md)
-- [Labelling Guide](labelling.md)
-- [Evaluation Guide](evaluation.md)
+- [Project README](../README.md)
 
-## License
+## Data and Licensing
 
-This project is licensed under the terms specified in the [LICENSE](../LICENSE) file.
+The tracked CSV contains labels and camera metadata; original photographs are not
+included. The data is intended for public reuse, but has no separate data licence or
+provenance statement. The [MIT licence](../LICENSE) applies to code only; attribution
+and redistribution terms for the CSV remain unspecified.

@@ -66,7 +66,7 @@ def filter_baiting_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
     return labeled.loc[labeled["class"].isin(BAITING_CLASSES)].copy()
 
 
-def main():
+def main() -> bool:
     """Main function to generate all visualizations."""
     # Configuration
     model = "MegaDetectorV6_MDV6-yolov10-e_classified"
@@ -75,26 +75,6 @@ def main():
     repo_root = Path(__file__).parent.parent.parent
     labels_dir = repo_root / "labels" / f"labels_{model}"
     output_dir = repo_root / "docs" / "diagrams"
-
-    # Delete old visualizations directory and recreate it
-    if output_dir.exists():
-        print(f"Clearing old visualizations from {output_dir}")
-        try:
-            # Remove directory tree, ignoring errors for read-only files
-            def handle_remove_error(func, path, exc):
-                os.chmod(path, 0o777)
-                func(path)
-
-            shutil.rmtree(
-                output_dir,
-                ignore_errors=False,
-                onerror=handle_remove_error,
-            )
-            print("✓ Cleared old visualizations")
-        except Exception as e:
-            print(f"⚠ Warning: Could not fully clear old visualizations: {e}")
-            # Try to continue anyway
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize plot counter for sequential numbering
     plot_num = 0
@@ -109,20 +89,61 @@ def main():
     csv_path = labels_dir / f"detection_results_{model}.csv"
     if not csv_path.exists():
         print(f"Error: Results file not found at {csv_path}")
-        return
+        return False
 
-    df = pd.read_csv(csv_path)
+    try:
+        df = pd.read_csv(csv_path)
+    except (OSError, UnicodeError, ValueError, pd.errors.ParserError) as error:
+        print(f"Error: Could not read results file at {csv_path}: {error}")
+        return False
+
+    required_columns = {
+        "class",
+        "location_id",
+        "lighting",
+        "temperature_celsius",
+    }
+    missing_columns = required_columns.difference(df.columns)
+    if not {"timestamp", "timestamp_exif"}.intersection(df.columns):
+        missing_columns.add("timestamp or timestamp_exif")
+    if df.empty:
+        print(f"Error: Results file contains no rows: {csv_path}")
+        return False
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        print(f"Error: Results file is missing required columns: {missing}")
+        return False
+
+    if output_dir.exists():
+        print(f"Clearing old visualizations from {output_dir}")
+        try:
+
+            def handle_remove_error(func, path, exc):
+                os.chmod(path, 0o777)
+                func(path)
+
+            shutil.rmtree(
+                output_dir,
+                ignore_errors=False,
+                onerror=handle_remove_error,
+            )
+            print("✓ Cleared old visualizations")
+        except Exception as error:
+            print(f"⚠ Warning: Could not fully clear old visualizations: {error}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     print(f"Loaded {len(df)} labelled images")
     print(f"Columns: {df.columns.tolist()}")
     print("\nFirst few rows:")
     print(df.head())
 
     # Parse timestamps (EXIF preferred, OCR as fallback where EXIF is missing)
-    timestamp_source = (
-        df["timestamp_exif"].fillna(df["timestamp"])
-        if "timestamp_exif" in df.columns
-        else df["timestamp"]
-    )
+    if {"timestamp_exif", "timestamp"}.issubset(df.columns):
+        timestamp_source = df["timestamp_exif"].fillna(df["timestamp"])
+    else:
+        timestamp_source = (
+            df["timestamp_exif"] if "timestamp_exif" in df else df["timestamp"]
+        )
     df["timestamp"] = pd.to_datetime(timestamp_source, errors="coerce")
     df["hour"] = df["timestamp"].dt.hour
     df["date"] = df["timestamp"].dt.date
@@ -2158,9 +2179,10 @@ def main():
     print("\n" + "=" * 70)
     print(f"All visualizations saved to: {output_dir}")
     print("=" * 70)
+    return True
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(0 if main() else 1)
 
 # %%

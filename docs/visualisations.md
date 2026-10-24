@@ -4,36 +4,20 @@ Wildlife activity patterns and analysis visualisations.
 
 ## Table of Contents
 
-- [Visualisations](#visualisations)
-  - [Table of Contents](#table-of-contents)
-  - [Species Distribution](#species-distribution)
-    - [Species Distribution](#species-distribution-1)
-  - [Activity Patterns](#activity-patterns)
-    - [Species Activity Patterns](#species-activity-patterns)
-  - [Environmental Factors](#environmental-factors)
-    - [Location Comparison](#location-comparison)
-    - [Baiting Effect Analysis - Roe Deer](#baiting-effect-analysis---roe-deer)
-    - [Baiting Effect Analysis - Wild Boar](#baiting-effect-analysis---wild-boar)
-  - [Activity Timeline](#activity-timeline)
-    - [Individual Species Timelines](#individual-species-timelines)
-  - [Crepuscular Activity Analysis](#crepuscular-activity-analysis)
-    - [Roe Deer - Sunset Activity Scatter](#roe-deer---sunset-activity-scatter)
-    - [Roe Deer - Sunrise Activity Scatter](#roe-deer---sunrise-activity-scatter)
-    - [Roe Deer - Daily and Yearly Activity Pattern](#roe-deer---daily-and-yearly-activity-pattern)
-    - [Wild Boar - Daily and Yearly Activity Pattern](#wild-boar---daily-and-yearly-activity-pattern)
-  - [Summary Statistics](#summary-statistics)
+- [Species Distribution](#species-distribution)
+- [Activity Patterns](#activity-patterns)
+- [Environmental Factors](#environmental-factors)
+- [Activity Timeline](#activity-timeline)
+- [Crepuscular Activity Analysis](#crepuscular-activity-analysis)
+- [Summary Statistics](#summary-statistics)
 
 ## Species Distribution
-
-### Species Distribution
 
 ![Species Distribution](diagrams/01_species_distribution.svg)
 
 Overall distribution of species detections across the study area, shown in both bar chart and pie chart formats.
 
 ## Activity Patterns
-
-### Species Activity Patterns
 
 ![Species Activity Patterns](diagrams/02_species_activity_patterns.svg)
 
@@ -60,8 +44,6 @@ Impact of human activity on roe deer presence, with timeline and before/after an
 Impact of human activity on wild boar presence, with timeline and before/after analysis.
 
 ## Activity Timeline
-
-### Individual Species Timelines
 
 ![Individual Species Timelines](diagrams/09_individual_species_timelines.svg)
 

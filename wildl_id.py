@@ -4,23 +4,21 @@ Wildlife Camera Image Analysis - Main Interface
 
 This is the main entry point for the wildlife camera analysis system.
 It provides a user-friendly interface to:
-1. Download new images from camera gallery
-2. Organize new images from data/ into images/<year>/<location>/
-3. Label/classify images using MegaDetector and species classifier
-4. Generate visualizations and analysis reports
-5. Run all steps in sequence
+1. Organise new images from data/ into images/<year>/<location>/
+2. Label/classify images using MegaDetector and species classifier
+3. Generate visualisations and analysis reports
+4. Run all supported steps in sequence
 
 Usage:
     # Interactive menu:
     python wildl_id.py
 
     # Command-line arguments:
-    python wildl_id.py --download         # Download images
-    python wildl_id.py --organize         # Organize images
+    python wildl_id.py --organize         # Organise images
     python wildl_id.py --label            # Label images
-    python wildl_id.py --visualize        # Generate visualizations
+    python wildl_id.py --visualize        # Generate visualisations
     python wildl_id.py --all              # Run all steps
-    python wildl_id.py -d -o -l -v        # Same as --all (short form)
+    python wildl_id.py -o -l -v           # Organise, label, and visualise
 """
 
 import argparse
@@ -31,7 +29,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import the main functions from each module
-# from labelling.download_images import main as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import organize_images as organize_main
 from visualisation.evaluate_labels import main as visualisation_main
@@ -49,87 +46,65 @@ def print_menu():
     """Print the main menu."""
     print("\n📋 MAIN MENU")
     print("-" * 70)
-    print("1. Download new images from camera gallery")
-    print("2. Organize new images (data/ → images/<year>/<location>/)")
-    print("3. Label/classify images (MegaDetector + Species Classifier)")
-    print("4. Generate visualizations and analysis reports")
-    print("5. Run all steps in sequence (Download → Organize → Label → Visualize)")
-    print("6. Exit")
+    print("1. Organise new images (data/ → images/<year>/<location>/)")
+    print("2. Label/classify images (MegaDetector + Species Classifier)")
+    print("3. Generate visualisations and analysis reports")
+    print("4. Run all supported steps in sequence (Organise → Label → Visualise)")
+    print("5. Exit")
     print("-" * 70)
-
-
-def download_images():
-    """Download images from camera gallery."""
-    print("\n" + "=" * 70)
-    print("📥  DOWNLOADING IMAGES FROM CAMERA GALLERY")
-    print("=" * 70)
-    print()
-    print("⚠️  IMPORTANT: Make sure the ZEISS Secacam carousel is open in Safari!")
-    print()
-
-    try:
-        download_main()
-        print("\n✓ Download completed successfully!")
-        return True
-    except Exception as e:
-        print(f"\n✗ Download failed: {e}")
-        return False
-    except KeyboardInterrupt:
-        print("\n\n⚠️  Download interrupted by user")
-        return False
 
 
 def organize_images():
     """Move new images from data/ into images/<year>/<location>/."""
     print("\n" + "=" * 70)
-    print("🗂️  ORGANIZING IMAGES")
+    print("🗂️  ORGANISING IMAGES")
     print("=" * 70)
     print()
 
     try:
         organize_main()
-        print("\n✓ Organizing completed successfully!")
+        print("\n✓ Organising completed successfully!")
         return True
     except Exception as e:
-        print(f"\n✗ Organizing failed: {e}")
+        print(f"\n✗ Organising failed: {e}")
         return False
     except KeyboardInterrupt:
-        print("\n\n⚠️  Organizing interrupted by user")
+        print("\n\n⚠️  Organising interrupted by user")
         return False
 
 
 def label_images(camera=None, reprocess_missing=False):
     """Label and classify images using MegaDetector."""
     print("\n" + "=" * 70)
-    print("🏷️  LABELING IMAGES")
+    print("🏷️  LABELLING IMAGES")
     print("=" * 70)
     print()
     print("This will run MegaDetector for animal detection and DeepFaune for species")
     print("classification. It will also extract metadata (timestamp, temperature) and")
-    print("analyze lighting conditions.")
+    print("analyse lighting conditions.")
     print()
 
     try:
         process_images_with_pytorch_wildlife(
             camera=camera, reprocess_missing=reprocess_missing
         )
-        print("\n✓ Labeling completed successfully!")
+        print("\n✓ Labelling completed successfully!")
         return True
     except Exception as e:
-        print(f"\n✗ Labeling failed: {e}")
+        print(f"\n✗ Labelling failed: {e}")
         return False
     except KeyboardInterrupt:
-        print("\n\n⚠️  Labeling interrupted by user")
+        print("\n\n⚠️  Labelling interrupted by user")
         return False
 
 
 def generate_visualizations():
-    """Generate visualizations and analysis reports."""
+    """Generate visualisations and analysis reports."""
     print("\n" + "=" * 70)
-    print("📊  GENERATING VISUALIZATIONS")
+    print("📊  GENERATING VISUALISATIONS")
     print("=" * 70)
     print()
-    print("This will create comprehensive visualizations including:")
+    print("This will create comprehensive visualisations including:")
     print("  • Activity patterns by hour of day")
     print("  • Species distribution charts")
     print("  • Calendar heatmaps")
@@ -139,71 +114,53 @@ def generate_visualizations():
     print()
 
     try:
-        visualisation_main()
-        print("\n✓ Visualizations generated successfully!")
+        if visualisation_main() is False:
+            print("\n✗ Visualisation failed")
+            return False
+        print("\n✓ Visualisations generated successfully!")
         print("📁 Check the docs/diagrams/ folder for output files")
         return True
     except Exception as e:
-        print(f"\n✗ Visualization failed: {e}")
+        print(f"\n✗ Visualisation failed: {e}")
         return False
     except KeyboardInterrupt:
-        print("\n\n⚠️  Visualization interrupted by user")
+        print("\n\n⚠️  Visualisation interrupted by user")
         return False
 
 
 def run_all(camera=None, reprocess_missing=False):
-    """Run all steps in sequence."""
+    """Run all supported steps in sequence."""
     print("\n" + "=" * 70)
     print("🚀  RUNNING COMPLETE PIPELINE")
     print("=" * 70)
     print()
-    print("This will run all steps in sequence:")
-    print("  1. Download images")
-    print("  2. Organize images")
-    print("  3. Label/classify images")
-    print("  4. Generate visualizations")
+    print("This will run all supported steps in sequence:")
+    print("  1. Organise images")
+    print("  2. Label/classify images")
+    print("  3. Generate visualisations")
     print()
 
-    # Step 1: Download
-    print("\n\n" + "=" * 70)
-    print("STEP 1/4: DOWNLOADING IMAGES")
-    print("=" * 70)
-    success = download_images()
-    if not success:
-        print("\n⚠️  Pipeline stopped due to download failure")
-        return
-
-    # Step 2: Organize
-    print("\n\n" + "=" * 70)
-    print("STEP 2/4: ORGANIZING IMAGES")
-    print("=" * 70)
-    success = organize_images()
-    if not success:
-        print("\n⚠️  Pipeline stopped due to organizing failure")
-        return
-
-    # Step 3: Label
-    print("\n\n" + "=" * 70)
-    print("STEP 3/4: LABELING IMAGES")
-    print("=" * 70)
-    success = label_images(camera=camera, reprocess_missing=reprocess_missing)
-    if not success:
-        print("\n⚠️  Pipeline stopped due to labeling failure")
-        return
-
-    # Step 4: Visualize
-    print("\n\n" + "=" * 70)
-    print("STEP 4/4: GENERATING VISUALIZATIONS")
-    print("=" * 70)
-    success = generate_visualizations()
-    if not success:
-        print("\n⚠️  Pipeline completed with visualization errors")
-        return
+    steps = (
+        ("ORGANISING IMAGES", organize_images),
+        (
+            "LABELLING IMAGES",
+            lambda: label_images(camera=camera, reprocess_missing=reprocess_missing),
+        ),
+        ("GENERATING VISUALISATIONS", generate_visualizations),
+    )
+    for index, (description, action) in enumerate(steps, start=1):
+        print("\n\n" + "=" * 70)
+        print(f"STEP {index}/{len(steps)}: {description}")
+        print("=" * 70)
+        if not action():
+            print(f"\n⚠️  Pipeline stopped during {description.lower()}")
+            return False
 
     print("\n\n" + "=" * 70)
     print("✓  PIPELINE COMPLETED SUCCESSFULLY!")
     print("=" * 70)
     print()
+    return True
 
 
 def parse_arguments():
@@ -213,14 +170,14 @@ def parse_arguments():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                    Run interactive menu
-  %(prog)s --download         Download new images
-  %(prog)s --label            Label/classify images
-  %(prog)s --visualize        Generate visualizations
-  %(prog)s --all              Run all steps in sequence
-  %(prog)s -d -l -v           Run download, label, and visualize
-  %(prog)s -l --camera seissiger   Label with explicit Seissiger camera format
-  %(prog)s -l --camera zeiss       Label with explicit Zeiss camera format
+    %(prog)s                    Run interactive menu
+    %(prog)s --organize         Organise new images
+    %(prog)s --label            Label/classify images
+    %(prog)s --visualize        Generate visualisations
+    %(prog)s --all              Run all supported steps in sequence
+    %(prog)s -o -l -v           Organise, label, and visualise
+    %(prog)s -l --camera seissiger   Label with explicit Seissiger camera format
+    %(prog)s -l --camera zeiss       Label with explicit Zeiss camera format
     %(prog)s -l --reprocess-missing  Reprocess incomplete/missing label entries
         """,
     )
@@ -231,13 +188,6 @@ Examples:
         choices=["zeiss", "seissiger"],
         default="seissiger",
         help="Camera brand for timestamp parsing (default: seissiger)",
-    )
-
-    parser.add_argument(
-        "-d",
-        "--download",
-        action="store_true",
-        help="Download new images from camera gallery",
     )
 
     parser.add_argument(
@@ -258,83 +208,86 @@ Examples:
         "-v",
         "--visualize",
         action="store_true",
-        help="Generate visualizations and analysis reports",
+        help="Generate visualisations and analysis reports",
     )
 
     parser.add_argument(
         "-a",
         "--all",
         action="store_true",
-        help="Run all steps in sequence (download, organize, label, visualize)",
+        help="Run all supported steps in sequence (organise, label, visualise)",
     )
 
     parser.add_argument(
         "--reprocess-missing",
         action="store_true",
-        help="When labeling, reprocess entries with missing class/timestamp/temperature",
+        help="When labelling, reprocess entries with missing class/timestamp/temperature",
     )
 
     return parser.parse_args()
 
 
 def main():
-    """Main function with command-line argument support and interactive menu."""
+    """Run requested command-line actions or the interactive menu."""
     args = parse_arguments()
 
     # Check if any action flags were provided
-    has_action = (
-        args.download or args.organize or args.label or args.visualize or args.all
-    )
+    has_action = args.organize or args.label or args.visualize or args.all
 
     if has_action:
         # Command-line mode: run specified actions
         print_header()
 
         if args.all:
-            # Run all steps in sequence
-            run_all(camera=args.camera, reprocess_missing=args.reprocess_missing)
+            success = run_all(
+                camera=args.camera, reprocess_missing=args.reprocess_missing
+            )
         else:
+            success = True
             # Run individual steps as specified
-            if args.download:
-                download_images()
-
             if args.organize:
-                organize_images()
+                success = organize_images() and success
 
             if args.label:
-                label_images(
-                    camera=args.camera, reprocess_missing=args.reprocess_missing
+                success = (
+                    label_images(
+                        camera=args.camera, reprocess_missing=args.reprocess_missing
+                    )
+                    and success
                 )
 
             if args.visualize:
-                generate_visualizations()
+                success = generate_visualizations() and success
 
         print()
+        return 0 if success else 1
     else:
         # Interactive menu mode
         print_header()
+        exit_status = 0
 
         while True:
             print_menu()
 
             try:
-                choice = input("\nEnter your choice (1-6): ").strip()
+                choice = input("\nEnter your choice (1-5): ").strip()
 
                 if choice == "1":
-                    download_images()
+                    success = organize_images()
                 elif choice == "2":
-                    organize_images()
+                    success = label_images()
                 elif choice == "3":
-                    label_images()
+                    success = generate_visualizations()
                 elif choice == "4":
-                    generate_visualizations()
+                    success = run_all()
                 elif choice == "5":
-                    run_all()
-                elif choice == "6":
                     print("\n👋  Goodbye!")
                     break
                 else:
-                    print("\n⚠️  Invalid choice. Please enter 1-6.")
+                    print("\n⚠️  Invalid choice. Please enter 1-5.")
+                    continue
+                if not success:
+                    exit_status = 1
 
             except KeyboardInterrupt:
                 print("\n\n👋  Goodbye!")
@@ -344,7 +297,8 @@ def main():
                 print("Please try again or report this issue.")
 
         print()
+        return exit_status
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

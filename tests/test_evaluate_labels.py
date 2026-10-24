@@ -1,6 +1,10 @@
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
+from src.visualisation import evaluate_labels as evaluate_module
 from src.visualisation.evaluate_labels import (
     filter_baiting_classes,
     filter_visualization_classes,
@@ -54,6 +58,52 @@ class VisualizationClassFilterTests(unittest.TestCase):
         self.assertEqual(
             filtered["class"].tolist(), ["human", "human", "roe deer", "wild boar"]
         )
+
+
+class VisualizationOutputSafetyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.repo_dir = Path(self.temp_dir.name)
+        self.script_path = (
+            self.repo_dir / "src" / "visualisation" / "evaluate_labels.py"
+        )
+        self.output_dir = self.repo_dir / "docs" / "diagrams"
+        self.output_dir.mkdir(parents=True)
+        self.sentinel = self.output_dir / "keep.svg"
+        self.sentinel.write_text("existing output", encoding="utf-8")
+        model = "MegaDetectorV6_MDV6-yolov10-e_classified"
+        self.csv_path = (
+            self.repo_dir
+            / "labels"
+            / f"labels_{model}"
+            / f"detection_results_{model}.csv"
+        )
+
+    def run_visualisation(self):
+        with patch.object(evaluate_module, "__file__", self.script_path):
+            return evaluate_module.main()
+
+    def test_missing_csv_preserves_existing_visualisations(self):
+        result = self.run_visualisation()
+
+        self.assertIs(result, False)
+        self.assertTrue(self.sentinel.exists())
+
+    def test_invalid_csv_preserves_existing_visualisations(self):
+        self.csv_path.parent.mkdir(parents=True)
+        self.csv_path.write_text("class\nfox\n", encoding="utf-8")
+
+        error = None
+        result = None
+        try:
+            result = self.run_visualisation()
+        except (KeyError, ValueError) as caught:
+            error = caught
+
+        self.assertIsNone(error)
+        self.assertIs(result, False)
+        self.assertTrue(self.sentinel.exists())
 
 
 if __name__ == "__main__":

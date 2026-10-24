@@ -728,6 +728,13 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.position, 0)
 
     def test_gui_dropdown_selects_review_mode(self):
+        image_dir = self.csv_path.parent / "images"
+        image_dir.mkdir()
+        for image_name in ("unchecked", "correct", "incorrect"):
+            Image.new("RGB", (64, 64), "black").save(
+                image_dir / f"camera1_{image_name}.jpg"
+            )
+
         models_dir = Path(self.temp_dir.name) / "models"
         incorrect_dir = (
             models_dir
@@ -744,12 +751,14 @@ class LabelReviewTests(unittest.TestCase):
             review.show()
         self.addCleanup(plt.close, review.figure)
 
+        self.assertEqual(len(review.image_axes.images), 1)
         review.toggle_mode_menu()
         review.select_mode("Seen")
 
         self.assertEqual(review.pending, [1, 2])
         self.assertEqual(review.mode, "Seen")
         self.assertEqual(review.mode_button.label.get_text(), "Mode: Seen v")
+        self.assertEqual(len(review.image_axes.images), 1)
 
     def test_box_and_annotation_are_green_and_keep_true_label_when_correct(self):
         review = LabelReview(self.csv_path)
