@@ -1,8 +1,21 @@
 {
-  "include": ["src", "tests", "wildl_id.py"],
-  "exclude": [".venv", "data", "images", "labels", "logs", "models"],
-  "extraPaths": ["src"],
-  "pythonVersion": "3.10",
-  "venvPath": ".",
-  "venv": ".venv"
+    "include": [
+        "src",
+        "tests",
+        "wildl_id.py"
+    ],
+    "exclude": [
+        ".venv",
+        "data",
+        "images",
+        "labels",
+        "logs",
+        "models"
+    ],
+    "extraPaths": [
+        "src"
+    ],
+    "pythonVersion": "3.10",
+    "venvPath": ".",
+    "venv": ".venv"
 }
