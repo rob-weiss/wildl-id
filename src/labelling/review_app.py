@@ -121,7 +121,16 @@ class ReviewApp:
 
     def build(self):
         ui.colors(primary="#2e7d32", secondary="#c62828")
-        self.keyboard = ui.keyboard(on_key=self.on_key, repeating=False)
+        self.keyboard = ui.keyboard(on_key=self.on_key, repeating=True)
+        self.keyboard.on(
+            "key",
+            js_handler="""payload => {
+                if (payload.action === 'keydown' && payload.code === 'Space' &&
+                    !payload.altKey && !payload.ctrlKey && !payload.metaKey) {
+                    payload.event.preventDefault();
+                }
+            }""",
+        )
         ui.add_head_html(
             """<style>
             body { background: #f4f6f4; }
@@ -444,6 +453,8 @@ class ReviewApp:
             self.undo_label()
         elif event.key.enter:
             self.custom_label.run_method("focus")
+        elif event.key.name.lower() == "z":
+            self.toggle_subject_focus()
         else:
             label = SHORTCUTS.get(event.key.name.lower())
             if label:

@@ -115,6 +115,7 @@ Use the zoom icons, mouse wheel, or a pinch gesture to inspect the image. Choose
 toggles between the whole image and its saved bounding-box area, with padding.
 This preference stays active across images; images without a valid box show in full.
 Manual zoom resets for each new image. **Fit image** turns subject focus off.
+Press **Z** to toggle subject focus.
 
 ### Remove Empty Images
 

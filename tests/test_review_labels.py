@@ -645,6 +645,44 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(chosen, ["song bird"])
 
+    def test_held_space_reaches_client_guard_without_accepting_again(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        self.assertTrue(app.keyboard._props["repeating"])
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=True),
+            key=SimpleNamespace(name=" ", space=True, backspace=False, enter=False),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+        with patch.object(app, "accept") as accept:
+            app.on_key(event)
+        accept.assert_not_called()
+
+    def test_z_shortcut_toggles_subject_focus_without_changing_labels(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        before = self.csv_path.read_bytes()
+        with patch.object(app, "choose_label") as choose_label:
+            for key_name, focused in (("z", True), ("Z", False)):
+                event = SimpleNamespace(
+                    action=SimpleNamespace(keydown=True, repeat=False),
+                    key=SimpleNamespace(
+                        name=key_name, space=False, backspace=False, enter=False
+                    ),
+                    modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+                )
+                app.on_key(event)
+                self.assertEqual(app.focus_subject, focused)
+                self.assertEqual(app.viewer._props["focusSubject"], focused)
+            choose_label.assert_not_called()
+        self.assertEqual(self.csv_path.read_bytes(), before)
+
     def test_letter_shortcut_selects_matching_label(self):
         app = review_app_module.ReviewApp(self.csv_path)
         chosen = []
