@@ -122,6 +122,15 @@ class ReviewApp:
     def build(self):
         ui.colors(primary="#2e7d32", secondary="#c62828")
         self.keyboard = ui.keyboard(on_key=self.on_key, repeating=True)
+        ui.add_head_html(
+            """<script>
+            document.addEventListener('mousedown', event => {
+                if (event.target instanceof Element && event.target.closest('.q-btn')) {
+                    event.preventDefault();
+                }
+            }, true);
+            </script>"""
+        )
         self.keyboard.on(
             "key",
             js_handler="""payload => {

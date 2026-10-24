@@ -661,6 +661,15 @@ class LabelReviewTests(unittest.TestCase):
             app.on_key(event)
         accept.assert_not_called()
 
+    def test_keyboard_shortcuts_leave_focused_buttons_to_native_activation(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+
+        self.assertIn("button", app.keyboard._props["ignore"])
+
     def test_z_shortcut_toggles_subject_focus_without_changing_labels(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:
