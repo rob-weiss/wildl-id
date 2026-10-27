@@ -67,9 +67,7 @@ def filter_baiting_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
 
 
 def _create_individual_timeline_axes(n_rows, n_cols, figsize):
-    figure, axes = plt.subplots(
-        n_rows, n_cols, figsize=figsize, sharex=True
-    )
+    figure, axes = plt.subplots(n_rows, n_cols, figsize=figsize, sharex=True)
     if n_rows == 1:
         axes = axes.reshape(1, -1)
     return figure, axes.flatten()
