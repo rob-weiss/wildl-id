@@ -92,7 +92,18 @@ Save the mailbox password in Keychain Access:
 4. Enter the exact `username` from the JSON config as the account name.
 5. Type the mailbox password into the password field and save the item.
 
-Do not put the password in the config file or a shell command. The downloader
+Or add/update the item from Terminal. Replace `your-mailbox-login` with the
+exact `username` from the JSON config:
+
+```bash
+security add-generic-password -U \
+  -s "wildl-id-mail-downloader" \
+  -a "your-mailbox-login" \
+  -w
+```
+
+Because `-w` is last and has no value, macOS prompts for the password. Do not
+append the password to the command or put it in the config file. The downloader
 reads the generic password matching service `wildl-id-mail-downloader` and
 account `<username>` from Keychain.
 
