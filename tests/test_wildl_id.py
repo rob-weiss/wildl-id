@@ -3,18 +3,27 @@ import unittest
 from contextlib import redirect_stdout
 from importlib import import_module
 from io import StringIO
+from types import SimpleNamespace
 from unittest.mock import patch
 
 wildl_id = import_module("wildl_id")
 
 
 class WildlifeCommandLineTests(unittest.TestCase):
-    def test_download_option_is_rejected(self):
+    def test_download_option_is_accepted(self):
         with patch.object(sys, "argv", ["wildl_id.py", "--download"]):
-            with self.assertRaises(SystemExit) as error:
-                wildl_id.parse_arguments()
+            args = wildl_id.parse_arguments()
 
-        self.assertEqual(error.exception.code, 2)
+        self.assertTrue(args.download)
+
+    def test_menu_has_download_choice_five_and_exit_choice_six(self):
+        output = StringIO()
+        with redirect_stdout(output):
+            wildl_id.print_menu()
+
+        menu = output.getvalue()
+        self.assertIn("5. Download new images from email", menu)
+        self.assertIn("6. Exit", menu)
 
     def test_help_examples_use_consistent_indentation(self):
         output = StringIO()
@@ -45,6 +54,117 @@ class WildlifeCommandLineTests(unittest.TestCase):
         self.assertIn("visualisations", menu.lower())
         self.assertNotIn("Organize", menu)
         self.assertNotIn("Visualizations", menu)
+
+    def test_download_action_organizes_when_result_has_pending_images(self):
+        result = SimpleNamespace(
+            saved_images=2,
+            duplicates=0,
+            pending_organization=True,
+            failures=(),
+        )
+        with (
+            patch.object(wildl_id, "download_main", return_value=result),
+            patch.object(wildl_id, "organize_images", return_value=True) as organize,
+        ):
+            self.assertTrue(wildl_id.download_images())
+
+        organize.assert_called_once_with()
+
+    def test_download_action_skips_organizer_without_pending_images(self):
+        result = SimpleNamespace(
+            saved_images=0,
+            duplicates=0,
+            pending_organization=False,
+            failures=(),
+        )
+        with (
+            patch.object(wildl_id, "download_main", return_value=result),
+            patch.object(wildl_id, "organize_images") as organize,
+        ):
+            self.assertTrue(wildl_id.download_images())
+
+        organize.assert_not_called()
+
+    def test_download_action_returns_failure_when_organizer_fails(self):
+        result = SimpleNamespace(
+            saved_images=1,
+            duplicates=0,
+            pending_organization=True,
+            failures=(),
+        )
+        with (
+            patch.object(wildl_id, "download_main", return_value=result),
+            patch.object(wildl_id, "organize_images", return_value=False),
+        ):
+            self.assertFalse(wildl_id.download_images())
+
+    def test_download_action_organizes_partial_success_and_returns_failure(self):
+        result = SimpleNamespace(
+            saved_images=1,
+            duplicates=0,
+            pending_organization=True,
+            failures=("INBOX UID 4: transient failure",),
+        )
+        with (
+            patch.object(wildl_id, "download_main", return_value=result),
+            patch.object(wildl_id, "organize_images", return_value=True) as organize,
+        ):
+            self.assertFalse(wildl_id.download_images())
+
+        organize.assert_called_once_with()
+
+    def test_download_cli_calls_download_action(self):
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download"]),
+            patch.object(wildl_id, "download_images", return_value=True) as download,
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_called_once_with(organize=True)
+
+    def test_download_cli_returns_nonzero_on_download_failure(self):
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download"]),
+            patch.object(wildl_id, "download_images", return_value=False),
+        ):
+            self.assertEqual(wildl_id.main(), 1)
+
+    def test_download_and_organize_cli_only_runs_organizer_once(self):
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--organize"]),
+            patch.object(wildl_id, "download_images", return_value=True) as download,
+            patch.object(wildl_id, "organize_images", return_value=True) as organize,
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_called_once_with(organize=False)
+        organize.assert_called_once_with()
+
+    def test_download_and_all_cli_only_runs_organizer_once(self):
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--all"]),
+            patch.object(wildl_id, "download_images", return_value=True) as download,
+            patch.object(wildl_id, "run_all", return_value=True) as run_all,
+            patch.object(wildl_id, "organize_images") as organize,
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_called_once_with(organize=False)
+        run_all.assert_called_once_with(camera="seissiger", reprocess_missing=False)
+        organize.assert_not_called()
+
+    def test_menu_download_choice_runs_action_and_six_exits(self):
+        output = StringIO()
+        with (
+            patch.object(sys, "argv", ["wildl_id.py"]),
+            patch("builtins.input", side_effect=["5", "6"]),
+            patch.object(wildl_id, "download_images", return_value=True) as download,
+            redirect_stdout(output),
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_called_once_with()
+        self.assertIn("5. Download new images from email", output.getvalue())
 
     def test_all_runs_supported_actions_in_order(self):
         calls = []

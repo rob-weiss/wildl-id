@@ -14,6 +14,7 @@ Usage:
     python wildl_id.py
 
     # Command-line arguments:
+    python wildl_id.py --download         # Download new camera images from email
     python wildl_id.py --organize         # Organise images
     python wildl_id.py --label            # Label images
     python wildl_id.py --visualize        # Generate visualisations
@@ -32,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import organize_images as organize_main
 from visualisation.evaluate_labels import main as visualisation_main
+from downloading.download_email_images import download_email_images as download_main
 
 
 def print_header():
@@ -50,7 +52,8 @@ def print_menu():
     print("2. Label/classify images (MegaDetector + Species Classifier)")
     print("3. Generate visualisations and analysis reports")
     print("4. Run all supported steps in sequence (Organise → Label → Visualise)")
-    print("5. Exit")
+    print("5. Download new images from email")
+    print("6. Exit")
     print("-" * 70)
 
 
@@ -70,6 +73,37 @@ def organize_images():
         return False
     except KeyboardInterrupt:
         print("\n\n⚠️  Organising interrupted by user")
+        return False
+
+
+def download_images(organize=True):
+    """Download matching camera images and organise staged images when needed."""
+    print("\n" + "=" * 70)
+    print("📨  DOWNLOADING IMAGES FROM EMAIL")
+    print("=" * 70)
+    print()
+
+    try:
+        result = download_main()
+        for failure in result.failures:
+            print(f"✗ {failure}")
+        success = not result.failures
+        print(
+            f"Downloaded {result.saved_images} images; "
+            f"skipped {result.duplicates} duplicates"
+        )
+        if result.pending_organization:
+            if organize:
+                organization_success = organize_images()
+                success = organization_success and success
+            else:
+                print("Staged images will be organised by the requested workflow.")
+        return success
+    except Exception as e:
+        print(f"\n✗ Email download failed: {e}")
+        return False
+    except KeyboardInterrupt:
+        print("\n\n⚠️  Email download interrupted by user")
         return False
 
 
@@ -171,6 +205,7 @@ def parse_arguments():
         epilog="""
 Examples:
     %(prog)s                    Run interactive menu
+    %(prog)s --download         Download new images from email
     %(prog)s --organize         Organise new images
     %(prog)s --label            Label/classify images
     %(prog)s --visualize        Generate visualisations
@@ -188,6 +223,12 @@ Examples:
         choices=["zeiss", "seissiger"],
         default="seissiger",
         help="Camera brand for timestamp parsing (default: seissiger)",
+    )
+
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Download new camera images from email",
     )
 
     parser.add_argument(
@@ -232,21 +273,29 @@ def main():
     args = parse_arguments()
 
     # Check if any action flags were provided
-    has_action = args.organize or args.label or args.visualize or args.all
+    has_action = args.download or args.organize or args.label or args.visualize or args.all
 
     if has_action:
         # Command-line mode: run specified actions
         print_header()
 
         if args.all:
-            success = run_all(
+            download_success = True
+            if args.download:
+                download_success = download_images(organize=False)
+            pipeline_success = run_all(
                 camera=args.camera, reprocess_missing=args.reprocess_missing
             )
+            success = pipeline_success and download_success
         else:
             success = True
             # Run individual steps as specified
+            if args.download:
+                success = download_images(organize=not args.organize)
+
             if args.organize:
-                success = organize_images() and success
+                organization_success = organize_images()
+                success = organization_success and success
 
             if args.label:
                 success = (
@@ -281,10 +330,12 @@ def main():
                 elif choice == "4":
                     success = run_all()
                 elif choice == "5":
+                    success = download_images()
+                elif choice == "6":
                     print("\n👋  Goodbye!")
                     break
                 else:
-                    print("\n⚠️  Invalid choice. Please enter 1-5.")
+                    print("\n⚠️  Invalid choice. Please enter 1-6.")
                     continue
                 if not success:
                     exit_status = 1
