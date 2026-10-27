@@ -161,6 +161,30 @@ def collect_files():
     return images, videos, others
 
 
+def remove_empty_directories(root):
+    if not root.is_dir() or root.is_symlink():
+        return 0
+    directories = sorted(
+        (path for path in root.rglob("*") if path.is_dir() and not path.is_symlink()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    removed = 0
+    for directory in directories:
+        try:
+            directory.rmdir()
+        except OSError:
+            continue
+        removed += 1
+    try:
+        root.rmdir()
+    except OSError:
+        pass
+    else:
+        removed += 1
+    return removed
+
+
 def location_of(path):
     return nfc(path.relative_to(DATA_DIR).parts[0])
 
@@ -339,10 +363,14 @@ def organize_images(dry_run=False, workers=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(source, target)
 
-    if not (renames or removed):
-        return
-    update_csv(renames, removed, dry_run)
-    rename_annotated(renames, removed, dry_run)
+    if renames or removed:
+        update_csv(renames, removed, dry_run)
+        rename_annotated(renames, removed, dry_run)
+
+    if not dry_run:
+        removed_directories = remove_empty_directories(DATA_DIR)
+        if removed_directories:
+            print(f"Removed {removed_directories} empty directories from data/")
 
 
 def main():

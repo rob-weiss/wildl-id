@@ -86,12 +86,35 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
 
     def test_unrecognized_filename_without_exif_stays_in_data(self):
         source, _ = self.create_image("camera-export.jpg")
+        empty_folder = self.data_dir / "Unused" / "Empty"
+        empty_folder.mkdir(parents=True)
 
         organizer.organize_images(workers=1)
 
         self.assertTrue(source.exists())
         self.assertEqual(self.exif_capture_time(source), (None, None, None))
+        self.assertTrue(self.data_dir.exists())
+        self.assertFalse(empty_folder.parent.exists())
         self.assertFalse((self.images_dir / "2026" / "Grenzweg").exists())
+
+    def test_removes_data_tree_after_all_timestamped_images_are_organized(self):
+        self.create_image("Aufnahme_261026_2141_ZWBTI.jpg")
+        (self.data_dir / "Unused" / "Empty").mkdir(parents=True)
+
+        organizer.organize_images(workers=1)
+
+        self.assertFalse(self.data_dir.exists())
+        self.assertTrue(
+            (self.images_dir / "2026" / "Grenzweg" / "image_0000001.jpg").exists()
+        )
+
+    def test_dry_run_does_not_remove_empty_data_directories(self):
+        empty_folder = self.data_dir / "Unused" / "Empty"
+        empty_folder.mkdir(parents=True)
+
+        organizer.organize_images(dry_run=True, workers=1)
+
+        self.assertTrue(empty_folder.exists())
 
 
 if __name__ == "__main__":
