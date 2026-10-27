@@ -26,6 +26,7 @@ KEYCHAIN_SERVICE = "wildl-id-mail-downloader"
 SENDER_ADDRESS = "info@supersim.camera"
 RECIPIENT_ADDRESS = "wildlife@robinweiss.de"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+IMAP_TIMEOUT_SECONDS = 30
 SUBJECT_PATTERN = re.compile(r"^Kamera:\s*Jochen\s+\d+\s+(.+?)\s*$", re.IGNORECASE)
 RECIPIENT_HEADERS = (
     "To",
@@ -297,10 +298,14 @@ def _image_index(state):
     by_hash = {}
     roots = ((DATA_DIR, "data"), (IMAGES_DIR, "images"))
     for root, kind in roots:
-        if not root.is_dir():
+        if not root.is_dir() or root.is_symlink():
             continue
         for path in root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or path.suffix.lower() not in IMAGE_EXTENSIONS
+            ):
                 continue
             location = _location_for_existing(path, root, kind)
             if not location:
@@ -331,11 +336,20 @@ def _image_index(state):
 
 def _write_attachment(location, filename, content, digest, existing, by_hash, file_cache):
     target_dir = DATA_DIR / location
+    if DATA_DIR.is_symlink() or target_dir.is_symlink():
+        raise ValueError("download destination must not use a symlink")
     target_dir.mkdir(parents=True, exist_ok=True)
+    data_root = DATA_DIR.resolve()
+    if not target_dir.resolve().is_relative_to(data_root):
+        raise ValueError("download destination escapes data directory")
     target = target_dir / filename
+    if target.is_symlink():
+        raise ValueError("download target must not be a symlink")
     if target.exists():
         suffix = target.suffix
         target = target.with_name(f"{target.stem}_{digest[:12]}{suffix}")
+    if target.is_symlink():
+        raise ValueError("download target must not be a symlink")
     if target.exists():
         if _sha256(target) == digest:
             return target, False
@@ -471,9 +485,17 @@ def download_email_images(
         password = password_reader(KEYCHAIN_SERVICE, config["username"])
         if not password:
             raise RuntimeError("mail password is missing from macOS Keychain")
-        factory = imap_factory or imaplib.IMAP4_SSL
-        connection = factory(config["host"], config["port"])
-        status, _ = connection.login(config["username"], password)
+        connection: IMAP4
+        if imap_factory is None:
+            connection = imaplib.IMAP4_SSL(
+                config["host"], config["port"], timeout=IMAP_TIMEOUT_SECONDS
+            )
+        else:
+            connection = imap_factory(config["host"], config["port"])
+        try:
+            status, _ = connection.login(config["username"], password)
+        except imaplib.IMAP4.error:
+            raise RuntimeError("IMAP authentication failed") from None
         if not _status_ok(status):
             raise RuntimeError("IMAP authentication failed")
         inbox, trash = _mailboxes(connection, config)

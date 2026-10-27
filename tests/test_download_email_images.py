@@ -1,3 +1,4 @@
+import imaplib
 import json
 import os
 import tempfile
@@ -20,6 +21,7 @@ class FakeIMAP4:
         fail_uid_expunge=False,
         trash_name="Trash",
         login_failure=False,
+        login_exception=None,
     ):
         self.mailboxes = mailboxes
         self.selected = "INBOX"
@@ -29,8 +31,11 @@ class FakeIMAP4:
         self.fail_uid_expunge = fail_uid_expunge
         self.trash_name = trash_name
         self.login_failure = login_failure
+        self.login_exception = login_exception
 
     def login(self, username, password):
+        if self.login_exception:
+            raise self.login_exception
         if (
             self.login_failure
             or username != "camera@example.test"
@@ -486,6 +491,31 @@ class EmailImageDownloadTests(unittest.TestCase):
         self.assertIn("IMAP authentication failed", " ".join(result.failures))
         self.assertNotIn("wrong-password", " ".join(result.failures))
 
+    def test_server_login_exception_is_sanitized(self):
+        server = FakeIMAP4(
+            {"INBOX": {}, "Trash": {}},
+            login_exception=imaplib.IMAP4.error(
+                "AUTHENTICATIONFAILED password=do-not-log"
+            ),
+        )
+
+        result, _ = self.run_download(server=server, allow_failures=True)
+
+        self.assertIn("IMAP authentication failed", " ".join(result.failures))
+        self.assertNotIn("do-not-log", " ".join(result.failures))
+
+    def test_default_imap_connection_uses_a_finite_timeout(self):
+        server = FakeIMAP4({"INBOX": {}, "Trash": {}})
+        with patch.object(downloader.imaplib, "IMAP4_SSL", return_value=server) as factory:
+            result = downloader.download_email_images(
+                config_path=self.config_path,
+                state_path=self.state_path,
+                keychain_reader=lambda service, account: "test-password",
+            )
+
+        self.assertEqual(result.failures, ())
+        factory.assert_called_once_with("imap.example.test", 993, timeout=30)
+
     def test_unsafe_location_does_not_write_outside_data(self):
         mailboxes = {
             "INBOX": {
@@ -501,6 +531,25 @@ class EmailImageDownloadTests(unittest.TestCase):
         self.assertEqual(result.saved_images, 0)
         self.assertEqual(set(server.mailboxes["INBOX"]), {"1"})
         self.assertFalse((self.root / "outside").exists())
+
+    def test_symlinked_location_cannot_redirect_download_outside_data(self):
+        outside = self.root / "outside"
+        outside.mkdir()
+        (self.data_dir / "Grenzweg").symlink_to(outside, target_is_directory=True)
+        mailboxes = {
+            "INBOX": {
+                "1": stored_message(
+                    make_message("Kamera: Jochen 6 Grenzweg", b"symlink escape")
+                )
+            },
+            "Trash": {},
+        }
+
+        result, server = self.run_download(mailboxes, allow_failures=True)
+
+        self.assertIn("symlink", " ".join(result.failures).lower())
+        self.assertFalse((outside / "camera.jpg").exists())
+        self.assertEqual(set(server.mailboxes["INBOX"]), {"1"})
 
     def test_unsafe_attachment_filename_is_not_written(self):
         mailboxes = {
