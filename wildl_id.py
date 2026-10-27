@@ -30,10 +30,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import the main functions from each module
+from downloading.download_email_images import download_email_images as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import organize_images as organize_main
 from visualisation.evaluate_labels import main as visualisation_main
-from downloading.download_email_images import download_email_images as download_main
 
 
 def print_header():
@@ -273,7 +273,9 @@ def main():
     args = parse_arguments()
 
     # Check if any action flags were provided
-    has_action = args.download or args.organize or args.label or args.visualize or args.all
+    has_action = (
+        args.download or args.organize or args.label or args.visualize or args.all
+    )
 
     if has_action:
         # Command-line mode: run specified actions

@@ -8,12 +8,12 @@ import os
 import re
 import subprocess
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass
 from email import message_from_bytes, policy
 from email.utils import getaddresses
 from imaplib import IMAP4
 from pathlib import Path
-from typing import Callable
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -130,7 +130,7 @@ def _decode_mailbox(raw):
     flags = {flag.casefold() for flag in match.group(1).split()}
     name = match.group(2).strip()
     if name.startswith('"') and name.endswith('"'):
-        name = name[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+        name = name[1:-1].replace('\\"', '"').replace("\\\\", "\\")
     return flags, name
 
 
@@ -205,11 +205,7 @@ def _header_addresses(message, names):
     values = []
     for name in names:
         values.extend(str(value) for value in message.get_all(name, ()))
-    return {
-        address.casefold()
-        for _, address in getaddresses(values)
-        if address
-    }
+    return {address.casefold() for _, address in getaddresses(values) if address}
 
 
 def _message_location(message):
@@ -334,7 +330,9 @@ def _image_index(state):
     return by_location, by_hash
 
 
-def _write_attachment(location, filename, content, digest, existing, by_hash, file_cache):
+def _write_attachment(
+    location, filename, content, digest, existing, by_hash, file_cache
+):
     target_dir = DATA_DIR / location
     if DATA_DIR.is_symlink() or target_dir.is_symlink():
         raise ValueError("download destination must not use a symlink")
@@ -375,7 +373,12 @@ def _write_attachment(location, filename, content, digest, existing, by_hash, fi
 
 
 def _uid_values(data):
-    return [uid.decode("ascii") for row in data or () if isinstance(row, bytes) for uid in row.split()]
+    return [
+        uid.decode("ascii")
+        for row in data or ()
+        if isinstance(row, bytes)
+        for uid in row.split()
+    ]
 
 
 def _fetch_message(connection, uid):

@@ -5,8 +5,8 @@ import os
 import plistlib
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 LABEL = "com.robinweiss.wildl-id-mail-downloader"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]

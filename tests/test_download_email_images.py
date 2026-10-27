@@ -3,8 +3,8 @@ import json
 import os
 import tempfile
 import unittest
-from email.message import EmailMessage
 from email.header import Header
+from email.message import EmailMessage
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import patch
@@ -142,7 +142,9 @@ def make_message(
     message = EmailMessage()
     message["From"] = sender
     message["To"] = recipient
-    message["Subject"] = Header(subject, "utf-8").encode() if encoded_subject else subject
+    message["Subject"] = (
+        Header(subject, "utf-8").encode() if encoded_subject else subject
+    )
     if original_recipient:
         message["X-Original-To"] = original_recipient
     if image is not None:
@@ -215,11 +217,15 @@ class EmailImageDownloadTests(unittest.TestCase):
         mailboxes = {
             "INBOX": {
                 "2": stored_message(
-                    make_message("Kamera: Jochen 14 Madenhäule Nord", second, "north.jpg"),
+                    make_message(
+                        "Kamera: Jochen 14 Madenhäule Nord", second, "north.jpg"
+                    ),
                     seen=True,
                 ),
                 "5": stored_message(
-                    make_message("Kamera: Jochen 06 Madenhäule Nord", first, "south.jpg")
+                    make_message(
+                        "Kamera: Jochen 06 Madenhäule Nord", first, "south.jpg"
+                    )
                 ),
             },
             "Trash": {
@@ -235,15 +241,16 @@ class EmailImageDownloadTests(unittest.TestCase):
         location = self.data_dir / "Madenhäule Nord"
         self.assertEqual((location / "north.jpg").read_bytes(), second)
         self.assertEqual((location / "south.jpg").read_bytes(), first)
-        self.assertEqual(
-            (self.data_dir / "Grenzweg" / "older.jpg").read_bytes(), older
-        )
+        self.assertEqual((self.data_dir / "Grenzweg" / "older.jpg").read_bytes(), older)
         self.assertEqual(result.saved_images, 3)
         self.assertTrue(result.pending_organization)
         self.assertEqual(server.mailboxes["INBOX"], {})
         self.assertEqual(len(server.mailboxes["Trash"]), 3)
         self.assertTrue(
-            all("\\Seen" in message["flags"] for message in server.mailboxes["Trash"].values())
+            all(
+                "\\Seen" in message["flags"]
+                for message in server.mailboxes["Trash"].values()
+            )
         )
 
     def test_decodes_rfc2047_subject_before_extracting_location(self):
@@ -294,7 +301,9 @@ class EmailImageDownloadTests(unittest.TestCase):
                         recipient="other@example.test",
                     )
                 ),
-                "4": stored_message(make_message("Monthly camera report", b"wrong subject")),
+                "4": stored_message(
+                    make_message("Monthly camera report", b"wrong subject")
+                ),
             },
             "Trash": {},
         }
@@ -369,13 +378,17 @@ class EmailImageDownloadTests(unittest.TestCase):
         files = list((self.data_dir / "Grenzweg").glob("*.jpg"))
         self.assertEqual(result.saved_images, 2)
         self.assertEqual(len(files), 2)
-        self.assertEqual({path.read_bytes() for path in files}, {b"image one", b"image two"})
+        self.assertEqual(
+            {path.read_bytes() for path in files}, {b"image one", b"image two"}
+        )
 
     def test_messages_without_matching_image_attachment_remain_unchanged(self):
         mailboxes = {
             "INBOX": {
                 "1": stored_message(make_message("Kamera: Jochen 6 Grenzweg")),
-                "2": stored_message(make_message("Monthly camera report", b"not matching")),
+                "2": stored_message(
+                    make_message("Monthly camera report", b"not matching")
+                ),
             },
             "Trash": {},
         }
@@ -392,7 +405,9 @@ class EmailImageDownloadTests(unittest.TestCase):
             {
                 "INBOX": {
                     "8": stored_message(
-                        make_message("Kamera: Jochen 6 Grenzweg", b"first image", "first.jpg")
+                        make_message(
+                            "Kamera: Jochen 6 Grenzweg", b"first image", "first.jpg"
+                        )
                     )
                 },
                 "Trash": {},
@@ -435,7 +450,9 @@ class EmailImageDownloadTests(unittest.TestCase):
             {
                 "INBOX": {
                     "1": stored_message(
-                        make_message("Kamera: Jochen 6 Grenzweg", b"move to special trash")
+                        make_message(
+                            "Kamera: Jochen 6 Grenzweg", b"move to special trash"
+                        )
                     )
                 },
                 "Deleted Messages": {},
@@ -506,7 +523,9 @@ class EmailImageDownloadTests(unittest.TestCase):
 
     def test_default_imap_connection_uses_a_finite_timeout(self):
         server = FakeIMAP4({"INBOX": {}, "Trash": {}})
-        with patch.object(downloader.imaplib, "IMAP4_SSL", return_value=server) as factory:
+        with patch.object(
+            downloader.imaplib, "IMAP4_SSL", return_value=server
+        ) as factory:
             result = downloader.download_email_images(
                 config_path=self.config_path,
                 state_path=self.state_path,
