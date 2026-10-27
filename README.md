@@ -16,6 +16,7 @@ Python 3.10 and 3.14. Python 3.15 is not yet supported because PyTorch has no
 compatible wheel.
 
 Copy camera exports into `data/<location>/` before organising images.
+Email downloads can be fetched manually or by a macOS LaunchAgent after setup.
 
 The easiest way to use this system is through the main interface:
 
@@ -29,7 +30,8 @@ The menu provides these actions:
 2. Label and classify images with MegaDetector and DeepFaune.
 3. Generate visualisations and analysis reports.
 4. Run all supported steps in sequence.
-5. Exit.
+5. Download new images from email.
+6. Exit.
 
 ## Features
 
@@ -57,6 +59,60 @@ Visualisations are saved to `docs/diagrams/`.
 ## Manual Usage
 
 If you prefer to run individual components:
+
+### Download Images From Email
+
+The downloader scans read and unread messages in Inbox and the server's
+Trash/Bin mailbox. It accepts messages from `info@supersim.camera` delivered to
+`wildlife@robinweiss.de`, with subjects such as `Kamera: Jochen 06 Grenzweg`.
+The camera number may vary. Image attachments are staged in
+`data/<location>/`; new or pending images trigger the existing organiser, which
+moves timestamped images into `images/<year>/<location>/`. The organiser also
+deletes videos and corrupt images under `data/`.
+
+Create `~/.config/wildl-id/mail-downloader.json` outside the repository:
+
+```json
+{
+  "host": "imap.example.com",
+  "port": 993,
+  "username": "your-mailbox-login",
+  "inbox_mailbox": "INBOX",
+  "trash_mailbox": "Trash"
+}
+```
+
+`inbox_mailbox` and `trash_mailbox` are optional when the provider exposes
+standard mailbox names. The downloader discovers Trash/Bin through IMAP's
+special-use flag when available; set `trash_mailbox` if discovery fails. In
+Keychain Access, create a generic password item named
+`wildl-id-mail-downloader`, set its account to the configured `username`, and
+enter the mailbox password. Do not put passwords in the config file.
+
+Run a one-time download with:
+
+```bash
+uv run --locked python wildl_id.py --download
+```
+
+To check automatically at login and every minute, install the versioned
+LaunchAgent after configuring IMAP and Keychain:
+
+```bash
+uv run --locked python macos/launchd/install.py install
+```
+
+Remove it with:
+
+```bash
+uv run --locked python macos/launchd/install.py uninstall
+```
+
+The LaunchAgent template and installer are versioned in this repository. The
+installed plist, config, UID checkpoints, hash cache, and logs live under your
+home directory and are not version-controlled. macOS does not run the job while
+asleep; launchd runs a missed interval after the Mac wakes. Downloaded images
+and camera data are ignored by Git, so back up those folders separately.
 
 ### Organise Images
 
