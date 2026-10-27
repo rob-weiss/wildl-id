@@ -23,7 +23,7 @@ dependencies = [
     # Keep NumPy compatible with PyTorchWildlife's supervision pin on Python 3.10.
     "scipy<1.14 ; sys_platform == 'darwin' and python_full_version < '3.11'",
     "scipy>=1.14,<1.15 ; sys_platform == 'darwin' and python_full_version >= '3.11' and python_full_version < '3.14'",
-    "scipy>=1.16 ; sys_platform == 'darwin' and python_full_version >= '3.14'",
+    "scipy>=1.16 ; python_full_version >= '3.14'",
     # EasyOCR needs a wheel-backed release on Python 3.14 instead of a Pythran source build.
     "scikit-image>=0.26.0 ; python_full_version >= '3.14'",
     "seaborn>=0.13.2",
