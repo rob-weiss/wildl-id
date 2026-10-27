@@ -70,6 +70,13 @@ The camera number may vary. Image attachments are staged in
 moves timestamped images into `images/<year>/<location>/`. The organiser also
 deletes videos and corrupt images under `data/`.
 
+Supersim filenames such as `Aufnahme_YYMMDD_HHMM_CAMERA.jpg` provide a fallback
+when the downloaded JPEG has no EXIF time. The organiser writes that capture
+time into EXIF before moving the image. Filename times are interpreted as
+`Europe/Berlin` local time and converted to fixed CET (UTC+01:00), matching the
+timezone-free EXIF convention used by direct camera downloads. Seconds are set
+to `00`; image pixels are not recompressed.
+
 Create `~/.config/wildl-id/mail-downloader.json` outside the repository:
 
 ```json
@@ -142,7 +149,9 @@ uv run src/labelling/organize_images.py [--dry-run]
 
 The script deletes videos and corrupt images, then moves images to
 `images/<year>/<location>/image_XXXXXXX.jpg`, numbered by EXIF capture time.
-Images without an EXIF timestamp stay in `data/` and are ignored by the other tools.
+Supersim `Aufnahme_YYMMDD_HHMM_CAMERA.jpg` files without EXIF are stamped from
+their filenames; other images without a capture time stay in `data/` and are
+ignored by the other tools.
 The labels CSV and annotated images are renamed to match. A mapping of old to new
 paths is written to `logs/`.
 

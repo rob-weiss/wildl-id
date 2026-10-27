@@ -21,9 +21,11 @@ import re
 import shutil
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+import piexif  # type: ignore[import-untyped]
 from PIL import Image
 from tqdm import tqdm
 
@@ -48,6 +50,12 @@ VIDEO_EXTENSIONS = {
     ".3gp",
 }
 NAME_PATTERN = re.compile(r"^image_(\d{7})\.[^.]+$")
+CAMERA_FILENAME_PATTERN = re.compile(
+    r"^Aufnahme_(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})_[^.]+$",
+    re.IGNORECASE,
+)
+CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
+STANDARD_TIMEZONE = timezone(timedelta(hours=1))
 
 
 def nfc(text):
@@ -59,6 +67,43 @@ def parse_exif_time(raw):
     return datetime.strptime(str(raw).strip().rstrip("\x00"), "%Y:%m:%d %H:%M:%S")
 
 
+def parse_camera_filename_time(path):
+    if path.suffix.lower() not in {".jpg", ".jpeg"}:
+        return None
+    match = CAMERA_FILENAME_PATTERN.fullmatch(path.stem)
+    if not match:
+        return None
+    year, month, day, hour, minute = map(int, match.groups())
+    try:
+        local_time = datetime(
+            2000 + year, month, day, hour, minute, tzinfo=CAMERA_TIMEZONE
+        )
+    except ValueError:
+        return None
+    return local_time.astimezone(STANDARD_TIMEZONE).replace(tzinfo=None)
+
+
+def capture_time_from_exif(exif):
+    exif_ifd = exif.get_ifd(0x8769)
+    raw = exif_ifd.get(0x9003) or exif_ifd.get(0x9004) or exif.get(0x0132)
+    return parse_exif_time(raw) if raw else None
+
+
+def write_exif_capture_time(path, timestamp):
+    value = timestamp.strftime("%Y:%m:%d %H:%M:%S")
+    exif = piexif.load(str(path))
+    exif["0th"][piexif.ImageIFD.DateTime] = value
+    exif["Exif"][piexif.ExifIFD.DateTimeOriginal] = value
+    exif["Exif"][piexif.ExifIFD.DateTimeDigitized] = value
+    exif_bytes = piexif.dump(exif)
+    temporary = path.with_name(f".{path.name}.exif.tmp")
+    try:
+        piexif.insert(exif_bytes, str(path), str(temporary))
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def inspect_image(path):
     """Return (path, timestamp or None, error or None) after fully decoding the image."""
     try:
@@ -67,12 +112,13 @@ def inspect_image(path):
         with Image.open(path) as img:
             img.load()
             exif = img.getexif()
-        exif_ifd = exif.get_ifd(0x8769)
-        raw = exif_ifd.get(0x9003) or exif_ifd.get(0x9004) or exif.get(0x0132)
-        timestamp = parse_exif_time(raw) if raw else None
-        return path, timestamp, None
+        timestamp = capture_time_from_exif(exif)
+        if timestamp is not None:
+            return path, timestamp, None, False
+        timestamp = parse_camera_filename_time(path)
+        return path, timestamp, None, timestamp is not None
     except Exception as e:
-        return path, None, str(e) or type(e).__name__
+        return path, None, str(e) or type(e).__name__, False
 
 
 def natural_key(name):
@@ -230,7 +276,7 @@ def organize_images(dry_run=False, workers=None):
 
     removed = set()
     valid, no_timestamp = [], []
-    for path, timestamp, error in results:
+    for path, timestamp, error, from_filename in results:
         key = (location_of(path), path.name)
         if error:
             print(f"  Corrupt: {path.relative_to(REPO_DIR)} ({error})")
@@ -241,6 +287,15 @@ def organize_images(dry_run=False, workers=None):
         if timestamp is None:
             no_timestamp.append(path)
             continue
+        if from_filename and not dry_run:
+            try:
+                write_exif_capture_time(path, timestamp)
+            except Exception as e:
+                print(
+                    f"  Could not write filename timestamp; left in place: "
+                    f"{path.relative_to(REPO_DIR)} ({e})"
+                )
+                continue
         valid.append((timestamp, key[0], natural_key(path.name), path))
 
     print(f"{'Would delete' if dry_run else 'Deleted'} {len(removed)} corrupt images")

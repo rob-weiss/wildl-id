@@ -35,4 +35,5 @@ dependencies = [
     "torch>=2.14.1",
     "torchvision>=0.29.1",
     "tqdm>=4.70.1",
+    "piexif>=1.1.3",
 ]
