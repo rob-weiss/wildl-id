@@ -74,20 +74,27 @@ Create `~/.config/wildl-id/mail-downloader.json` outside the repository:
 
 ```json
 {
-  "host": "imap.example.com",
+  "host": "imaps.udag.de",
   "port": 993,
-  "username": "your-mailbox-login",
-  "inbox_mailbox": "INBOX",
-  "trash_mailbox": "Trash"
+  "username": "your-mailbox-login"
 }
 ```
 
 `inbox_mailbox` and `trash_mailbox` are optional when the provider exposes
 standard mailbox names. The downloader discovers Trash/Bin through IMAP's
-special-use flag when available; set `trash_mailbox` if discovery fails. In
-Keychain Access, create a generic password item named
-`wildl-id-mail-downloader`, set its account to the configured `username`, and
-enter the mailbox password. Do not put passwords in the config file.
+special-use flag when available; set `trash_mailbox` if discovery fails.
+
+Save the mailbox password in Keychain Access:
+
+1. Open **Keychain Access** and select the `login` keychain.
+2. Choose **File > New Password Item**.
+3. Enter `wildl-id-mail-downloader` as the item name.
+4. Enter the exact `username` from the JSON config as the account name.
+5. Type the mailbox password into the password field and save the item.
+
+Do not put the password in the config file or a shell command. The downloader
+reads the generic password matching service `wildl-id-mail-downloader` and
+account `<username>` from Keychain.
 
 Run a one-time download with:
 
