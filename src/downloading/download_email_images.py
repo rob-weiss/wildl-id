@@ -46,6 +46,15 @@ class DownloadResult:
     failures: tuple[str, ...]
 
 
+class MessageProcessingError(RuntimeError):
+    def __init__(self, error, saved_images, duplicates, pending_organization):
+        super().__init__(str(error))
+        self.error = error
+        self.saved_images = saved_images
+        self.duplicates = duplicates
+        self.pending_organization = pending_organization
+
+
 def _read_keychain_password(service, account):
     try:
         result = subprocess.run(
@@ -419,25 +428,30 @@ def _process_message(
 
     saved = duplicates = 0
     pending_organization = False
-    for filename, content, content_type in attachments:
-        filename, _ = _safe_filename(filename, content_type)
-        digest = hashlib.sha256(content).hexdigest()
-        found = existing.get(location, {}).get(digest, set())
-        if found:
-            duplicates += 1
-            pending_organization |= any(
-                by_hash[path][2] == "data" for path in found if path in by_hash
+    try:
+        for filename, content, content_type in attachments:
+            filename, _ = _safe_filename(filename, content_type)
+            digest = hashlib.sha256(content).hexdigest()
+            found = existing.get(location, {}).get(digest, set())
+            if found:
+                duplicates += 1
+                pending_organization |= any(
+                    by_hash[path][2] == "data" for path in found if path in by_hash
+                )
+                continue
+            target, was_saved = _write_attachment(
+                location, filename, content, digest, existing, by_hash, file_cache
             )
-            continue
-        target, was_saved = _write_attachment(
-            location, filename, content, digest, existing, by_hash, file_cache
-        )
-        if was_saved:
-            saved += 1
-            pending_organization = True
+            if was_saved:
+                saved += 1
+                pending_organization = True
 
-    _mark_seen(connection, uid)
-    _move_message(connection, capabilities, uid, source, trash)
+        _mark_seen(connection, uid)
+        _move_message(connection, capabilities, uid, source, trash)
+    except Exception as error:
+        raise MessageProcessingError(
+            error, saved, duplicates, pending_organization
+        ) from error
     return saved, duplicates, pending_organization
 
 
@@ -499,7 +513,17 @@ def download_email_images(
                     duplicates += message_duplicates
                     pending_organization |= needs_organization
                 except Exception as error:
-                    failures.append(f"{mailbox} UID {uid}: {type(error).__name__}: {error}")
+                    if isinstance(error, MessageProcessingError):
+                        saved += error.saved_images
+                        duplicates += error.duplicates
+                        pending_organization |= error.pending_organization
+                        reported_error = error.error
+                    else:
+                        reported_error = error
+                    failures.append(
+                        f"{mailbox} UID {uid}: "
+                        f"{type(reported_error).__name__}: {reported_error}"
+                    )
                     if first_failure is None:
                         first_failure = int(uid)
             if first_failure is None:

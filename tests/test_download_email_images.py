@@ -539,6 +539,7 @@ class EmailImageDownloadTests(unittest.TestCase):
         failed, _ = self.run_download(server=server, allow_failures=True)
 
         self.assertTrue(failed.failures)
+        self.assertTrue(failed.pending_organization)
         self.assertTrue((self.data_dir / "Grenzweg" / "camera.jpg").exists())
         self.assertIn("1", server.mailboxes["INBOX"])
 
