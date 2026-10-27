@@ -66,6 +66,15 @@ def filter_baiting_classes(dataframe: pd.DataFrame) -> pd.DataFrame:
     return labeled.loc[labeled["class"].isin(BAITING_CLASSES)].copy()
 
 
+def _create_individual_timeline_axes(n_rows, n_cols, figsize):
+    figure, axes = plt.subplots(
+        n_rows, n_cols, figsize=figsize, sharex=True
+    )
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
+    return figure, axes.flatten()
+
+
 def main() -> bool:
     """Main function to generate all visualizations."""
     # Configuration
@@ -1054,10 +1063,9 @@ def main() -> bool:
             n_cols = 2
             n_rows = (n_species + 1) // 2
 
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 4 * n_rows))
-            if n_rows == 1:
-                axes = axes.reshape(1, -1)
-            axes = axes.flatten()
+            fig, axes = _create_individual_timeline_axes(
+                n_rows, n_cols, figsize=(16, 4 * n_rows)
+            )
 
             for idx, species in enumerate(top_species):
                 species_data = df_valid[df_valid["class"] == species]

@@ -106,5 +106,18 @@ class VisualizationOutputSafetyTests(unittest.TestCase):
         self.assertTrue(self.sentinel.exists())
 
 
+class IndividualTimelineAxisTests(unittest.TestCase):
+    def test_timeline_subplots_share_the_full_date_range(self):
+        figure, axes = evaluate_module._create_individual_timeline_axes(
+            n_rows=1, n_cols=2, figsize=(8, 4)
+        )
+        self.addCleanup(evaluate_module.plt.close, figure)
+        axes[0].plot(pd.to_datetime(["2024-01-01", "2024-06-01"]), [1, 2])
+        axes[1].plot(pd.to_datetime(["2025-01-01", "2025-06-01"]), [1, 2])
+
+        self.assertTrue(axes[0].get_shared_x_axes().joined(axes[0], axes[1]))
+        self.assertEqual(axes[0].get_xlim(), axes[1].get_xlim())
+
+
 if __name__ == "__main__":
     unittest.main()
