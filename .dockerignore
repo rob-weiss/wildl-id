@@ -18,3 +18,7 @@
 !src/labelling/vendor/PANZOOM-LICENSE.txt
 !src/visualisation/
 !src/visualisation/evaluate_labels.py
+!docs/
+!docs/assets/
+!docs/assets/wildl-id-icon.svg
+!docs/assets/wildl-id-logo.svg
