@@ -1,57 +1,67 @@
-# Local Web Container
+# Manual Labelling
 
-This minimal FastAPI service is a separate starting point for the wildl-id web
-application. It runs in Docker and does not load the project's images, models,
-labels, or machine-learning dependencies.
+The web app reuses the existing wildlife label reviewer. It writes accepted
+labels and backups to the default CSV on the host. It does not run inference or
+copy images and model files into the Docker image.
 
 ## Requirements
 
-- macOS with Docker Desktop, or another system with Docker Engine and Compose.
-- Raspberry Pi 5 with 64-bit Raspberry Pi OS and Docker Engine with Compose.
+- macOS with OrbStack or Docker Desktop and Docker Compose.
+- Raspberry Pi 5 with 64-bit Raspberry Pi OS and Docker Compose for later Pi use.
 
-The image builds for the native architecture of the Docker host. Build it on
-each host rather than copying an architecture-specific image between machines.
+Build the image on each host's native architecture. Do not copy an image built
+for one architecture to another host.
+
+## Dataset Access
+
+The app uses the default dataset:
+
+- CSV: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/`
+- Annotated images: that directory's `images/` child
+- Original images: `images/`
+- Validation predictions: `models/`
+
+The container can write the CSV and its `.before-review.bak` backup. Annotated
+images, original images, and model files are read-only. The app does not mount
+`data/`, logs, credentials, or the Docker socket. It hides the destructive
+“Remove empty” action.
 
 ## Run Locally
 
-From the repository root, build and start the service:
+From the repository root, start the container with your Mac user IDs:
 
 ```bash
-docker compose up --build -d
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose up --build -d
 ```
 
-Open <http://localhost:8080>. Check the health endpoint at
-<http://localhost:8080/health>. View logs with:
+Open <http://127.0.0.1:8080>. Check app health at
+<http://127.0.0.1:8080/health> and container status with:
 
 ```bash
-docker compose logs -f web
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose ps
 ```
 
-Rebuild after changing the app or its dependencies:
+View logs with:
 
 ```bash
-docker compose up --build -d
-```
-
-## Update
-
-From the repository root, pull the latest source and rebuild the service:
-
-```bash
-git pull --ff-only
-docker compose up --build -d
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose logs -f web
 ```
 
 Stop and remove the container with:
 
 ```bash
-docker compose down
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose down
 ```
 
-The service has no persistent state. On the Pi, `localhost` refers to the Pi,
-so open the page in a browser running on the Pi itself. The container publishes
-port 8080 only on `127.0.0.1`; it is not reachable from the LAN or internet.
+Label edits remain in the host CSV after the container stops. To update the
+app, pull the repository and rebuild it:
 
-No remote ingress or authentication is configured. Remote access, invited
-users, or public access need a separate security review and configuration.
-Pi hardware and cross-architecture execution have not been verified.
+```bash
+git pull --ff-only
+HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose up --build -d
+```
+
+The app binds only to `127.0.0.1`; it is not available from the LAN or internet.
+There is no login, so other local processes may access it. On a Pi, `localhost`
+means the Pi; open the app in a browser on the Pi itself. Pi hardware and
+cross-architecture execution have not been verified.
