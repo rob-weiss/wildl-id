@@ -7,14 +7,18 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 WORKDIR /app
 
-COPY pyproject.toml uv.lock ./
+COPY web/pyproject.toml web/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project --no-cache
 
-COPY app.py ./
+COPY web/app.py ./
+COPY src/labelling/review_app.py src/labelling/review_labels.py src/labelling/remove_empty_images.py src/labelling/organize_images.py src/labelling/pixel_hash.py ./src/labelling/
+COPY src/labelling/review_zoom.js ./src/labelling/
+COPY src/labelling/vendor/panzoom.es.js src/labelling/vendor/PANZOOM-LICENSE.txt ./src/labelling/vendor/
 
 FROM python:3.13-slim AS runtime
 
 ENV PATH="/app/.venv/bin:$PATH" \
+    MPLCONFIGDIR=/tmp/matplotlib \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
@@ -25,9 +29,10 @@ RUN groupadd --system app \
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/app.py /app/app.py
+COPY --from=builder --chown=app:app /app/src/labelling /app/src/labelling
 
 USER app:app
 
 EXPOSE 8080
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+CMD ["python", "app.py"]

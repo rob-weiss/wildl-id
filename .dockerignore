@@ -1,0 +1,17 @@
+**
+!web/
+!web/Dockerfile
+!web/pyproject.toml
+!web/uv.lock
+!web/app.py
+!src/
+!src/labelling/
+!src/labelling/review_app.py
+!src/labelling/review_labels.py
+!src/labelling/remove_empty_images.py
+!src/labelling/organize_images.py
+!src/labelling/pixel_hash.py
+!src/labelling/review_zoom.js
+!src/labelling/vendor/
+!src/labelling/vendor/panzoom.es.js
+!src/labelling/vendor/PANZOOM-LICENSE.txt
