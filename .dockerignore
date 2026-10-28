@@ -15,3 +15,5 @@
 !src/labelling/vendor/
 !src/labelling/vendor/panzoom.es.js
 !src/labelling/vendor/PANZOOM-LICENSE.txt
+!src/visualisation/
+!src/visualisation/evaluate_labels.py
