@@ -11,15 +11,17 @@ Steps:
 A mapping of old to new paths is written to logs/ before anything is moved.
 
 Usage:
-    uv run src/labelling/organize_images.py [--dry-run]
+    uv run src/labelling/organize_images.py [--dry-run] [--check-duplicates]
 """
 
 import argparse
 import csv
+import hashlib
 import os
 import re
 import shutil
 import unicodedata
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -275,7 +277,124 @@ def rename_annotated(renames, removed, dry_run):
     print(f"Annotated images: {moved} renamed, {deleted} deleted")
 
 
-def organize_images(dry_run=False, workers=None):
+def find_duplicate_images():
+    groups = defaultdict(list)
+    unreadable = 0
+    for root in (IMAGES_DIR, DATA_DIR):
+        if not root.is_dir() or root.is_symlink():
+            continue
+        for path in tqdm(root.rglob("*"), desc=f"Hashing {root.name}", unit="file"):
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or path.suffix.lower() not in IMAGE_EXTENSIONS
+            ):
+                continue
+            parts = path.relative_to(root).parts
+            minimum = 3 if root == IMAGES_DIR else 2
+            if len(parts) < minimum:
+                continue
+            location = nfc(parts[1] if root == IMAGES_DIR else parts[0])
+            try:
+                with Image.open(path) as image:
+                    pixels = (
+                        image
+                        if image.mode.startswith("I") or image.mode == "F"
+                        else image.convert("RGBA")
+                    )
+                    digest = hashlib.sha256(
+                        f"{pixels.mode}:{pixels.size}".encode("ascii")
+                    )
+                    digest.update(pixels.tobytes())
+            except (OSError, ValueError, Image.DecompressionBombError):
+                unreadable += 1
+                continue
+            groups[(location, digest.digest())].append(path)
+    if unreadable:
+        print(f"Duplicate scan skipped {unreadable} unreadable images")
+    return [paths for paths in groups.values() if len(paths) > 1]
+
+
+def remove_duplicate_images(groups, dry_run=False):
+    rows_by_image = defaultdict(list)
+    if CSV_PATH.exists():
+        _, rows = read_csv(CSV_PATH)
+        for row in rows:
+            rows_by_image[(nfc(row["location_id"]), row["image_file"])].append(row)
+
+    def key_for(path):
+        if path.is_relative_to(IMAGES_DIR):
+            return nfc(path.relative_to(IMAGES_DIR).parts[1]), path.name
+        return location_of(path), path.name
+
+    def manual_labels(path):
+        return frozenset(
+            label
+            for row in rows_by_image[key_for(path)]
+            if (label := (row.get("manual_label") or "").strip())
+        )
+
+    plan = []
+    conflicts = 0
+    for paths in groups:
+        reviewed = {labels for path in paths if (labels := manual_labels(path))}
+        if len(reviewed) > 1:
+            conflicts += 1
+            continue
+        ordered = sorted(
+            paths,
+            key=lambda path: (
+                not bool(manual_labels(path)),
+                not path.is_relative_to(IMAGES_DIR),
+                not bool(rows_by_image[key_for(path)]),
+                str(path.relative_to(REPO_DIR)),
+            ),
+        )
+        plan.extend((path, ordered[0]) for path in ordered[1:])
+
+    print(
+        f"{'Would remove' if dry_run else 'Removing'} {len(plan)} duplicate images; "
+        f"{conflicts} groups skipped for conflicting human labels"
+    )
+    if not plan:
+        return 0
+    removed = {key_for(path) for path, _ in plan} - {
+        key_for(keeper) for _, keeper in plan
+    }
+    if dry_run:
+        update_csv({}, removed, True)
+        return len(plan)
+
+    backup = LOG_DIR / f"duplicate_images_{datetime.now():%Y%m%d-%H%M%S-%f}"
+    backup.mkdir(parents=True)
+    if CSV_PATH.exists():
+        shutil.copy2(CSV_PATH, backup / "labels.before.csv")
+    with (backup / "mapping.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.writer(stream, lineterminator="\n")
+        writer.writerow(["removed_path", "kept_path"])
+        for path, keeper in plan:
+            writer.writerow(
+                [path.relative_to(REPO_DIR), keeper.relative_to(REPO_DIR)]
+            )
+    originals = [path for path, _ in plan]
+    annotated_names = {annotated_name(*key) for key in removed}
+    annotations = [
+        path
+        for path in ANNOTATED_DIR.rglob("*")
+        if path.is_file() and not path.is_symlink() and nfc(path.name) in annotated_names
+    ]
+    for path in originals + annotations:
+        target = backup / path.relative_to(REPO_DIR)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(path, target)
+    update_csv({}, removed, False)
+    print(f"Duplicate backups and mapping: {backup.relative_to(REPO_DIR)}")
+    return len(plan)
+
+
+def organize_images(dry_run=False, workers=None, check_duplicates=False):
+    if check_duplicates:
+        remove_duplicate_images(find_duplicate_images(), dry_run)
     images, videos, others = collect_files()
     print(
         f"Found {len(images)} images, {len(videos)} videos, "
@@ -381,8 +500,13 @@ def main():
     parser.add_argument(
         "--workers", type=int, default=os.cpu_count(), help="parallel image checks"
     )
+    parser.add_argument(
+        "--check-duplicates",
+        action="store_true",
+        help="scan data/ and images/ for identical pixels; back up and remove duplicates",
+    )
     args = parser.parse_args()
-    organize_images(args.dry_run, args.workers)
+    organize_images(args.dry_run, args.workers, args.check_duplicates)
 
 
 if __name__ == "__main__":

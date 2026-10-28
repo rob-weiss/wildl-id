@@ -1,5 +1,7 @@
+import csv
 import tempfile
 import unittest
+from datetime import datetime
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import patch
@@ -115,6 +117,144 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
         organizer.organize_images(dry_run=True, workers=1)
 
         self.assertTrue(empty_folder.exists())
+
+    def duplicate_fixture(self, manual_labels=("", "")):
+        source, _ = self.create_image("camera-export.jpg")
+        directory = self.images_dir / "2026" / "Grenzweg"
+        directory.mkdir(parents=True)
+        first = directory / "image_0000001.jpg"
+        second = directory / "image_0000002.jpg"
+        first.write_bytes(source.read_bytes())
+        second.write_bytes(source.read_bytes())
+        source.unlink()
+        organizer.write_exif_capture_time(second, datetime(2026, 1, 15, 12))
+        with self.csv_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream, fieldnames=["location_id", "image_file", "manual_label"]
+            )
+            writer.writeheader()
+            for path, label in zip((first, second), manual_labels):
+                writer.writerow(
+                    dict(location_id="Grenzweg", image_file=path.name, manual_label=label)
+                )
+        annotated = self.root / "annotated" / f"Grenzweg_{second.name}"
+        annotated.parent.mkdir()
+        annotated.write_bytes(second.read_bytes())
+        return first, second, annotated
+
+    def test_duplicates_are_not_checked_by_default(self):
+        first, second, _ = self.duplicate_fixture()
+
+        organizer.organize_images(workers=1)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+
+    def test_duplicate_check_ignores_metadata_and_backs_up_images_and_labels(self):
+        first, second, annotated = self.duplicate_fixture()
+        original_csv = self.csv_path.read_bytes()
+        duplicate_bytes = second.read_bytes()
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertFalse(second.exists())
+        self.assertFalse(annotated.exists())
+        _, rows = organizer.read_csv(self.csv_path)
+        self.assertEqual([row["image_file"] for row in rows], [first.name])
+        backup = next(self.logs_dir.glob("duplicate_images_*"))
+        self.assertEqual(
+            (backup / second.relative_to(self.root)).read_bytes(), duplicate_bytes
+        )
+        self.assertEqual((backup / "labels.before.csv").read_bytes(), original_csv)
+        self.assertTrue((backup / annotated.relative_to(self.root)).exists())
+
+    def test_duplicate_check_dry_run_changes_nothing(self):
+        first, second, annotated = self.duplicate_fixture()
+        original_csv = self.csv_path.read_bytes()
+
+        organizer.organize_images(dry_run=True, workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertTrue(annotated.exists())
+        self.assertEqual(self.csv_path.read_bytes(), original_csv)
+        self.assertFalse(self.logs_dir.exists())
+
+    def test_duplicate_check_keeps_human_reviewed_copy(self):
+        first, second, _ = self.duplicate_fixture(manual_labels=("", "fox"))
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertFalse(first.exists())
+        self.assertTrue(second.exists())
+        _, rows = organizer.read_csv(self.csv_path)
+        self.assertEqual(rows[0]["manual_label"], "fox")
+
+    def test_duplicate_check_preserves_conflicting_human_labels(self):
+        first, second, _ = self.duplicate_fixture(manual_labels=("fox", "badger"))
+        original_csv = self.csv_path.read_bytes()
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual(self.csv_path.read_bytes(), original_csv)
+
+    def test_duplicate_check_preserves_identical_images_from_other_locations(self):
+        first, second, _ = self.duplicate_fixture()
+        other = self.images_dir / "2026" / "Other" / second.name
+        other.parent.mkdir(parents=True)
+        second.rename(other)
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(other.exists())
+
+    def test_duplicate_check_removes_staged_copy_before_organizing(self):
+        first, _, _ = self.duplicate_fixture()
+        staged, _ = self.create_image("Aufnahme_260115_1200_CAM1.jpg")
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertFalse(staged.exists())
+        self.assertEqual(list(self.images_dir.rglob("*.jpg")), [first])
+
+    def test_staged_copy_with_keeper_filename_preserves_keeper_csv_row(self):
+        first, _, _ = self.duplicate_fixture()
+        staged = self.location_dir / first.name
+        staged.write_bytes(first.read_bytes())
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertFalse(staged.exists())
+        _, rows = organizer.read_csv(self.csv_path)
+        self.assertEqual([row["image_file"] for row in rows], [first.name])
+
+    def test_duplicate_check_keeps_different_pixels_with_same_dimensions(self):
+        first, second, _ = self.duplicate_fixture()
+        Image.new("RGB", (16, 12), "red").save(second, format="JPEG")
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+
+    def test_duplicate_check_preserves_distinct_high_bit_depth_pixels(self):
+        directory = self.images_dir / "2026" / "Grenzweg"
+        directory.mkdir(parents=True)
+        first = directory / "image_0000001.png"
+        second = directory / "image_0000002.png"
+        Image.new("I;16", (16, 12), 1024).save(first)
+        Image.new("I;16", (16, 12), 2048).save(second)
+
+        organizer.organize_images(workers=1, check_duplicates=True)
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
 
 
 if __name__ == "__main__":

@@ -155,6 +155,22 @@ ignored by the other tools.
 The labels CSV and annotated images are renamed to match. A mapping of old to new
 paths is written to `logs/`.
 
+Duplicate checking is off by default because it decodes all images. To preview
+duplicates in both `data/` and `images/`, run:
+
+```bash
+uv run src/labelling/organize_images.py --check-duplicates --dry-run
+```
+
+Remove `--dry-run` to apply the cleanup and then organise staged images as usual.
+Only exact decoded pixels at the same location count as duplicates; filenames
+and metadata (including EXIF timestamps) are ignored. Similar photos and photos
+from different locations are kept. Human-reviewed copies are preferred, then
+already organised copies, then labelled copies, then the lowest filename.
+Groups with conflicting human labels are skipped. Removed originals, annotated
+copies, a CSV backup, and the keeper mapping are saved under
+`logs/duplicate_images_<timestamp>/`; duplicate CSV rows are removed.
+
 ### Label Images
 
 ```bash
