@@ -35,4 +35,4 @@ USER app:app
 
 EXPOSE 8080
 
-CMD ["python", "app.py"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

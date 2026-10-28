@@ -62,14 +62,14 @@
 - Modify: `tests/test_web_app.py`
 
 **Interfaces:**
-- Produces `app`, the existing NiceGUI FastAPI application, with `GET /health` returning `{"status": "ok"}` and a root builder `build_review_page(csv_path: Path = DEFAULT_CSV) -> None`.
+- Produces a FastAPI `app` with `GET /health` returning `{"status": "ok"}`, `build_review_page(csv_path: Path = DEFAULT_CSV) -> None`, and an explicit NiceGUI `@ui.page("/")` route mounted with `ui.run_with(app, mount_path="/")`.
 - The root builder creates `ReviewApp`, calls `build()`, then hides `remove_empty_button`; it catches `OSError`, `ValueError`, and `csv.Error` from dataset loading and renders a clear setup error.
-- `run_web() -> None` calls `ui.run(root=..., host="0.0.0.0", port=8080, reload=False, show=False)`; the module main guard invokes it. Change the image command to `python app.py` so NiceGUI initializes its root page.
+- Uvicorn serves `app:app` on container address `0.0.0.0:8080`, with one worker and reload disabled.
 
-- [ ] **Step 1: Write tests** using `unittest.IsolatedAsyncioTestCase` and `nicegui.testing.user_simulation`. Name cases `test_review_page_shows_labels_and_hides_remove_empty`, `test_page_shows_missing_csv_error`, `test_page_shows_invalid_csv_schema_error`, `test_page_shows_unreadable_csv_error`, `test_health_returns_ok_json`, and `test_unknown_route_returns_404`. Use a directory at the CSV path to exercise an `IsADirectoryError` without relying on OS permission bits.
+- [ ] **Step 1: Write tests** using `unittest.IsolatedAsyncioTestCase`, `httpx.AsyncClient`, and NiceGUI's `User` interaction helper under the app lifespan. Name cases `test_review_page_shows_labels_and_hides_remove_empty`, `test_page_shows_missing_csv_error`, `test_page_shows_invalid_csv_schema_error`, `test_page_shows_unreadable_csv_error`, `test_health_returns_ok_json`, and `test_unknown_route_returns_404`. Use a directory at the CSV path to exercise an `IsADirectoryError` without relying on OS permission bits.
 - [ ] **Step 2: Run the focused web tests** with `uv run --project web --locked --extra test --python 3.13 python -m unittest discover -s tests -p test_web_app.py`. Expected: tests fail because the starter page does not build the reviewer.
-- [ ] **Step 3: Implement `build_review_page(csv_path: Path = DEFAULT_CSV) -> None`** in `web/app.py`, using the existing `ReviewApp` and leaving its save, undo, box, and mode logic unchanged. Register `/health` on NiceGUI's FastAPI app.
-- [ ] **Step 4: Add `run_web() -> None`** with the exact NiceGUI run options in the Interfaces block and update the Docker command to invoke it.
+- [ ] **Step 3: Implement `build_review_page(csv_path: Path = DEFAULT_CSV) -> None`** in `web/app.py`, using the existing `ReviewApp` and leaving its save, undo, box, and mode logic unchanged. Register `/health` on the outer FastAPI app.
+- [ ] **Step 4: Register the explicit `/` page** with `@ui.page("/")` and mount NiceGUI using `ui.run_with(app, mount_path="/")`; retain Uvicorn serving `app:app` on `0.0.0.0:8080` with one worker and reload disabled. Keep unknown paths as HTTP 404.
 - [ ] **Step 5: Run the focused web tests** and existing reviewer tests. Expected: temporary valid data displays; invalid data shows a useful error; health is 200; unknown paths are 404; reviewer tests retain existing behavior.
 - [ ] **Step 6: Commit** the web integration and route tests.
 

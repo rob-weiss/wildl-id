@@ -28,11 +28,11 @@ Dataset upload, a dataset picker, multi-user sessions, application login,
 
 ## Architecture
 
-Replace the standalone FastAPI page with the existing NiceGUI application and
-its FastAPI app. Register `/health` on that app. Pass a root-page builder to
-`ui.run(root=...)` so the reviewer UI is created through NiceGUI's supported
-startup path; run Uvicorn on container address `0.0.0.0:8080`, with reload and
-browser auto-open disabled. Host publishing remains `127.0.0.1:8080` only.
+Keep a small FastAPI app for `/health`; register the reviewer with `@ui.page("/")`
+and mount NiceGUI into that app using `ui.run_with(app, mount_path="/")`. The
+explicit page keeps unrelated paths as HTTP 404 rather than NiceGUI's root-page
+fallback. Run Uvicorn on container address `0.0.0.0:8080`, with one worker and
+reload disabled. Host publishing remains `127.0.0.1:8080` only.
 
 The root-page builder creates `ReviewApp` with the default CSV, builds the
 existing interface, then hides its "Remove empty" button. Do not copy the
