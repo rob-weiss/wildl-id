@@ -8,6 +8,19 @@ permissions:
     contents: read
 
 jobs:
+    web-tests:
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v4
+            - uses: astral-sh/setup-uv@v6
+              with:
+                  enable-cache: true
+            - name: Install Python
+              run: uv python install 3.13
+            - name: Check web lockfile
+              run: uv lock --project web --check
+            - name: Run web tests
+              run: uv run --project web --locked --extra test --python 3.13 python -m unittest discover -s tests -p test_web_app.py
     tests:
         runs-on: ubuntu-24.04
         strategy:
