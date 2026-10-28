@@ -112,6 +112,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Manual review")
             await user.should_see("Visualisations")
 
+    async def test_homepage_shows_brand_logo(self):
+        async with self.app_user("/") as user:
+            await user.should_see(kind=ui.image)
+
+    async def test_page_declares_brand_tab_icon(self):
+        async with self.http_client() as client:
+            response = await client.get("/visualisations")
+
+        self.assertIn("/assets/wildl-id-icon.svg", response.text)
+
     async def test_visualisations_page_does_not_generate_on_open(self):
         run_store = FakeVisualisationRunStore()
         self.patch_run_store(run_store)
@@ -175,6 +185,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json(), {"status": "ok"})
+
+    async def test_brand_logo_and_tab_icon_are_served(self):
+        async with self.http_client() as client:
+            logo = await client.get("/assets/wildl-id-logo.svg")
+            icon = await client.get("/assets/wildl-id-icon.svg")
+
+        self.assertEqual(logo.status_code, 200)
+        self.assertEqual(icon.status_code, 200)
+        self.assertIn("image/svg+xml", logo.headers["content-type"])
+        self.assertIn("image/svg+xml", icon.headers["content-type"])
+        self.assertIn("<svg", logo.text)
+        self.assertIn("<svg", icon.text)
 
     async def test_unknown_route_returns_404(self):
         async with self.http_client() as client:

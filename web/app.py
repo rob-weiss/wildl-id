@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 from src.labelling.review_app import ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
@@ -11,6 +12,20 @@ from web.visualisations import VisualisationRunStore
 app = FastAPI()
 visualisation_runs = VisualisationRunStore()
 logger = logging.getLogger(__name__)
+ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
+app.mount(
+    "/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets"
+)
+ui.add_head_html(
+    '<link rel="icon" type="image/svg+xml" href="/assets/wildl-id-icon.svg">',
+    shared=True,
+)
+
+
+def add_brand_logo() -> None:
+    ui.image("/assets/wildl-id-logo.svg").props('alt="wildl-id logo"').classes(
+        "w-64 max-w-full"
+    )
 
 
 @app.get("/health")
@@ -19,6 +34,7 @@ def health() -> dict[str, str]:
 
 
 def build_review_page(csv_path: Path = DEFAULT_CSV) -> None:
+    add_brand_logo()
     try:
         reviewer = ReviewApp(csv_path)
         reviewer.build()
@@ -37,6 +53,7 @@ def build_default_review_page() -> None:
 @ui.page("/")
 def home_page() -> None:
     with ui.column().classes("w-full max-w-3xl mx-auto p-6 gap-4"):
+        add_brand_logo()
         ui.label("Wildlife analysis").classes("text-2xl font-semibold")
         ui.link("Manual review", "/review").classes("text-lg")
         ui.link("Visualisations", "/visualisations").classes("text-lg")
@@ -49,6 +66,7 @@ def review_page() -> None:
 
 @ui.page("/visualisations")
 def visualisations_page() -> None:
+    add_brand_logo()
     ui.label("Visualisations").classes("text-xl font-semibold")
     status = ui.label()
     spinner = ui.spinner(size="lg")

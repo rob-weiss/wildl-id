@@ -32,6 +32,7 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/web /app/web
 COPY --from=builder --chown=app:app /app/src/labelling /app/src/labelling
 COPY --from=builder --chown=app:app /app/src/visualisation /app/src/visualisation
+COPY --chown=app:app docs/assets /app/docs/assets
 
 USER app:app
 

@@ -1,5 +1,7 @@
 # Wildlife Identification and Analysis
 
+<img src="assets/wildl-id-logo.svg" alt="wildl-id logo featuring a roe deer, badger, and duck" width="560">
+
 Tools for identifying wildlife in camera-trap images and analysing labelled detections.
 
 ## Features
