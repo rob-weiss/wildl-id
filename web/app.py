@@ -13,9 +13,7 @@ app = FastAPI()
 visualisation_runs = VisualisationRunStore()
 logger = logging.getLogger(__name__)
 ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
-app.mount(
-    "/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets"
-)
+app.mount("/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets")
 ui.add_head_html(
     '<link rel="icon" type="image/svg+xml" href="/assets/wildl-id-icon.svg">',
     shared=True,
