@@ -1,5 +1,7 @@
+import csv
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -104,6 +106,95 @@ class VisualizationOutputSafetyTests(unittest.TestCase):
         self.assertIsNone(error)
         self.assertIs(result, False)
         self.assertTrue(self.sentinel.exists())
+
+
+class VisualizationCustomPathTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.repo_dir = Path(self.temp_dir.name)
+        self.script_path = (
+            self.repo_dir / "src" / "visualisation" / "evaluate_labels.py"
+        )
+        self.csv_path = self.repo_dir / "fixture.csv"
+        self.output_dir = self.repo_dir / "web-output"
+        self.default_output = self.repo_dir / "docs" / "diagrams"
+        self.default_output.mkdir(parents=True)
+        self.sentinel = self.default_output / "keep.svg"
+        self.sentinel.write_text("existing output", encoding="utf-8")
+
+    def write_valid_csv(self):
+        fieldnames = [
+            "location_id",
+            "timestamp",
+            "timestamp_exif",
+            "image_file",
+            "class",
+            "manual_label",
+            "lighting",
+            "temperature_celsius",
+        ]
+        classes = ["roe deer", "wild boar", "human", "horse"]
+        start = datetime(2024, 4, 1)
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=fieldnames)
+            writer.writeheader()
+            for day in range(28):
+                for index, label in enumerate(classes):
+                    timestamp = start + timedelta(days=day, hours=index * 4 + 1)
+                    writer.writerow(
+                        {
+                            "location_id": f"camera-{day % 2 + 1}",
+                            "timestamp": timestamp.isoformat(),
+                            "timestamp_exif": timestamp.isoformat(),
+                            "image_file": f"image-{day:02d}-{index}.jpg",
+                            "class": label,
+                            "manual_label": "fox" if label == "horse" else "",
+                            "lighting": "bright" if 6 <= timestamp.hour < 19 else "dark",
+                            "temperature_celsius": -5 + (day * 3 + index * 7) % 41,
+                        }
+                    )
+
+    def run_visualisation(self, csv_path=None, output_dir=None):
+        with patch.object(evaluate_module, "__file__", self.script_path):
+            return evaluate_module.main(csv_path=csv_path, output_dir=output_dir)
+
+    def test_main_uses_custom_paths_and_manual_labels(self):
+        self.write_valid_csv()
+
+        result = self.run_visualisation(self.csv_path, self.output_dir)
+
+        self.assertIs(result, True)
+        summary = self.output_dir / "summary_statistics.txt"
+        self.assertTrue(summary.is_file())
+        self.assertTrue(list(self.output_dir.glob("*.svg")))
+        summary_text = summary.read_text(encoding="utf-8")
+        self.assertIn("fox", summary_text)
+        self.assertNotIn("horse", summary_text)
+        self.assertEqual(self.sentinel.read_text(encoding="utf-8"), "existing output")
+
+    def test_missing_custom_csv_preserves_existing_output(self):
+        self.output_dir.mkdir()
+        output_sentinel = self.output_dir / "keep.svg"
+        output_sentinel.write_text("existing output", encoding="utf-8")
+
+        result = self.run_visualisation(self.csv_path, self.output_dir)
+
+        self.assertIs(result, False)
+        self.assertEqual(output_sentinel.read_text(encoding="utf-8"), "existing output")
+        self.assertEqual(self.sentinel.read_text(encoding="utf-8"), "existing output")
+
+    def test_invalid_custom_csv_preserves_existing_output(self):
+        self.csv_path.write_text("class\nfox\n", encoding="utf-8")
+        self.output_dir.mkdir()
+        output_sentinel = self.output_dir / "keep.svg"
+        output_sentinel.write_text("existing output", encoding="utf-8")
+
+        result = self.run_visualisation(self.csv_path, self.output_dir)
+
+        self.assertIs(result, False)
+        self.assertEqual(output_sentinel.read_text(encoding="utf-8"), "existing output")
+        self.assertEqual(self.sentinel.read_text(encoding="utf-8"), "existing output")
 
 
 class IndividualTimelineAxisTests(unittest.TestCase):

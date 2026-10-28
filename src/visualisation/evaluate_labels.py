@@ -73,15 +73,21 @@ def _create_individual_timeline_axes(n_rows, n_cols, figsize):
     return figure, axes.flatten()
 
 
-def main() -> bool:
+def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     """Main function to generate all visualizations."""
     # Configuration
     model = "MegaDetectorV6_MDV6-yolov10-e_classified"
     image_dir = Path(__file__).parent.parent.parent / "images"
-    # Put visualizations in docs/diagrams at repo root
     repo_root = Path(__file__).parent.parent.parent
     labels_dir = repo_root / "labels" / f"labels_{model}"
-    output_dir = repo_root / "docs" / "diagrams"
+    csv_path = (
+        Path(csv_path)
+        if csv_path is not None
+        else labels_dir / f"detection_results_{model}.csv"
+    )
+    output_dir = (
+        Path(output_dir) if output_dir is not None else repo_root / "docs" / "diagrams"
+    )
 
     # Initialize plot counter for sequential numbering
     plot_num = 0
@@ -93,7 +99,6 @@ def main() -> bool:
     TIMEZONE = "Europe/Berlin"
 
     # Load the data
-    csv_path = labels_dir / f"detection_results_{model}.csv"
     if not csv_path.exists():
         print(f"Error: Results file not found at {csv_path}")
         return False
