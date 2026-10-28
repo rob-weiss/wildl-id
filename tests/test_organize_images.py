@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime
 from importlib import import_module
 from pathlib import Path
+from threading import Barrier
 from unittest.mock import patch
 
 from PIL import Image
@@ -135,7 +136,9 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
             writer.writeheader()
             for path, label in zip((first, second), manual_labels):
                 writer.writerow(
-                    dict(location_id="Grenzweg", image_file=path.name, manual_label=label)
+                    dict(
+                        location_id="Grenzweg", image_file=path.name, manual_label=label
+                    )
                 )
         annotated = self.root / "annotated" / f"Grenzweg_{second.name}"
         annotated.parent.mkdir()
@@ -255,6 +258,38 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
 
         self.assertTrue(first.exists())
         self.assertTrue(second.exists())
+
+    def test_duplicate_hashes_run_concurrently_with_identical_results(self):
+        self.duplicate_fixture()
+        expected = organizer.find_duplicate_images(workers=1)
+        barrier = Barrier(2)
+        original_open = Image.open
+
+        def open_together(path):
+            barrier.wait(timeout=5)
+            return original_open(path)
+
+        with patch.object(organizer.Image, "open", side_effect=open_together):
+            actual = organizer.find_duplicate_images(workers=2)
+
+        self.assertEqual(actual, expected)
+
+    def test_organizer_passes_workers_to_duplicate_scan(self):
+        with patch.object(organizer, "find_duplicate_images", return_value=[]) as scan:
+            organizer.organize_images(dry_run=True, workers=2, check_duplicates=True)
+
+        scan.assert_called_once_with(workers=2)
+
+    def test_parallel_duplicate_scan_skips_unreadable_images(self):
+        first, second, _ = self.duplicate_fixture()
+        broken = first.parent / "broken.jpg"
+        broken.write_bytes(b"not an image")
+
+        groups = organizer.find_duplicate_images(workers=2)
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(set(groups[0]), {first, second})
+        self.assertTrue(broken.exists())
 
 
 if __name__ == "__main__":

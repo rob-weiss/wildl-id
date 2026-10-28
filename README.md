@@ -162,6 +162,9 @@ duplicates in both `data/` and `images/`, run:
 uv run src/labelling/organize_images.py --check-duplicates --dry-run
 ```
 
+Hashing runs in parallel with up to four workers by default. Use `--workers N`
+to set concurrency for both duplicate hashing and image validation.
+
 Remove `--dry-run` to apply the cleanup and then organise staged images as usual.
 Only exact decoded pixels at the same location count as duplicates; filenames
 and metadata (including EXIF timestamps) are ignored. Similar photos and photos

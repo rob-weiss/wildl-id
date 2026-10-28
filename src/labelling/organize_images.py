@@ -277,39 +277,51 @@ def rename_annotated(renames, removed, dry_run):
     print(f"Annotated images: {moved} renamed, {deleted} deleted")
 
 
-def find_duplicate_images():
+def duplicate_image_digest(path):
+    try:
+        with Image.open(path) as image:
+            pixels = (
+                image
+                if image.mode.startswith("I") or image.mode == "F"
+                else image.convert("RGBA")
+            )
+            digest = hashlib.sha256(f"{pixels.mode}:{pixels.size}".encode("ascii"))
+            digest.update(pixels.tobytes())
+        return digest.digest()
+    except (OSError, ValueError, ImportError, Image.DecompressionBombError):
+        return None
+
+
+def find_duplicate_images(workers=None):
     groups = defaultdict(list)
     unreadable = 0
-    for root in (IMAGES_DIR, DATA_DIR):
-        if not root.is_dir() or root.is_symlink():
-            continue
-        for path in tqdm(root.rglob("*"), desc=f"Hashing {root.name}", unit="file"):
-            if (
-                path.is_symlink()
-                or not path.is_file()
-                or path.suffix.lower() not in IMAGE_EXTENSIONS
-            ):
+    with ThreadPoolExecutor(max_workers=workers or min(4, os.cpu_count() or 1)) as pool:
+        for root in (IMAGES_DIR, DATA_DIR):
+            if not root.is_dir() or root.is_symlink():
                 continue
-            parts = path.relative_to(root).parts
-            minimum = 3 if root == IMAGES_DIR else 2
-            if len(parts) < minimum:
-                continue
-            location = nfc(parts[1] if root == IMAGES_DIR else parts[0])
-            try:
-                with Image.open(path) as image:
-                    pixels = (
-                        image
-                        if image.mode.startswith("I") or image.mode == "F"
-                        else image.convert("RGBA")
-                    )
-                    digest = hashlib.sha256(
-                        f"{pixels.mode}:{pixels.size}".encode("ascii")
-                    )
-                    digest.update(pixels.tobytes())
-            except (OSError, ValueError, Image.DecompressionBombError):
-                unreadable += 1
-                continue
-            groups[(location, digest.digest())].append(path)
+            locations = {}
+            for path in root.rglob("*"):
+                if (
+                    path.is_symlink()
+                    or not path.is_file()
+                    or path.suffix.lower() not in IMAGE_EXTENSIONS
+                ):
+                    continue
+                parts = path.relative_to(root).parts
+                minimum = 3 if root == IMAGES_DIR else 2
+                if len(parts) >= minimum:
+                    locations[path] = nfc(parts[1] if root == IMAGES_DIR else parts[0])
+            digests = tqdm(
+                pool.map(duplicate_image_digest, locations),
+                total=len(locations),
+                desc=f"Hashing {root.name}",
+                unit="image",
+            )
+            for path, digest in zip(locations, digests):
+                if digest is None:
+                    unreadable += 1
+                    continue
+                groups[(locations[path], digest)].append(path)
     if unreadable:
         print(f"Duplicate scan skipped {unreadable} unreadable images")
     return [paths for paths in groups.values() if len(paths) > 1]
@@ -373,15 +385,15 @@ def remove_duplicate_images(groups, dry_run=False):
         writer = csv.writer(stream, lineterminator="\n")
         writer.writerow(["removed_path", "kept_path"])
         for path, keeper in plan:
-            writer.writerow(
-                [path.relative_to(REPO_DIR), keeper.relative_to(REPO_DIR)]
-            )
+            writer.writerow([path.relative_to(REPO_DIR), keeper.relative_to(REPO_DIR)])
     originals = [path for path, _ in plan]
     annotated_names = {annotated_name(*key) for key in removed}
     annotations = [
         path
         for path in ANNOTATED_DIR.rglob("*")
-        if path.is_file() and not path.is_symlink() and nfc(path.name) in annotated_names
+        if path.is_file()
+        and not path.is_symlink()
+        and nfc(path.name) in annotated_names
     ]
     for path in originals + annotations:
         target = backup / path.relative_to(REPO_DIR)
@@ -394,7 +406,7 @@ def remove_duplicate_images(groups, dry_run=False):
 
 def organize_images(dry_run=False, workers=None, check_duplicates=False):
     if check_duplicates:
-        remove_duplicate_images(find_duplicate_images(), dry_run)
+        remove_duplicate_images(find_duplicate_images(workers=workers), dry_run)
     images, videos, others = collect_files()
     print(
         f"Found {len(images)} images, {len(videos)} videos, "
@@ -498,7 +510,10 @@ def main():
         "--dry-run", action="store_true", help="report planned changes only"
     )
     parser.add_argument(
-        "--workers", type=int, default=os.cpu_count(), help="parallel image checks"
+        "--workers",
+        type=int,
+        default=min(4, os.cpu_count() or 1),
+        help="parallel image checks and duplicate hashes (default: up to 4)",
     )
     parser.add_argument(
         "--check-duplicates",
