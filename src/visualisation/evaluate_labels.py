@@ -73,6 +73,10 @@ def _create_individual_timeline_axes(n_rows, n_cols, figsize):
     return figure, axes.flatten()
 
 
+def _matplotlib_date_values(values: pd.Series) -> np.ndarray:
+    return np.asarray(mdates.date2num(pd.to_datetime(values).to_numpy()))
+
+
 def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     """Main function to generate all visualizations."""
     # Configuration
@@ -1799,9 +1803,7 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
                 )
 
                 # Right distribution (date)
-                date_values = (
-                    pd.to_datetime(species_data["date"]).astype("int64") / 10**9 / 86400
-                )
+                date_values = _matplotlib_date_values(species_data["date"])
                 ax_right.hist(
                     date_values,
                     bins=52,

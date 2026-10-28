@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
+import matplotlib.dates as mdates
 from src.visualisation import evaluate_labels as evaluate_module
 from src.visualisation.evaluate_labels import (
     filter_baiting_classes,
@@ -210,6 +211,17 @@ class IndividualTimelineAxisTests(unittest.TestCase):
 
         self.assertTrue(axes[0].get_shared_x_axes().joined(axes[0], axes[1]))
         self.assertEqual(axes[0].get_xlim(), axes[1].get_xlim())
+
+
+class VisualizationDateAxisTests(unittest.TestCase):
+    def test_plot_dates_use_matplotlib_units_across_pandas_resolutions(self):
+        dates = pd.Series(pd.to_datetime(["2025-10-28", "2026-08-23"]))
+
+        actual = evaluate_module._matplotlib_date_values(dates)
+
+        self.assertEqual(
+            actual.tolist(), mdates.date2num(dates.to_numpy()).tolist()
+        )
 
 
 if __name__ == "__main__":
