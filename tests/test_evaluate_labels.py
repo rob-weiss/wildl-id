@@ -221,6 +221,29 @@ class VisualizationDateAxisTests(unittest.TestCase):
 
         self.assertEqual(actual.tolist(), mdates.date2num(dates.to_numpy()).tolist())
 
+    def test_daily_yearly_marginal_axis_does_not_overlap_hour_ticks(self):
+        figure, _, main_axis, right_axis, _ = (
+            evaluate_module._create_daily_yearly_axes()
+        )
+        self.addCleanup(evaluate_module.plt.close, figure)
+        main_axis.set_xlim(0, 24)
+        main_axis.set_xticks(range(0, 25, 2))
+        main_axis.set_xticklabels([f"{hour:02d}:00" for hour in range(0, 25, 2)])
+        right_axis.hist(
+            [0.0, 0.005, 0.01, 0.015, 0.02], bins=5, orientation="horizontal"
+        )
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+
+        final_hour_label = main_axis.get_xticklabels()[-1].get_window_extent(
+            renderer
+        )
+        first_density_label = right_axis.get_xticklabels()[0].get_window_extent(
+            renderer
+        )
+
+        self.assertLess(final_hour_label.x1, first_density_label.x0)
+
 
 if __name__ == "__main__":
     unittest.main()

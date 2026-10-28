@@ -77,6 +77,28 @@ def _matplotlib_date_values(values: pd.Series) -> np.ndarray:
     return np.asarray(mdates.date2num(pd.to_datetime(values).to_numpy()))
 
 
+def _create_daily_yearly_axes():
+    from matplotlib.gridspec import GridSpec
+
+    figure = plt.figure(figsize=(18, 10), constrained_layout=False)
+    grid = GridSpec(
+        2,
+        3,
+        figure=figure,
+        width_ratios=[4, 1, 0.2],
+        height_ratios=[1, 4],
+        hspace=0.05,
+        wspace=0.2,
+    )
+    return (
+        figure,
+        figure.add_subplot(grid[0, 0]),
+        figure.add_subplot(grid[1, 0]),
+        figure.add_subplot(grid[1, 1]),
+        figure.add_subplot(grid[1, 2]),
+    )
+
+
 def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     """Main function to generate all visualizations."""
     # Configuration
@@ -1618,8 +1640,6 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
             # Use gridspec to add marginal distributions
             from datetime import datetime, timedelta
 
-            from matplotlib.gridspec import GridSpec
-
             today = datetime.now().date()
             twelve_months_ago = today - timedelta(days=365)
 
@@ -1636,29 +1656,10 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
                 if len(species_data) == 0:
                     continue
 
-                # Create figure for this species
-                fig = plt.figure(figsize=(18, 10), constrained_layout=False)
-                gs = GridSpec(
-                    2,
-                    3,
-                    figure=fig,
-                    width_ratios=[4, 1, 0.2],
-                    height_ratios=[1, 4],
-                    hspace=0.05,
-                    wspace=0.05,
-                )
-
-                # Top histogram (hour distribution)
-                ax_top = fig.add_subplot(gs[0, 0])
-
-                # Main scatter plot
-                ax_main = fig.add_subplot(gs[1, 0], sharex=ax_top)
-
-                # Right histogram (date distribution)
-                ax_right = fig.add_subplot(gs[1, 1], sharey=ax_main)
-
-                # Colorbar position
-                ax_cbar = fig.add_subplot(gs[1, 2])
+                # Create figure for this species with room between marginal axes.
+                fig, ax_top, ax_main, ax_right, ax_cbar = _create_daily_yearly_axes()
+                ax_main.sharex(ax_top)
+                ax_right.sharey(ax_main)
 
                 # Extract hour and minute as decimal hour for x-axis
                 species_data["hour_decimal"] = (
