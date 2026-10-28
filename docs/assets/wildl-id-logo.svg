@@ -1,24 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 180" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 250" role="img" aria-labelledby="title description">
   <title id="title">wildl-id</title>
-  <desc id="description">A roe deer, badger, and duck above the wildl-id wordmark.</desc>
-  <g transform="translate(10 10)">
-    <circle cx="80" cy="80" r="79" fill="#214a3a"/>
-    <circle cx="80" cy="80" r="74.5" fill="none" stroke="#d5a45f" stroke-width="2.5"/>
-    <path d="M25 120c7-11 22-14 37-10 7 2 12 6 16 11l-4 8H26z" fill="#f2ead8"/>
-    <path d="m34 123-1 18m13-18-1 18m17-18 2 18m10-19 4 19" fill="none" stroke="#f2ead8" stroke-linecap="round" stroke-width="5"/>
-    <path d="M43 117V91c-6-6-7-15-3-23l9-1 8 7 12-1 9 7-7 7 1 6-9 4-2 25" fill="#f2ead8"/>
-    <path d="m51 69-4-18-10-9m10 9 8-11m-8 14-9-7m23 17 4-16 10-8m-10 8 1-11m-1 17 9-6" fill="none" stroke="#d5a45f" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
-    <path d="M70 116c8-14 26-19 43-14 9 3 14 9 16 17l-7 9H74z" fill="#d5a45f"/>
-    <path d="m79 122-1 19m15-19v19m18-19 3 19" fill="none" stroke="#d5a45f" stroke-linecap="round" stroke-width="5"/>
-    <path d="M100 107c5-10 14-16 23-13 8 2 11 9 9 16l11 4-3 6-13-1-11 9-17-4z" fill="#f2ead8"/>
-    <path d="M104 106c6-7 12-10 18-8l5 5-12 5 11 1-1 5-16-1-6 5" fill="none" stroke="#214a3a" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
-    <path d="M131 127c1-10 10-17 21-17 9 0 16 5 20 13l-4 8h-34z" fill="#d5a45f"/>
-    <path d="M139 115c-3-8 0-17 7-22 6-5 15-3 19 4 4 6 2 15-5 20l-9 3z" fill="#f2ead8"/>
-    <path d="m163 100 12 4-12 5" fill="#d97347" stroke="#d97347" stroke-linejoin="round" stroke-width="3"/>
-    <circle cx="156" cy="99" r="2" fill="#214a3a"/>
-    <path d="M20 143h142" fill="none" stroke="#d5a45f" stroke-linecap="round" stroke-width="2.5"/>
-  </g>
-  <path d="M203 40v100" stroke="#d5a45f" stroke-width="3"/>
-  <text x="235" y="100" fill="#214a3a" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="700">wildl-id</text>
-  <text x="240" y="137" fill="#53675d" font-family="sans-serif" font-size="21">Wildlife identification</text>
+  <desc id="description">Roe deer, badger, and duck emoji above the wildl-id wordmark.</desc>
+  <text x="145" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦌</text>
+  <text x="230" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦡</text>
+  <text x="315" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦆</text>
+  <text x="230" y="190" text-anchor="middle" fill="#214a3a" font-family="Georgia, 'Times New Roman', serif" font-size="68" font-weight="700">wildl-id</text>
+  <text x="230" y="226" text-anchor="middle" fill="#53675d" font-family="sans-serif" font-size="17">Wildlife identification</text>
 </svg>

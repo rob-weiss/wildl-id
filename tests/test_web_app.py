@@ -197,6 +197,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("image/svg+xml", icon.headers["content-type"])
         self.assertIn("<svg", logo.text)
         self.assertIn("<svg", icon.text)
+        for animal in ("\U0001f98c", "\U0001f9a1", "\U0001f986"):
+            self.assertIn(animal, logo.text)
+            self.assertIn(animal, icon.text)
 
     async def test_unknown_route_returns_404(self):
         async with self.http_client() as client:
