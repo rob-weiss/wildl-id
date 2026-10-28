@@ -330,7 +330,11 @@ class ReviewApp:
             f"{self.review.position + 1} / {len(self.review.pending)}"
         )
         self.image_name.set_text(f"{row['location_id']} / {row['image_file']}")
-        prediction = self.prediction_for_row(row)
+        prediction = (
+            None
+            if self.review.mode == "Unseen"
+            else self.prediction_for_row(row)
+        )
         if prediction:
             self.prediction.set_text(
                 f"True: {prediction['true_label']} | "

@@ -361,6 +361,40 @@ class LabelReviewTests(unittest.TestCase):
                 app.change_mode("Seen")
                 self.assertEqual(app.prediction.text, "Predicted: fox")
 
+    def test_unseen_mode_hides_validation_truth_but_incorrect_mode_shows_it(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        filename = "camera1_unchecked.jpg"
+        prediction = {
+            "true_label": "hare",
+            "predicted_label": "song bird",
+            "status": "incorrect",
+        }
+        app.review.latest_predictions[filename] = prediction
+        app.review.latest_incorrect_filenames.add(filename)
+        image_path = Path(self.temp_dir.name) / "preview.png"
+        Image.new("RGB", (64, 64)).save(image_path)
+
+        with review_app_module.ui.column() as container:
+            with (
+                patch.object(app, "image_path_for", return_value=image_path),
+                patch.object(
+                    review_app_module,
+                    "box_overlay_svg",
+                    wraps=review_app_module.box_overlay_svg,
+                ) as render_overlay,
+            ):
+                app.build()
+                self.addCleanup(container.delete)
+                self.assertEqual(app.prediction.text, "fox")
+                self.assertIsNone(render_overlay.call_args.args[2])
+
+                app.change_mode("Latest model incorrect")
+
+                self.assertEqual(
+                    app.prediction.text, "True: hare | Predicted: song bird"
+                )
+                self.assertEqual(render_overlay.call_args.args[2], prediction)
+
     def test_browser_model_name_is_visible_only_in_latest_model_incorrect_mode(self):
         run_name = "deepfaune_finetuned_20261020-191127_latest"
         with (

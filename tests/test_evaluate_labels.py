@@ -235,9 +235,7 @@ class VisualizationDateAxisTests(unittest.TestCase):
         figure.canvas.draw()
         renderer = figure.canvas.get_renderer()
 
-        final_hour_label = main_axis.get_xticklabels()[-1].get_window_extent(
-            renderer
-        )
+        final_hour_label = main_axis.get_xticklabels()[-1].get_window_extent(renderer)
         first_density_label = right_axis.get_xticklabels()[0].get_window_extent(
             renderer
         )
