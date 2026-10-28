@@ -1,3 +1,4 @@
+import csv
 import hashlib
 import imaplib
 import json
@@ -191,11 +192,97 @@ class EmailImageDownloadTests(unittest.TestCase):
         self.state_path = self.root / "state.json"
         self.patches = patch.multiple(
             downloader,
+            REPO_DIR=self.root,
             DATA_DIR=self.data_dir,
             IMAGES_DIR=self.images_dir,
         )
         self.patches.start()
         self.addCleanup(self.patches.stop)
+
+    def test_downloader_reuses_organizer_pixel_cache_for_legacy_state(self):
+        organizer = import_module("src.labelling.organize_images")
+        content = BytesIO()
+        Image.new("RGB", (16, 12), "green").save(content, format="JPEG")
+        image_bytes = content.getvalue()
+        image_path = self.images_dir / "2026" / "Grenzweg" / "image_0000001.jpg"
+        image_path.parent.mkdir(parents=True)
+        image_path.write_bytes(image_bytes)
+        stat = image_path.stat()
+        relative = image_path.relative_to(self.root).as_posix()
+        cache_path = self.root / "logs" / "image_hashes.csv"
+        cache_path.parent.mkdir()
+        with cache_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream,
+                fieldnames=[
+                    "image_path", "size", "mtime_ns", "hash_version", "sha256"
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "image_path": relative,
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "hash_version": "rgba-sha256-v1",
+                    "sha256": organizer.duplicate_image_digest(image_path).hex(),
+                }
+            )
+        legacy_state = {
+            "files": {
+                str(image_path.resolve()): {
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "sha256": hashlib.sha256(image_bytes).hexdigest(),
+                    "hash_version": 1,
+                }
+            }
+        }
+
+        with patch.object(downloader, "_sha256") as hash_file:
+            by_location, _ = downloader._image_index(legacy_state)
+
+        hash_file.assert_not_called()
+        expected = organizer.duplicate_image_digest(image_path).hex()
+        self.assertIn(expected, by_location["Grenzweg"])
+        self.assertEqual(
+            legacy_state["files"][str(image_path.resolve())]["hash_version"],
+            downloader.DOWNLOAD_HASH_VERSION,
+        )
+
+    def test_downloader_rehashes_when_shared_pixel_cache_metadata_is_stale(self):
+        organizer = import_module("src.labelling.organize_images")
+        content = BytesIO()
+        Image.new("RGB", (16, 12), "green").save(content, format="JPEG")
+        image_path = self.images_dir / "2026" / "Grenzweg" / "image_0000001.jpg"
+        image_path.parent.mkdir(parents=True)
+        image_path.write_bytes(content.getvalue())
+        stat = image_path.stat()
+        cache_path = self.root / "logs" / "image_hashes.csv"
+        cache_path.parent.mkdir()
+        with cache_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream,
+                fieldnames=[
+                    "image_path", "size", "mtime_ns", "hash_version", "sha256"
+                ],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "image_path": image_path.relative_to(self.root).as_posix(),
+                    "size": stat.st_size,
+                    "mtime_ns": stat.st_mtime_ns,
+                    "hash_version": "rgba-sha256-v1",
+                    "sha256": organizer.duplicate_image_digest(image_path).hex(),
+                }
+            )
+        Image.new("RGB", (16, 12), "red").save(image_path, format="JPEG")
+
+        with patch.object(downloader, "_sha256", wraps=downloader._sha256) as hash_file:
+            downloader._image_index({"files": {}})
+
+        hash_file.assert_called_once_with(image_path)
 
     def run_download(
         self,

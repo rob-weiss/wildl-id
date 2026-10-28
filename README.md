@@ -173,6 +173,8 @@ without labels. Each entry stores the image path, size, nanosecond modification
 time, hash version, and a 64-character SHA-256 pixel hash. Unchanged images reuse
 their hashes; new or changed files are decoded again. Invalid cache entries are
 recomputed, and paths no longer present are dropped on the next cache update.
+The mail downloader reuses these hashes too, avoiding a separate full-image
+rehash when it starts with older mailbox state.
 
 Build or refresh the cache without organising or deleting any images:
 

@@ -1,5 +1,6 @@
 """Download matching camera images from IMAP mailboxes."""
 
+import csv
 import hashlib
 import imaplib
 import json
@@ -13,10 +14,14 @@ from dataclasses import dataclass
 from email import message_from_bytes, policy
 from email.utils import getaddresses
 from imaplib import IMAP4
-from io import BytesIO
 from pathlib import Path
 
 from PIL import Image
+
+try:
+    from ..labelling.pixel_hash import HASH_VERSION, pixel_digest_bytes
+except ImportError:
+    from labelling.pixel_hash import HASH_VERSION, pixel_digest_bytes
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -30,6 +35,7 @@ SENDER_ADDRESS = "info@supersim.camera"
 RECIPIENT_ADDRESS = "wildlife@robinweiss.de"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 IMAP_TIMEOUT_SECONDS = 30
+DOWNLOAD_HASH_VERSION = 2
 SUBJECT_PATTERN = re.compile(r"^Kamera:\s*Jochen\s+\d+\s+(.+?)\s*$", re.IGNORECASE)
 RECIPIENT_HEADERS = (
     "To",
@@ -271,14 +277,10 @@ def _safe_filename(filename, content_type):
 
 
 def _content_digest(content):
-    digest = hashlib.sha256()
-    if content.startswith(b"\xff\xd8"):
-        with Image.open(BytesIO(content)) as image:
-            digest.update(f"{image.mode}:{image.size}:".encode("ascii"))
-            digest.update(image.tobytes())
-    else:
-        digest.update(content)
-    return digest.hexdigest()
+    try:
+        return pixel_digest_bytes(content).hex()
+    except (OSError, ValueError, ImportError, Image.DecompressionBombError):
+        return hashlib.sha256(content).hexdigest()
 
 
 def _sha256(path):
@@ -297,8 +299,45 @@ def _location_for_existing(path, root, kind):
     return None
 
 
+def _shared_pixel_hash_cache():
+    cache_path = REPO_DIR / "logs" / "image_hashes.csv"
+    entries = {}
+    try:
+        with cache_path.open(newline="", encoding="utf-8") as stream:
+            for row in csv.DictReader(stream):
+                try:
+                    relative = Path(row["image_path"])
+                    if relative.is_absolute() or ".." in relative.parts:
+                        continue
+                    path = REPO_DIR / relative
+                    resolved = path.resolve()
+                    if not resolved.is_relative_to(REPO_DIR.resolve()):
+                        continue
+                    stat = path.stat()
+                    digest = bytes.fromhex(row["sha256"])
+                    if (
+                        row["hash_version"] != HASH_VERSION
+                        or len(digest) != 32
+                        or int(row["size"]) != stat.st_size
+                        or int(row["mtime_ns"]) != stat.st_mtime_ns
+                    ):
+                        continue
+                    entries[str(resolved)] = {
+                        "hash_version": DOWNLOAD_HASH_VERSION,
+                        "size": stat.st_size,
+                        "mtime_ns": stat.st_mtime_ns,
+                        "sha256": digest.hex(),
+                    }
+                except (KeyError, OSError, TypeError, ValueError):
+                    continue
+    except (OSError, UnicodeError, csv.Error):
+        return {}
+    return entries
+
+
 def _image_index(state):
     old_cache = state["files"]
+    old_cache.update(_shared_pixel_hash_cache())
     new_cache = {}
     by_location = {}
     by_hash = {}
@@ -320,7 +359,7 @@ def _image_index(state):
             stat = path.stat()
             cached = old_cache.get(key, {})
             if (
-                cached.get("hash_version") == 1
+                cached.get("hash_version") == DOWNLOAD_HASH_VERSION
                 and cached.get("size") == stat.st_size
                 and cached.get("mtime_ns") == stat.st_mtime_ns
                 and isinstance(cached.get("sha256"), str)
@@ -329,7 +368,7 @@ def _image_index(state):
             else:
                 digest = _sha256(path)
             new_cache[key] = {
-                "hash_version": 1,
+                "hash_version": DOWNLOAD_HASH_VERSION,
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
                 "sha256": digest,
@@ -373,7 +412,7 @@ def _write_attachment(
     key = str(target.resolve())
     stat = target.stat()
     file_cache[key] = {
-        "hash_version": 1,
+        "hash_version": DOWNLOAD_HASH_VERSION,
         "size": stat.st_size,
         "mtime_ns": stat.st_mtime_ns,
         "sha256": digest,

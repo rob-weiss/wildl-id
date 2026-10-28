@@ -17,7 +17,6 @@ Usage:
 
 import argparse
 import csv
-import hashlib
 import os
 import re
 import shutil
@@ -32,6 +31,11 @@ from zoneinfo import ZoneInfo
 import piexif  # type: ignore[import-untyped]
 from PIL import Image
 from tqdm import tqdm
+
+try:
+    from .pixel_hash import HASH_VERSION, pixel_digest_path
+except ImportError:
+    from pixel_hash import HASH_VERSION, pixel_digest_path
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -60,7 +64,7 @@ CAMERA_FILENAME_PATTERN = re.compile(
 )
 CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
 STANDARD_TIMEZONE = timezone(timedelta(hours=1))
-DUPLICATE_HASH_VERSION = "rgba-sha256-v1"
+DUPLICATE_HASH_VERSION = HASH_VERSION
 DUPLICATE_CACHE_FIELDS = ["image_path", "size", "mtime_ns", "hash_version", "sha256"]
 
 
@@ -283,15 +287,7 @@ def rename_annotated(renames, removed, dry_run):
 
 def duplicate_image_digest(path):
     try:
-        with Image.open(path) as image:
-            pixels = (
-                image
-                if image.mode.startswith("I") or image.mode == "F"
-                else image.convert("RGBA")
-            )
-            digest = hashlib.sha256(f"{pixels.mode}:{pixels.size}".encode("ascii"))
-            digest.update(pixels.tobytes())
-        return digest.digest()
+        return pixel_digest_path(path)
     except (OSError, ValueError, ImportError, Image.DecompressionBombError):
         return None
 
