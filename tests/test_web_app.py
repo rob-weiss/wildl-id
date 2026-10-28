@@ -118,9 +118,17 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_page_declares_brand_tab_icon(self):
         async with self.http_client() as client:
-            response = await client.get("/visualisations")
+            response = await client.get("/")
+            favicon = await client.get("/favicon.ico")
 
-        self.assertIn("/assets/wildl-id-icon.svg", response.text)
+        self.assertIn('href="/favicon.ico"', response.text)
+        self.assertNotIn("/assets/wildl-id-icon.svg", response.text)
+        self.assertEqual(favicon.status_code, 200)
+        self.assertIn("image/svg+xml", favicon.headers["content-type"])
+        self.assertEqual(
+            favicon.content,
+            (web_app.ASSETS_DIRECTORY / "wildl-id-icon.svg").read_bytes(),
+        )
 
     async def test_visualisations_page_does_not_generate_on_open(self):
         run_store = FakeVisualisationRunStore()

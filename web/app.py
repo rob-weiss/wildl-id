@@ -14,10 +14,6 @@ visualisation_runs = VisualisationRunStore()
 logger = logging.getLogger(__name__)
 ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
 app.mount("/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets")
-ui.add_head_html(
-    '<link rel="icon" type="image/svg+xml" href="/assets/wildl-id-icon.svg">',
-    shared=True,
-)
 
 
 def add_brand_logo() -> None:
@@ -120,4 +116,4 @@ def visualisations_page() -> None:
     button = ui.button("Generate visualisations", on_click=generate).props("no-caps")
 
 
-ui.run_with(app, mount_path="/")
+ui.run_with(app, favicon=ASSETS_DIRECTORY / "wildl-id-icon.svg", mount_path="/")
