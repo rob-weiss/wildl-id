@@ -1,12 +1,16 @@
 import csv
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
 from nicegui import ui
 from src.labelling.review_app import ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
+from web.visualisations import VisualisationRunStore
 
 app = FastAPI()
+visualisation_runs = VisualisationRunStore()
+logger = logging.getLogger(__name__)
 
 
 @app.get("/health")
@@ -31,8 +35,71 @@ def build_default_review_page() -> None:
 
 
 @ui.page("/")
+def home_page() -> None:
+    with ui.column().classes("w-full max-w-3xl mx-auto p-6 gap-4"):
+        ui.label("Wildlife analysis").classes("text-2xl font-semibold")
+        ui.link("Manual review", "/review").classes("text-lg")
+        ui.link("Visualisations", "/visualisations").classes("text-lg")
+
+
+@ui.page("/review")
 def review_page() -> None:
     build_default_review_page()
+
+
+@ui.page("/visualisations")
+def visualisations_page() -> None:
+    ui.label("Visualisations").classes("text-xl font-semibold")
+    status = ui.label()
+    spinner = ui.spinner(size="lg")
+    spinner.set_visibility(False)
+    results = ui.column().classes("w-full gap-3")
+
+    def show_results(output_directory: Path) -> None:
+        summary_path = output_directory / "summary_statistics.txt"
+        chart_paths = sorted(output_directory.glob("*.svg"))
+        if not summary_path.is_file() or not chart_paths:
+            status.set_text("No visualisation results are available.")
+            return
+
+        summary_text = summary_path.read_text(encoding="utf-8")
+        results.clear()
+        with results:
+            ui.label("Summary").classes("font-semibold")
+            ui.label(summary_text).classes("whitespace-pre-wrap")
+            chart_image = ui.image(chart_paths[0]).classes("w-full")
+            ui.select(
+                {str(path): path.name for path in chart_paths},
+                value=str(chart_paths[0]),
+                label="Chart",
+                on_change=lambda event: chart_image.set_source(event.value),
+            ).classes("w-full")
+
+    if visualisation_runs.current_directory is not None:
+        show_results(visualisation_runs.current_directory)
+
+    async def generate() -> None:
+        button.disable()
+        spinner.set_visibility(True)
+        status.set_text("Generating visualisations...")
+        try:
+            output_directory = await visualisation_runs.generate(DEFAULT_CSV)
+            if output_directory is None:
+                status.set_text("Visualisations could not be generated.")
+                return
+            show_results(output_directory)
+            status.set_text("Visualisations ready")
+        except Exception:
+            logger.exception("Visualisation generation failed")
+            status.set_text("Visualisations failed; see container logs for details.")
+            ui.notify("Visualisations failed; see container logs for details.", type="negative")
+        finally:
+            spinner.set_visibility(False)
+            button.enable()
+
+    button = ui.button("Generate visualisations", on_click=generate).props(
+        "no-caps"
+    )
 
 
 ui.run_with(app, mount_path="/")

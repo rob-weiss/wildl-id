@@ -7,9 +7,26 @@ from unittest.mock import patch
 
 import httpx
 from nicegui import run
+from nicegui import ui
 from nicegui.testing.user import User
 from PIL import Image
 from web import app as web_app
+
+
+class FakeVisualisationRunStore:
+    def __init__(self, current_directory=None, result=None, error=None):
+        self.current_directory = current_directory
+        self.result = result
+        self.error = error
+        self.is_running = False
+        self.generate_calls = 0
+
+    async def generate(self, csv_path):
+        self.generate_calls += 1
+        if self.error is not None:
+            raise self.error
+        self.current_directory = self.result
+        return self.result
 
 
 class WebAppTests(unittest.IsolatedAsyncioTestCase):
@@ -37,13 +54,20 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             run.reset()
 
     @asynccontextmanager
-    async def review_user(self):
+    async def app_user(self, path):
         async with self.http_client() as client:
-            response = await client.get("/")
+            response = await client.get(path)
             self.assertEqual(response.headers.get("X-NiceGUI-Content"), "page")
             user = User(client)
-            await user.open("/")
+            await user.open(path)
             yield user
+
+    def patch_run_store(self, store):
+        run_store_patch = patch.object(
+            web_app, "visualisation_runs", store, create=True
+        )
+        run_store_patch.start()
+        self.addCleanup(run_store_patch.stop)
 
     def write_csv(self, fieldnames, rows):
         with self.csv_path.open("w", newline="", encoding="utf-8") as target:
@@ -63,26 +87,86 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_review_page_shows_labels_and_hides_remove_empty(self):
         self.write_valid_review_data()
 
-        async with self.review_user() as user:
+        async with self.app_user("/review") as user:
             await user.should_see("Wildlife label review")
             await user.should_see("fox")
             await user.should_not_see("Remove empty")
 
     async def test_page_shows_missing_csv_error(self):
-        async with self.review_user() as user:
+        async with self.app_user("/review") as user:
             await user.should_see("Review data unavailable")
 
     async def test_page_shows_invalid_csv_schema_error(self):
         self.write_csv(["invalid"], [{"invalid": "value"}])
 
-        async with self.review_user() as user:
+        async with self.app_user("/review") as user:
             await user.should_see("Review data unavailable")
 
     async def test_page_shows_unreadable_csv_error(self):
         self.csv_path.mkdir()
 
-        async with self.review_user() as user:
+        async with self.app_user("/review") as user:
             await user.should_see("Review data unavailable")
+
+    async def test_home_links_to_review_and_visualisations(self):
+        async with self.app_user("/") as user:
+            await user.should_see("Manual review")
+            await user.should_see("Visualisations")
+
+    async def test_visualisations_page_does_not_generate_on_open(self):
+        run_store = FakeVisualisationRunStore()
+        self.patch_run_store(run_store)
+
+        async with self.app_user("/visualisations") as user:
+            await user.should_see("Generate visualisations")
+
+        self.assertEqual(run_store.generate_calls, 0)
+
+    async def test_successful_run_shows_summary_and_selected_chart(self):
+        output_dir = self.root / "results"
+        output_dir.mkdir()
+        (output_dir / "summary_statistics.txt").write_text(
+            "24 images analysed", encoding="utf-8"
+        )
+        (output_dir / "01_species_distribution.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
+        )
+        run_store = FakeVisualisationRunStore(result=output_dir)
+        self.patch_run_store(run_store)
+
+        async with self.app_user("/visualisations") as user:
+            user.find("Generate visualisations").click()
+            await user.should_see("24 images analysed")
+            await user.should_see("01_species_distribution.svg")
+            await user.should_see(kind=ui.image)
+
+        self.assertEqual(run_store.generate_calls, 1)
+
+    async def test_failed_run_shows_error_and_preserves_previous_chart(self):
+        output_dir = self.root / "previous-results"
+        output_dir.mkdir()
+        (output_dir / "summary_statistics.txt").write_text(
+            "previous successful run", encoding="utf-8"
+        )
+        (output_dir / "01_species_distribution.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
+        )
+        run_store = FakeVisualisationRunStore(
+            current_directory=output_dir,
+            error=RuntimeError("fixture generation failure"),
+        )
+        self.patch_run_store(run_store)
+
+        async with self.app_user("/visualisations") as user:
+            user.find("Generate visualisations").click()
+            await user.should_see(
+                "Visualisations failed; see container logs for details."
+            )
+            await user.should_not_see("fixture generation failure")
+            await user.should_see("previous successful run")
+            await user.should_see("01_species_distribution.svg")
+
+        self.assertEqual(run_store.generate_calls, 1)
 
     async def test_health_returns_ok_json(self):
         async with self.http_client() as client:
