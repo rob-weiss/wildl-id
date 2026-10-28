@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-import pandas as pd
 import matplotlib.dates as mdates
+import pandas as pd
 from src.visualisation import evaluate_labels as evaluate_module
 from src.visualisation.evaluate_labels import (
     filter_baiting_classes,
@@ -219,9 +219,7 @@ class VisualizationDateAxisTests(unittest.TestCase):
 
         actual = evaluate_module._matplotlib_date_values(dates)
 
-        self.assertEqual(
-            actual.tolist(), mdates.date2num(dates.to_numpy()).tolist()
-        )
+        self.assertEqual(actual.tolist(), mdates.date2num(dates.to_numpy()).tolist())
 
 
 if __name__ == "__main__":

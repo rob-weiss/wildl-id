@@ -70,9 +70,7 @@ def visualisations_page() -> None:
                 {str(path): path.name for path in chart_paths},
                 value=str(chart_paths[0]),
                 label="Chart",
-                on_change=lambda event: chart_image["element"].set_source(
-                    event.value
-                ),
+                on_change=lambda event: chart_image["element"].set_source(event.value),
             ).classes("w-full")
             chart_image["element"] = ui.image(chart_paths[0]).classes("w-full")
             with ui.expansion("Summary statistics").classes("w-full"):
