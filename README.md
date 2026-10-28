@@ -165,6 +165,22 @@ uv run src/labelling/organize_images.py --check-duplicates --dry-run
 Hashing runs in parallel with up to four workers by default. Use `--workers N`
 to set concurrency for both duplicate hashing and image validation.
 
+Hashes are cached in the Git-ignored `logs/image_hashes.csv`, including images
+without labels. Each entry stores the image path, size, nanosecond modification
+time, hash version, and a 64-character SHA-256 pixel hash. Unchanged images reuse
+their hashes; new or changed files are decoded again. Invalid cache entries are
+recomputed, and paths no longer present are dropped on the next cache update.
+
+Build or refresh the cache without organising or deleting any images:
+
+```bash
+uv run src/labelling/organize_images.py --build-hash-cache --workers 4
+```
+
+Regular duplicate cleanup updates the cache automatically. A dry run reads an
+existing cache but never creates or updates it. The labels CSV is unchanged by
+cache-only builds. Deleting the cache is safe; the next build recomputes hashes.
+
 Remove `--dry-run` to apply the cleanup and then organise staged images as usual.
 Only exact decoded pixels at the same location count as duplicates; filenames
 and metadata (including EXIF timestamps) are ignored. Similar photos and photos

@@ -1,4 +1,5 @@
 import csv
+import os
 import tempfile
 import unittest
 from datetime import datetime
@@ -261,7 +262,7 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
 
     def test_duplicate_hashes_run_concurrently_with_identical_results(self):
         self.duplicate_fixture()
-        expected = organizer.find_duplicate_images(workers=1)
+        expected = organizer.find_duplicate_images(workers=1, write_cache=False)
         barrier = Barrier(2)
         original_open = Image.open
 
@@ -278,7 +279,7 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
         with patch.object(organizer, "find_duplicate_images", return_value=[]) as scan:
             organizer.organize_images(dry_run=True, workers=2, check_duplicates=True)
 
-        scan.assert_called_once_with(workers=2)
+        scan.assert_called_once_with(workers=2, write_cache=False)
 
     def test_parallel_duplicate_scan_skips_unreadable_images(self):
         first, second, _ = self.duplicate_fixture()
@@ -290,6 +291,153 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
         self.assertEqual(len(groups), 1)
         self.assertEqual(set(groups[0]), {first, second})
         self.assertTrue(broken.exists())
+
+    def test_hash_cache_reuses_unlabelled_image_hashes_without_decoding(self):
+        image, _ = self.create_image("camera-export.jpg")
+        organizer.find_duplicate_images(workers=1)
+
+        with patch.object(organizer, "duplicate_image_digest") as digest:
+            self.assertEqual(organizer.find_duplicate_images(workers=2), [])
+
+        digest.assert_not_called()
+        cache = self.logs_dir / "image_hashes.csv"
+        _, rows = organizer.read_csv(cache)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["image_path"], image.relative_to(self.root).as_posix())
+        self.assertEqual(len(rows[0]["sha256"]), 64)
+        self.assertEqual(rows[0]["size"], str(image.stat().st_size))
+        self.assertEqual(rows[0]["mtime_ns"], str(image.stat().st_mtime_ns))
+
+    def test_hash_cache_invalidates_size_and_modification_time(self):
+        image, _ = self.create_image("camera-export.jpg")
+        organizer.find_duplicate_images(workers=1)
+        original_digest = organizer.duplicate_image_digest
+        stat = image.stat()
+        image.write_bytes(image.read_bytes() + b"padding")
+        os.utime(image, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+
+        with patch.object(
+            organizer, "duplicate_image_digest", wraps=original_digest
+        ) as digest:
+            organizer.find_duplicate_images(workers=1)
+        digest.assert_called_once_with(image)
+
+        stat = image.stat()
+        os.utime(image, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        with patch.object(
+            organizer, "duplicate_image_digest", wraps=original_digest
+        ) as digest:
+            organizer.find_duplicate_images(workers=1)
+        digest.assert_called_once_with(image)
+
+    def test_hash_cache_rebuilds_invalid_entries_and_old_versions(self):
+        image, _ = self.create_image("camera-export.jpg")
+        cache = self.logs_dir / "image_hashes.csv"
+        original_digest = organizer.duplicate_image_digest
+        for field, value in (("hash_version", "old"), ("sha256", "invalid")):
+            with self.subTest(field=field):
+                organizer.find_duplicate_images(workers=1)
+                fields, rows = organizer.read_csv(cache)
+                rows[0][field] = value
+                organizer.rewrite_csv(cache, rows, fields)
+
+                with patch.object(
+                    organizer, "duplicate_image_digest", wraps=original_digest
+                ) as digest:
+                    organizer.find_duplicate_images(workers=1)
+
+                digest.assert_called_once_with(image)
+
+    def test_hash_cache_discards_deleted_paths(self):
+        first, second, _ = self.duplicate_fixture()
+        organizer.find_duplicate_images(workers=1)
+        second.unlink()
+
+        organizer.find_duplicate_images(workers=1)
+
+        _, rows = organizer.read_csv(self.logs_dir / "image_hashes.csv")
+        self.assertEqual(
+            [row["image_path"] for row in rows],
+            [first.relative_to(self.root).as_posix()],
+        )
+
+    def test_dry_run_reads_cache_without_updating_it(self):
+        self.duplicate_fixture()
+        organizer.find_duplicate_images(workers=1)
+        cache = self.logs_dir / "image_hashes.csv"
+        before = cache.read_bytes(), cache.stat().st_mtime_ns
+
+        with patch.object(organizer, "duplicate_image_digest") as digest:
+            organizer.organize_images(dry_run=True, workers=1, check_duplicates=True)
+
+        digest.assert_not_called()
+        self.assertEqual((cache.read_bytes(), cache.stat().st_mtime_ns), before)
+
+    def test_hash_cache_skips_files_changed_during_hashing(self):
+        image, _ = self.create_image("camera-export.jpg")
+        original_digest = organizer.duplicate_image_digest
+
+        def change_during_hash(path):
+            result = original_digest(path)
+            path.write_bytes(path.read_bytes() + b"changed")
+            return result
+
+        with patch.object(
+            organizer, "duplicate_image_digest", side_effect=change_during_hash
+        ):
+            organizer.find_duplicate_images(workers=1)
+
+        _, rows = organizer.read_csv(self.logs_dir / "image_hashes.csv")
+        self.assertEqual(rows, [])
+
+    def test_build_hash_cache_only_does_not_organize_or_remove_duplicates(self):
+        first, second, _ = self.duplicate_fixture()
+        original_csv = self.csv_path.read_bytes()
+
+        with patch(
+            "sys.argv", ["organize_images.py", "--build-hash-cache", "--workers", "2"]
+        ):
+            organizer.main()
+
+        self.assertTrue(first.exists())
+        self.assertTrue(second.exists())
+        self.assertEqual(self.csv_path.read_bytes(), original_csv)
+        _, rows = organizer.read_csv(self.logs_dir / "image_hashes.csv")
+        self.assertEqual(len(rows), 2)
+
+    def test_hash_cache_revalidates_hits_after_other_files_finish_hashing(self):
+        first, second, _ = self.duplicate_fixture()
+        organizer.find_duplicate_images(workers=1)
+        stat = second.stat()
+        os.utime(second, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+        original_digest = organizer.duplicate_image_digest
+
+        def change_cached_image(path):
+            result = original_digest(path)
+            Image.new("RGB", (16, 12), "red").save(first, format="JPEG")
+            return result
+
+        with patch.object(
+            organizer, "duplicate_image_digest", side_effect=change_cached_image
+        ):
+            groups = organizer.find_duplicate_images(workers=1)
+
+        self.assertEqual(groups, [])
+        _, rows = organizer.read_csv(self.logs_dir / "image_hashes.csv")
+        self.assertEqual(
+            [row["image_path"] for row in rows],
+            [second.relative_to(self.root).as_posix()],
+        )
+
+    def test_build_hash_cache_rejects_dry_run(self):
+        with patch(
+            "sys.argv", ["organize_images.py", "--build-hash-cache", "--dry-run"]
+        ):
+            with self.assertRaises(SystemExit) as error:
+                organizer.main()
+
+        self.assertEqual(error.exception.code, 2)
+        self.assertFalse(self.logs_dir.exists())
 
 
 if __name__ == "__main__":

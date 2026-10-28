@@ -12,6 +12,7 @@ A mapping of old to new paths is written to logs/ before anything is moved.
 
 Usage:
     uv run src/labelling/organize_images.py [--dry-run] [--check-duplicates]
+    uv run src/labelling/organize_images.py --build-hash-cache
 """
 
 import argparse
@@ -25,6 +26,7 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 
 import piexif  # type: ignore[import-untyped]
@@ -58,6 +60,8 @@ CAMERA_FILENAME_PATTERN = re.compile(
 )
 CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
 STANDARD_TIMEZONE = timezone(timedelta(hours=1))
+DUPLICATE_HASH_VERSION = "rgba-sha256-v1"
+DUPLICATE_CACHE_FIELDS = ["image_path", "size", "mtime_ns", "hash_version", "sha256"]
 
 
 def nfc(text):
@@ -292,14 +296,74 @@ def duplicate_image_digest(path):
         return None
 
 
-def find_duplicate_images(workers=None):
+def read_duplicate_hash_cache(path):
+    entries = {}
+    try:
+        with path.open(newline="", encoding="utf-8") as stream:
+            for row in csv.DictReader(stream):
+                try:
+                    if row["hash_version"] != DUPLICATE_HASH_VERSION:
+                        continue
+                    digest = bytes.fromhex(row["sha256"])
+                    size, mtime_ns = int(row["size"]), int(row["mtime_ns"])
+                    if len(digest) != 32 or size < 0:
+                        continue
+                    entries[row["image_path"]] = (size, mtime_ns, digest)
+                except (KeyError, TypeError, ValueError):
+                    continue
+    except (OSError, UnicodeError, csv.Error):
+        return {}
+    return entries
+
+
+def write_duplicate_hash_cache(path, entries):
+    temporary = None
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with NamedTemporaryFile(
+            mode="w",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            newline="",
+            encoding="utf-8",
+            delete=False,
+        ) as stream:
+            temporary = Path(stream.name)
+            writer = csv.DictWriter(stream, fieldnames=DUPLICATE_CACHE_FIELDS)
+            writer.writeheader()
+            for relative, (size, mtime_ns, digest) in entries.items():
+                writer.writerow(
+                    dict(
+                        image_path=relative,
+                        size=size,
+                        mtime_ns=mtime_ns,
+                        hash_version=DUPLICATE_HASH_VERSION,
+                        sha256=digest.hex(),
+                    )
+                )
+        os.replace(temporary, path)
+    except OSError as error:
+        print(f"Could not update duplicate hash cache: {error}")
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def find_duplicate_images(workers=None, *, write_cache=True):
     groups = defaultdict(list)
-    unreadable = 0
+    cache_path = LOG_DIR / "image_hashes.csv"
+    old_cache = read_duplicate_hash_cache(cache_path)
+    new_cache = {}
+    unreadable = reused = computed = changed = 0
     with ThreadPoolExecutor(max_workers=workers or min(4, os.cpu_count() or 1)) as pool:
         for root in (IMAGES_DIR, DATA_DIR):
             if not root.is_dir() or root.is_symlink():
                 continue
             locations = {}
+            signatures = {}
+            pending = []
+            results = {}
             for path in root.rglob("*"):
                 if (
                     path.is_symlink()
@@ -310,20 +374,70 @@ def find_duplicate_images(workers=None):
                 parts = path.relative_to(root).parts
                 minimum = 3 if root == IMAGES_DIR else 2
                 if len(parts) >= minimum:
+                    try:
+                        stat = path.stat()
+                    except OSError:
+                        unreadable += 1
+                        continue
                     locations[path] = nfc(parts[1] if root == IMAGES_DIR else parts[0])
+                    signatures[path] = stat.st_size, stat.st_mtime_ns
+                    cached = old_cache.get(path.relative_to(REPO_DIR).as_posix())
+                    if cached is not None and cached[:2] == signatures[path]:
+                        results[path] = cached[2]
+                        reused += 1
+                    else:
+                        pending.append(path)
             digests = tqdm(
-                pool.map(duplicate_image_digest, locations),
-                total=len(locations),
+                pool.map(duplicate_image_digest, pending),
+                total=len(pending),
                 desc=f"Hashing {root.name}",
                 unit="image",
             )
-            for path, digest in zip(locations, digests):
+            for path, digest in zip(pending, digests):
+                computed += 1
                 if digest is None:
                     unreadable += 1
                     continue
+                try:
+                    stat = path.stat()
+                except OSError:
+                    changed += 1
+                    continue
+                if (stat.st_size, stat.st_mtime_ns) != signatures[path]:
+                    changed += 1
+                    continue
+                results[path] = digest
+            for path, digest in results.items():
                 groups[(locations[path], digest)].append(path)
+                new_cache[path.relative_to(REPO_DIR).as_posix()] = (
+                    *signatures[path],
+                    digest,
+                )
+    for key, paths in groups.items():
+        stable = []
+        for path in paths:
+            relative = path.relative_to(REPO_DIR).as_posix()
+            try:
+                stat = path.stat()
+                unchanged = (
+                    not path.is_symlink()
+                    and (stat.st_size, stat.st_mtime_ns) == new_cache[relative][:2]
+                )
+            except OSError:
+                unchanged = False
+            if unchanged:
+                stable.append(path)
+            else:
+                changed += 1
+                del new_cache[relative]
+        groups[key] = stable
+    print(f"Duplicate hash cache: {reused} reused, {computed} computed")
     if unreadable:
         print(f"Duplicate scan skipped {unreadable} unreadable images")
+    if changed:
+        print(f"Duplicate scan skipped {changed} images changed during hashing")
+    if write_cache:
+        write_duplicate_hash_cache(cache_path, new_cache)
     return [paths for paths in groups.values() if len(paths) > 1]
 
 
@@ -406,7 +520,9 @@ def remove_duplicate_images(groups, dry_run=False):
 
 def organize_images(dry_run=False, workers=None, check_duplicates=False):
     if check_duplicates:
-        remove_duplicate_images(find_duplicate_images(workers=workers), dry_run)
+        remove_duplicate_images(
+            find_duplicate_images(workers=workers, write_cache=not dry_run), dry_run
+        )
     images, videos, others = collect_files()
     print(
         f"Found {len(images)} images, {len(videos)} videos, "
@@ -515,12 +631,23 @@ def main():
         default=min(4, os.cpu_count() or 1),
         help="parallel image checks and duplicate hashes (default: up to 4)",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--check-duplicates",
         action="store_true",
         help="scan data/ and images/ for identical pixels; back up and remove duplicates",
     )
+    mode.add_argument(
+        "--build-hash-cache",
+        action="store_true",
+        help="update image hash cache only; do not organize or delete images",
+    )
     args = parser.parse_args()
+    if args.build_hash_cache:
+        if args.dry_run:
+            parser.error("--build-hash-cache writes a cache; omit --dry-run")
+        find_duplicate_images(workers=args.workers)
+        return
     organize_images(args.dry_run, args.workers, args.check_duplicates)
 
 
