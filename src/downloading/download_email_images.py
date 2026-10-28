@@ -19,7 +19,6 @@ from PIL import Image
 
 try:
     from ..labelling.pixel_hash import (
-        HASH_VERSION,
         pixel_digest_bytes,
         read_pixel_hash_cache,
     )
