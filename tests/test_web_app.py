@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
+from nicegui import run
 from nicegui.testing.user import User
 from PIL import Image
 from web import app as web_app
@@ -25,12 +26,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     @asynccontextmanager
     async def http_client(self):
-        async with web_app.app.router.lifespan_context(web_app.app):
-            async with httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=web_app.app),
-                base_url="http://test",
-            ) as client:
-                yield client
+        try:
+            async with web_app.app.router.lifespan_context(web_app.app):
+                async with httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=web_app.app),
+                    base_url="http://test",
+                ) as client:
+                    yield client
+        finally:
+            run.reset()
 
     @asynccontextmanager
     async def review_user(self):
