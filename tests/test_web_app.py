@@ -1,14 +1,13 @@
 import csv
-import httpx
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 from nicegui.testing.user import User
 from PIL import Image
-
 from web import app as web_app
 
 
@@ -55,9 +54,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         )
         annotated_images = self.root / "images"
         annotated_images.mkdir()
-        Image.new("RGB", (16, 16), "green").save(
-            annotated_images / "camera1_photo.png"
-        )
+        Image.new("RGB", (16, 16), "green").save(annotated_images / "camera1_photo.png")
 
     async def test_review_page_shows_labels_and_hides_remove_empty(self):
         self.write_valid_review_data()
