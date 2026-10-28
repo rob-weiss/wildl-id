@@ -70,6 +70,9 @@ The camera number may vary. Image attachments are staged in
 moves timestamped images into `images/<year>/<location>/`. The organiser also
 deletes videos and corrupt images under `data/`.
 
+JPEG duplicates are detected by decoded pixels, so filename and EXIF timestamp
+changes during organisation do not cause repeated downloads.
+
 Supersim filenames such as `Aufnahme_YYMMDD_HHMM_CAMERA.jpg` provide a fallback
 when the downloaded JPEG has no EXIF time. The organiser writes that capture
 time into EXIF before moving the image. Filename times are interpreted as

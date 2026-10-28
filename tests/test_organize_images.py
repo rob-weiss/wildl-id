@@ -430,11 +430,13 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
         )
 
     def test_build_hash_cache_rejects_dry_run(self):
-        with patch(
-            "sys.argv", ["organize_images.py", "--build-hash-cache", "--dry-run"]
+        with (
+            patch(
+                "sys.argv", ["organize_images.py", "--build-hash-cache", "--dry-run"]
+            ),
+            self.assertRaises(SystemExit) as error,
         ):
-            with self.assertRaises(SystemExit) as error:
-                organizer.main()
+            organizer.main()
 
         self.assertEqual(error.exception.code, 2)
         self.assertFalse(self.logs_dir.exists())

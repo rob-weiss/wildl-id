@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from email import message_from_bytes, policy
 from email.utils import getaddresses
 from imaplib import IMAP4
+from io import BytesIO
 from pathlib import Path
+
+from PIL import Image
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -267,12 +270,19 @@ def _safe_filename(filename, content_type):
     return filename, suffix
 
 
-def _sha256(path):
+def _content_digest(content):
     digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
+    if content.startswith(b"\xff\xd8"):
+        with Image.open(BytesIO(content)) as image:
+            digest.update(f"{image.mode}:{image.size}:".encode("ascii"))
+            digest.update(image.tobytes())
+    else:
+        digest.update(content)
     return digest.hexdigest()
+
+
+def _sha256(path):
+    return _content_digest(path.read_bytes())
 
 
 def _location_for_existing(path, root, kind):
@@ -310,7 +320,8 @@ def _image_index(state):
             stat = path.stat()
             cached = old_cache.get(key, {})
             if (
-                cached.get("size") == stat.st_size
+                cached.get("hash_version") == 1
+                and cached.get("size") == stat.st_size
                 and cached.get("mtime_ns") == stat.st_mtime_ns
                 and isinstance(cached.get("sha256"), str)
             ):
@@ -318,6 +329,7 @@ def _image_index(state):
             else:
                 digest = _sha256(path)
             new_cache[key] = {
+                "hash_version": 1,
                 "size": stat.st_size,
                 "mtime_ns": stat.st_mtime_ns,
                 "sha256": digest,
@@ -361,6 +373,7 @@ def _write_attachment(
     key = str(target.resolve())
     stat = target.stat()
     file_cache[key] = {
+        "hash_version": 1,
         "size": stat.st_size,
         "mtime_ns": stat.st_mtime_ns,
         "sha256": digest,
@@ -448,7 +461,7 @@ def _process_message(
     try:
         for filename, content, content_type in attachments:
             filename, _ = _safe_filename(filename, content_type)
-            digest = hashlib.sha256(content).hexdigest()
+            digest = _content_digest(content)
             found = existing.get(location, {}).get(digest, set())
             if found:
                 duplicates += 1

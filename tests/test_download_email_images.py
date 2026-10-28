@@ -1,13 +1,18 @@
+import hashlib
 import imaplib
 import json
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from email.header import Header
 from email.message import EmailMessage
 from importlib import import_module
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
+
+from PIL import Image
 
 downloader = import_module("src.downloading.download_email_images")
 
@@ -337,6 +342,52 @@ class EmailImageDownloadTests(unittest.TestCase):
         self.assertEqual(result.duplicates, 1)
         self.assertEqual(server.mailboxes["INBOX"], {})
         self.assertEqual(len(server.mailboxes["Trash"]), 1)
+
+    def test_organized_exif_timestamp_prevents_duplicate_with_legacy_cache(self):
+        organizer = import_module("src.labelling.organize_images")
+        content = BytesIO()
+        Image.new("RGB", (640, 480), "green").save(content, format="JPEG")
+        image = content.getvalue()
+        organized = self.images_dir / "2026" / "Grenzweg" / "image_0000001.jpg"
+        organized.parent.mkdir(parents=True)
+        organized.write_bytes(image)
+        organizer.write_exif_capture_time(organized, datetime(2026, 10, 27, 12, 30))
+        stat = organized.stat()
+        self.state_path.write_text(
+            json.dumps(
+                {
+                    "mailboxes": {},
+                    "files": {
+                        str(organized.resolve()): {
+                            "size": stat.st_size,
+                            "mtime_ns": stat.st_mtime_ns,
+                            "sha256": hashlib.sha256(
+                                organized.read_bytes()
+                            ).hexdigest(),
+                        }
+                    },
+                }
+            )
+        )
+        mailboxes = {
+            "INBOX": {
+                "1": stored_message(
+                    make_message(
+                        "Kamera: Jochen 6 Grenzweg",
+                        image,
+                        "Aufnahme_261027_1230_test.jpg",
+                    )
+                )
+            },
+            "Trash": {},
+        }
+
+        result, _ = self.run_download(mailboxes)
+
+        self.assertEqual(result.saved_images, 0)
+        self.assertEqual(result.duplicates, 1)
+        self.assertFalse(result.pending_organization)
+        self.assertFalse((self.data_dir / "Grenzweg").exists())
 
     def test_existing_staged_image_prevents_duplicate_and_requests_organization(self):
         image = b"same bytes as a staged image"
