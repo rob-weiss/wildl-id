@@ -214,9 +214,7 @@ class EmailImageDownloadTests(unittest.TestCase):
         with cache_path.open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(
                 stream,
-                fieldnames=[
-                    "image_path", "size", "mtime_ns", "hash_version", "sha256"
-                ],
+                fieldnames=["image_path", "size", "mtime_ns", "hash_version", "sha256"],
             )
             writer.writeheader()
             writer.writerow(
@@ -263,9 +261,7 @@ class EmailImageDownloadTests(unittest.TestCase):
         with cache_path.open("w", newline="", encoding="utf-8") as stream:
             writer = csv.DictWriter(
                 stream,
-                fieldnames=[
-                    "image_path", "size", "mtime_ns", "hash_version", "sha256"
-                ],
+                fieldnames=["image_path", "size", "mtime_ns", "hash_version", "sha256"],
             )
             writer.writeheader()
             writer.writerow(
