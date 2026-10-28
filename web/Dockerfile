@@ -10,7 +10,7 @@ WORKDIR /app
 COPY web/pyproject.toml web/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project --no-cache
 
-COPY web/app.py ./
+COPY web/app.py web/visualisations.py ./web/
 COPY src/labelling/review_app.py src/labelling/review_labels.py src/labelling/remove_empty_images.py src/labelling/organize_images.py src/labelling/pixel_hash.py ./src/labelling/
 COPY src/labelling/review_zoom.js ./src/labelling/
 COPY src/labelling/vendor/panzoom.es.js src/labelling/vendor/PANZOOM-LICENSE.txt ./src/labelling/vendor/
@@ -29,7 +29,7 @@ RUN groupadd --system app \
     && useradd --system --gid app --no-create-home --shell /usr/sbin/nologin app
 
 COPY --from=builder --chown=app:app /app/.venv /app/.venv
-COPY --from=builder --chown=app:app /app/app.py /app/app.py
+COPY --from=builder --chown=app:app /app/web /app/web
 COPY --from=builder --chown=app:app /app/src/labelling /app/src/labelling
 COPY --from=builder --chown=app:app /app/src/visualisation /app/src/visualisation
 
@@ -37,4 +37,4 @@ USER app:app
 
 EXPOSE 8080
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+CMD ["uvicorn", "web.app:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]

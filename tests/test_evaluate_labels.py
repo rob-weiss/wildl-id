@@ -150,7 +150,9 @@ class VisualizationCustomPathTests(unittest.TestCase):
                             "image_file": f"image-{day:02d}-{index}.jpg",
                             "class": label,
                             "manual_label": "fox" if label == "horse" else "",
-                            "lighting": "bright" if 6 <= timestamp.hour < 19 else "dark",
+                            "lighting": "bright"
+                            if 6 <= timestamp.hour < 19
+                            else "dark",
                             "temperature_celsius": -5 + (day * 3 + index * 7) % 41,
                         }
                     )

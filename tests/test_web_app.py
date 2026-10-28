@@ -6,8 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
-from nicegui import run
-from nicegui import ui
+from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
 from web import app as web_app
@@ -136,9 +135,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.app_user("/visualisations") as user:
             user.find("Generate visualisations").click()
-            await user.should_see("24 images analysed")
+            await user.should_see("Summary statistics")
             await user.should_see("01_species_distribution.svg")
             await user.should_see(kind=ui.image)
+            user.find("Summary statistics").click()
+            await user.should_see("24 images analysed")
 
         self.assertEqual(run_store.generate_calls, 1)
 

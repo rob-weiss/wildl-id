@@ -1,8 +1,8 @@
-# Manual Labelling
+# Local Web App
 
-The web app reuses the existing wildlife label reviewer. It writes accepted
-labels and backups to the default CSV on the host. It does not run inference or
-copy images and model files into the Docker image.
+The home page at <http://127.0.0.1:8080> links to manual review and
+visualisations. The app binds only to localhost; it is not available from the
+LAN or internet. There is no login, so other local processes may access it.
 
 ## Requirements
 
@@ -61,7 +61,22 @@ git pull --ff-only
 HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose up --build -d
 ```
 
-The app binds only to `127.0.0.1`; it is not available from the LAN or internet.
-There is no login, so other local processes may access it. On a Pi, `localhost`
-means the Pi; open the app in a browser on the Pi itself. Pi hardware and
-cross-architecture execution have not been verified.
+## Visualisations
+
+Choose **Visualisations** from the home page, then select **Generate
+visualisations**. A spinner remains visible while the report runs. When it
+finishes, read the summary and select one chart at a time.
+
+Charts and summaries live only in the container's 64 MiB `/tmp` filesystem.
+They disappear when the container stops or restarts. A failed rerun keeps the
+previous successful results. The visualiser never writes to host
+`docs/diagrams/`.
+
+## Manual Review
+
+Choose **Manual review** from the home page. The reviewer writes labels and a
+backup to the default host CSV. Annotated and original images and models are
+read-only inside the container.
+
+On a Pi, `localhost` means the Pi; open the app in a browser on the Pi itself.
+Pi hardware and cross-architecture execution have not been verified.

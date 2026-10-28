@@ -65,15 +65,18 @@ def visualisations_page() -> None:
         summary_text = summary_path.read_text(encoding="utf-8")
         results.clear()
         with results:
-            ui.label("Summary").classes("font-semibold")
-            ui.label(summary_text).classes("whitespace-pre-wrap")
-            chart_image = ui.image(chart_paths[0]).classes("w-full")
+            chart_image = {}
             ui.select(
                 {str(path): path.name for path in chart_paths},
                 value=str(chart_paths[0]),
                 label="Chart",
-                on_change=lambda event: chart_image.set_source(event.value),
+                on_change=lambda event: chart_image["element"].set_source(
+                    event.value
+                ),
             ).classes("w-full")
+            chart_image["element"] = ui.image(chart_paths[0]).classes("w-full")
+            with ui.expansion("Summary statistics").classes("w-full"):
+                ui.label(summary_text).classes("whitespace-pre-wrap")
 
     if visualisation_runs.current_directory is not None:
         show_results(visualisation_runs.current_directory)
@@ -92,14 +95,15 @@ def visualisations_page() -> None:
         except Exception:
             logger.exception("Visualisation generation failed")
             status.set_text("Visualisations failed; see container logs for details.")
-            ui.notify("Visualisations failed; see container logs for details.", type="negative")
+            ui.notify(
+                "Visualisations failed; see container logs for details.",
+                type="negative",
+            )
         finally:
             spinner.set_visibility(False)
             button.enable()
 
-    button = ui.button("Generate visualisations", on_click=generate).props(
-        "no-caps"
-    )
+    button = ui.button("Generate visualisations", on_click=generate).props("no-caps")
 
 
 ui.run_with(app, mount_path="/")

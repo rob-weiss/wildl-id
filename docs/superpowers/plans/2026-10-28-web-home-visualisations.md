@@ -45,10 +45,10 @@
 - Produces an image containing `src/visualisation/evaluate_labels.py` and its direct runtime dependencies, while excluding `docs/diagrams/` and all host data.
 - Continues to install the isolated web project only; root ML dependencies remain absent.
 
-- [ ] **Step 1: Add direct dependencies** to `web/pyproject.toml`: `astral>=3.2`, `ephem>=4.2.1`, `numpy>=1.23.2`, `pandas>=2.3.3`, `pytz`, and `seaborn>=0.13.2`. Keep existing FastAPI, NiceGUI, Matplotlib, Pillow, and test extras.
+- [ ] **Step 1: Add direct dependencies** to `web/pyproject.toml`: `astral>=3.2`, `ephem>=4.2.1`, `numpy>=1.23.2`, `pandas>=2.3.3`, `pytz`, `scipy>=1.14,<2.0 ; python_full_version < '3.14'`, `scipy>=1.16,<2.0 ; python_full_version >= '3.14'`, and `seaborn>=0.13.2`. Keep existing FastAPI, NiceGUI, Matplotlib, Pillow, and test extras.
 - [ ] **Step 2: Regenerate and verify the lockfile** with `uv lock --project web` and `uv lock --project web --check`. Expected: dependencies resolve in `web/uv.lock`; root `uv.lock` remains unchanged.
 - [ ] **Step 3: Add only `src/visualisation/` and `evaluate_labels.py`** to the root `.dockerignore` allowlist. Do not allow `docs/`, `docs/diagrams/`, or any additional host data.
-- [ ] **Step 4: Copy the visualizer module** into `/app/src/visualisation/` in `web/Dockerfile`.
+- [ ] **Step 4: Copy the visualizer module** into `/app/src/visualisation/` and web modules into `/app/web/` in `web/Dockerfile`; set Uvicorn's target to `web.app:app` so its `web.visualisations` import resolves.
 - [ ] **Step 5: Build and inspect** with `docker compose build` and `docker run --rm --entrypoint sh wildl-id-web -c 'find /app/src/visualisation -maxdepth 1 -type f -print'`. Expected: only the visualizer source is added; no diagrams or dataset files enter the image.
 - [ ] **Step 6: Commit** the dependency and build-context changes.
 
@@ -110,6 +110,8 @@
 - Modify: `compose.yaml`
 - Modify: `web/README.md`
 - Modify: `.github/workflows/tests.yml`
+- Modify: `.dockerignore`
+- Modify: `web/Dockerfile`
 
 **Interfaces:**
 - Compose grants the existing `/tmp` tmpfs a 64 MiB limit; no new host mount is added.
@@ -117,9 +119,10 @@
 
 - [ ] **Step 1: Raise `/tmp` tmpfs** from `size=16m` to `size=64m` without changing the existing CSV or image/model mounts.
 - [ ] **Step 2: Update `web/README.md`** to document the main menu, `/review`, `/visualisations`, manual Generate action, in-browser chart selection, the 64 MiB temporary limit, and that results disappear when the container stops. Keep localhost-only access and existing UID/GID startup commands.
-- [ ] **Step 3: Update the Python 3.13 CI job** to discover both web test files using `-p 'test_web*.py'`; retain the web lock check and existing Python 3.10/3.14 root matrix.
-- [ ] **Step 4: Run final checks**: web lock check; visualizer tests; run-store tests; Python 3.13 web tests; root lock check; compile check; complete repository suite; workflow YAML parse; Compose validation; image build; and container route/health smoke checks with UID/GID supplied.
-- [ ] **Step 5: Review the final diff** for writes to host `docs/diagrams/`, unbounded storage, concurrent Matplotlib calls, non-loopback publishing, or ML dependencies. Commit docs, CI, and Compose changes.
+- [ ] **Step 3: Keep the runtime allowlist current** by including `web/visualisations.py` in `.dockerignore` and copying web modules under `/app/web/`; verify `python -c 'from web.app import app'` succeeds in the image.
+- [ ] **Step 4: Update the Python 3.13 CI job** to discover both web test files using `-p 'test_web*.py'`; retain the web lock check and existing Python 3.10/3.14 root matrix.
+- [ ] **Step 5: Run final checks**: web lock check; visualizer tests; run-store tests; Python 3.13 web tests; root lock check; compile check; complete repository suite; workflow YAML parse; Compose validation; image build; and container route/health smoke checks with UID/GID supplied.
+- [ ] **Step 6: Review the final diff** for writes to host `docs/diagrams/`, unbounded storage, concurrent Matplotlib calls, non-loopback publishing, or ML dependencies. Commit docs, CI, Compose, and runtime allowlist changes.
 
 ## Stop Conditions
 

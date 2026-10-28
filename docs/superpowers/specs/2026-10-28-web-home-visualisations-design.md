@@ -38,10 +38,12 @@ CSV and writing `docs/diagrams/`. The web app never uses that persistent output
 directory.
 
 Add only this visualiser module and its runtime dependencies to the strict
-Docker build allowlist. Add the dependencies it imports directly: Astral,
-Ephem, NumPy, pandas, pytz, and seaborn. Matplotlib is already in the isolated
-web project. Do not add ML dependencies or copy visualisation source data into
-the image.
+Docker build allowlist, along with `web/visualisations.py`. Mount web modules as
+the `/app/web` namespace package and start Uvicorn with `web.app:app`. Add the
+dependencies it imports directly: Astral, Ephem, NumPy, pandas, pytz, SciPy,
+and seaborn. Select SciPy `>=1.14,<2.0` on Python before 3.14 and `>=1.16,<2.0`
+on Python 3.14. Matplotlib is already in the isolated web project. Do not add ML
+dependencies or copy visualisation source data into the image.
 
 Run the synchronous visualiser through NiceGUI's `run.io_bound` so chart
 calculation and file output do not block UI requests. Disable the Generate
