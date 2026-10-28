@@ -33,9 +33,9 @@ from PIL import Image
 from tqdm import tqdm
 
 try:
-    from .pixel_hash import HASH_VERSION, pixel_digest_path
+    from .pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 except ImportError:
-    from pixel_hash import HASH_VERSION, pixel_digest_path
+    from pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -293,23 +293,7 @@ def duplicate_image_digest(path):
 
 
 def read_duplicate_hash_cache(path):
-    entries = {}
-    try:
-        with path.open(newline="", encoding="utf-8") as stream:
-            for row in csv.DictReader(stream):
-                try:
-                    if row["hash_version"] != DUPLICATE_HASH_VERSION:
-                        continue
-                    digest = bytes.fromhex(row["sha256"])
-                    size, mtime_ns = int(row["size"]), int(row["mtime_ns"])
-                    if len(digest) != 32 or size < 0:
-                        continue
-                    entries[row["image_path"]] = (size, mtime_ns, digest)
-                except (KeyError, TypeError, ValueError):
-                    continue
-    except (OSError, UnicodeError, csv.Error):
-        return {}
-    return entries
+    return read_pixel_hash_cache(path)
 
 
 def write_duplicate_hash_cache(path, entries):

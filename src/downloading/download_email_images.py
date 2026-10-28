@@ -1,6 +1,5 @@
 """Download matching camera images from IMAP mailboxes."""
 
-import csv
 import hashlib
 import imaplib
 import json
@@ -19,9 +18,17 @@ from pathlib import Path
 from PIL import Image
 
 try:
-    from ..labelling.pixel_hash import HASH_VERSION, pixel_digest_bytes
+    from ..labelling.pixel_hash import (
+        HASH_VERSION,
+        pixel_digest_bytes,
+        read_pixel_hash_cache,
+    )
 except ImportError:
-    from labelling.pixel_hash import HASH_VERSION, pixel_digest_bytes
+    from labelling.pixel_hash import (
+        HASH_VERSION,
+        pixel_digest_bytes,
+        read_pixel_hash_cache,
+    )
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = REPO_DIR / "data"
@@ -302,36 +309,28 @@ def _location_for_existing(path, root, kind):
 def _shared_pixel_hash_cache():
     cache_path = REPO_DIR / "logs" / "image_hashes.csv"
     entries = {}
-    try:
-        with cache_path.open(newline="", encoding="utf-8") as stream:
-            for row in csv.DictReader(stream):
-                try:
-                    relative = Path(row["image_path"])
-                    if relative.is_absolute() or ".." in relative.parts:
-                        continue
-                    path = REPO_DIR / relative
-                    resolved = path.resolve()
-                    if not resolved.is_relative_to(REPO_DIR.resolve()):
-                        continue
-                    stat = path.stat()
-                    digest = bytes.fromhex(row["sha256"])
-                    if (
-                        row["hash_version"] != HASH_VERSION
-                        or len(digest) != 32
-                        or int(row["size"]) != stat.st_size
-                        or int(row["mtime_ns"]) != stat.st_mtime_ns
-                    ):
-                        continue
-                    entries[str(resolved)] = {
-                        "hash_version": DOWNLOAD_HASH_VERSION,
-                        "size": stat.st_size,
-                        "mtime_ns": stat.st_mtime_ns,
-                        "sha256": digest.hex(),
-                    }
-                except (KeyError, OSError, TypeError, ValueError):
-                    continue
-    except (OSError, UnicodeError, csv.Error):
-        return {}
+    for relative, (size, mtime_ns, digest) in read_pixel_hash_cache(
+        cache_path
+    ).items():
+        try:
+            relative_path = Path(relative)
+            if relative_path.is_absolute() or ".." in relative_path.parts:
+                continue
+            path = REPO_DIR / relative_path
+            resolved = path.resolve()
+            if not resolved.is_relative_to(REPO_DIR.resolve()):
+                continue
+            stat = path.stat()
+            if size != stat.st_size or mtime_ns != stat.st_mtime_ns:
+                continue
+            entries[str(resolved)] = {
+                "hash_version": DOWNLOAD_HASH_VERSION,
+                "size": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns,
+                "sha256": digest.hex(),
+            }
+        except (OSError, TypeError, ValueError):
+            continue
     return entries
 
 

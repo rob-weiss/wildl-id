@@ -12,6 +12,7 @@ from PIL import Image
 
 organizer = import_module("src.labelling.organize_images")
 labeler = import_module("src.labelling.label_images")
+pixel_hash = import_module("src.labelling.pixel_hash")
 
 
 class OrganizerFilenameTimestampTests(unittest.TestCase):
@@ -37,6 +38,52 @@ class OrganizerFilenameTimestampTests(unittest.TestCase):
         )
         self.patches.start()
         self.addCleanup(self.patches.stop)
+
+    def test_shared_pixel_hash_cache_reader_skips_invalid_rows(self):
+        cache_path = self.root / "image_hashes.csv"
+        expected_digest = bytes.fromhex("ab" * 32)
+        with cache_path.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream,
+                fieldnames=[
+                    "image_path",
+                    "size",
+                    "mtime_ns",
+                    "hash_version",
+                    "sha256",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(
+                [
+                    {
+                        "image_path": "images/example.jpg",
+                        "size": "4",
+                        "mtime_ns": "10",
+                        "hash_version": pixel_hash.HASH_VERSION,
+                        "sha256": expected_digest.hex(),
+                    },
+                    {
+                        "image_path": "images/old.jpg",
+                        "size": "4",
+                        "mtime_ns": "10",
+                        "hash_version": "old-version",
+                        "sha256": expected_digest.hex(),
+                    },
+                    {
+                        "image_path": "images/bad.jpg",
+                        "size": "4",
+                        "mtime_ns": "10",
+                        "hash_version": pixel_hash.HASH_VERSION,
+                        "sha256": "not-a-digest",
+                    },
+                ]
+            )
+
+        self.assertEqual(
+            pixel_hash.read_pixel_hash_cache(cache_path),
+            {"images/example.jpg": (4, 10, expected_digest)},
+        )
 
     def create_image(self, name):
         path = self.location_dir / name
