@@ -24,7 +24,6 @@ try:
     )
 except ImportError:
     from labelling.pixel_hash import (
-        HASH_VERSION,
         pixel_digest_bytes,
         read_pixel_hash_cache,
     )
@@ -308,9 +307,7 @@ def _location_for_existing(path, root, kind):
 def _shared_pixel_hash_cache():
     cache_path = REPO_DIR / "logs" / "image_hashes.csv"
     entries = {}
-    for relative, (size, mtime_ns, digest) in read_pixel_hash_cache(
-        cache_path
-    ).items():
+    for relative, (size, mtime_ns, digest) in read_pixel_hash_cache(cache_path).items():
         try:
             relative_path = Path(relative)
             if relative_path.is_absolute() or ".." in relative_path.parts:
