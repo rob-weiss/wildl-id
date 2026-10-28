@@ -331,9 +331,7 @@ class ReviewApp:
         )
         self.image_name.set_text(f"{row['location_id']} / {row['image_file']}")
         prediction = (
-            None
-            if self.review.mode == "Unseen"
-            else self.prediction_for_row(row)
+            None if self.review.mode == "Unseen" else self.prediction_for_row(row)
         )
         if prediction:
             self.prediction.set_text(
