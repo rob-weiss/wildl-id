@@ -204,7 +204,7 @@ class ReviewApp:
                             .props(
                                 "flat round dense aria-label='Focus subject' aria-pressed=false"
                             )
-                            .tooltip("Focus subject")
+                            .tooltip("Focus subject [Z]")
                         )
                         ui.toggle(
                             {"box": "Box", "pan": "Pan"},

@@ -726,6 +726,36 @@ class LabelReviewTests(unittest.TestCase):
             choose_label.assert_not_called()
         self.assertEqual(self.csv_path.read_bytes(), before)
 
+    def test_backspace_shortcut_undoes_label(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=False),
+            key=SimpleNamespace(
+                name="Backspace", space=False, backspace=True, enter=False
+            ),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+
+        with patch.object(app, "undo_label") as undo_label:
+            app.on_key(event)
+
+        undo_label.assert_called_once_with()
+
+    def test_subject_focus_tooltip_includes_z_shortcut(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        tooltips = [
+            element.text
+            for element in app.subject_zoom_button._client().elements.values()
+            if element.tag == "q-tooltip"
+            and element.text.startswith("Focus subject")
+        ]
+
+        self.assertEqual(tooltips, ["Focus subject [Z]"])
+
     def test_letter_shortcut_selects_matching_label(self):
         app = review_app_module.ReviewApp(self.csv_path)
         chosen = []
