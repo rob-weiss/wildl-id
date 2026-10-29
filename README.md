@@ -214,6 +214,9 @@ and saved annotated images otherwise. Choose a mode, accept a prediction, or sel
 label. Drag on the image to add or replace its bounding box; changes save to the CSV.
 Use **Undo label** or **Undo box** to revert the latest change of that type.
 
+To publish originals to S3 and display them through CloudFront, see
+[Cloud Image Storage](docs/image-storage.md).
+
 Use the zoom icons, mouse wheel, or a pinch gesture to inspect the image. Choose
 **Pan** to move the zoomed image or **Box** to edit its bounding box. **Focus subject**
 toggles between the whole image and its saved bounding-box area, with padding.
