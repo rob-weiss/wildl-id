@@ -145,6 +145,15 @@ class ReviewApp:
                     event.preventDefault();
                 }
             }, true);
+            document.addEventListener('keydown', event => {
+                const button = document.getElementById('focus-subject-button');
+                if (button && document.activeElement === button &&
+                    event.key.toLowerCase() === 'z' && !event.repeat &&
+                    !event.altKey && !event.ctrlKey && !event.metaKey) {
+                    event.preventDefault();
+                    button.click();
+                }
+            }, true);
             </script>"""
         )
         self.keyboard.on(
@@ -202,7 +211,7 @@ class ReviewApp:
                                 on_click=self.toggle_subject_focus,
                             )
                             .props(
-                                "flat round dense aria-label='Focus subject' aria-pressed=false"
+                                "flat round dense id=focus-subject-button aria-label='Focus subject' aria-pressed=false"
                             )
                             .tooltip("Focus subject [Z]")
                         )
