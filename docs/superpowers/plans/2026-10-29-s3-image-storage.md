@@ -156,7 +156,7 @@ Expected: No whitespace errors; README links to `docs/image-storage.md`.
 
 ## Task 5: Deploy and Verify AWS Resources
 
-**Gate:** Do not deploy until the user reviews and approves the plan, confirms the 30-day version retention, and sees the dry-run scope. The current IAM policies do not include CloudFormation; attach a least-privilege policy for `aws cloudformation deploy` and stack inspection, scoped to this stack where supported. `cloudformation:ValidateTemplate` requires `Resource: "*"`. Before the initial real publish, report the local image count/size and obtain confirmation for that transfer.
+**Gate:** Do not deploy until the user has approved the plan and 30-day version retention, and the required CloudFormation permissions are attached. Review the dry-run after deployment and before any image upload. Before the initial real publish, report the local image count/size and obtain confirmation for that transfer. Scope stack operations to this stack where supported; `cloudformation:ValidateTemplate` requires `Resource: "*"`.
 
 **Files:**
 - No source changes; deploy `infra/images-stack.yaml`.
