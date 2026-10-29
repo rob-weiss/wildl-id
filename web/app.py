@@ -6,7 +6,6 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
-
 from src.labelling.review_app import ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.visualisations import VisualisationRunStore

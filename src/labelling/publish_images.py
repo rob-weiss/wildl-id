@@ -25,6 +25,7 @@ def build_sync_command(source: Path, bucket: str, dry_run: bool) -> list[str]:
         command.append("--dryrun")
     return command
 
+
 def build_force_upload_command(
     source: Path, bucket: str, relative_path: str
 ) -> list[str]:
@@ -62,9 +63,7 @@ def run_aws(
         "--no-cli-pager",
     ]
     try:
-        result = subprocess.run(
-            command, check=True, capture_output=True, text=True
-        )
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as error:
         if error.stdout:
             sys.stdout.write(error.stdout)
@@ -97,7 +96,9 @@ def stack_outputs(stack_name: str, profile: str, region: str) -> dict[str, str]:
     try:
         outputs = json.loads(result.stdout)["Stacks"][0]["Outputs"]
     except (IndexError, KeyError, json.JSONDecodeError) as error:
-        raise RuntimeError(f"CloudFormation stack {stack_name} has no outputs") from error
+        raise RuntimeError(
+            f"CloudFormation stack {stack_name} has no outputs"
+        ) from error
     return {output["OutputKey"]: output["OutputValue"] for output in outputs}
 
 
@@ -117,7 +118,9 @@ def publish_images(
         bucket = outputs["ImagesBucketName"]
         distribution_id = outputs["CloudFrontDistributionId"]
     except KeyError as error:
-        raise RuntimeError(f"CloudFormation stack output {error.args[0]} is missing") from error
+        raise RuntimeError(
+            f"CloudFormation stack output {error.args[0]} is missing"
+        ) from error
 
     if force_upload is not None:
         transfer_command = build_force_upload_command(source, bucket, force_upload)
@@ -159,7 +162,12 @@ def main() -> int:
             arguments.dry_run,
             arguments.force_upload,
         )
-    except (FileNotFoundError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+    except (
+        FileNotFoundError,
+        RuntimeError,
+        ValueError,
+        subprocess.CalledProcessError,
+    ) as error:
         parser.exit(1, f"publish-images: {error}\n")
     return 0
 

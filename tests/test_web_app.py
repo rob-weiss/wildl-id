@@ -11,7 +11,6 @@ import httpx
 from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
-
 from web import app as web_app
 
 review_module = import_module("src.labelling.review_app")
