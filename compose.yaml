@@ -6,6 +6,8 @@ services:
     user: "${HOST_UID:?Set HOST_UID to your numeric uid}:${HOST_GID:?Set HOST_GID to your numeric gid}"
     ports:
       - "127.0.0.1:8080:8080"
+    environment:
+      WILDL_ID_IMAGE_BASE_URL: ${WILDL_ID_IMAGE_BASE_URL:-}
     volumes:
       - ./labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified:/app/labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified:rw
       - ./labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:/app/labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:ro

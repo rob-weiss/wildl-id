@@ -1,15 +1,25 @@
 import csv
+import os
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
+from importlib import import_module
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import httpx
 from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
+
 from web import app as web_app
+
+review_module = import_module("src.labelling.review_app")
+
+
+def call_cloud_image_url(image_path, images_root, base_url):
+    mapper = getattr(review_module, "cloud_image_url", None)
+    return mapper(image_path, images_root, base_url) if mapper else None
 
 
 class FakeVisualisationRunStore:
@@ -82,6 +92,85 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         annotated_images = self.root / "images"
         annotated_images.mkdir()
         Image.new("RGB", (16, 16), "green").save(annotated_images / "camera1_photo.png")
+
+    def test_cloud_image_url_encodes_nested_path_segments(self):
+        images_root = self.root / "images"
+        image_path = images_root / "2026" / "München" / "fox 1.jpg"
+
+        self.assertEqual(
+            call_cloud_image_url(
+                image_path, images_root, "https://cdn.example.test/images/"
+            ),
+            "https://cdn.example.test/images/2026/M%C3%BCnchen/fox%201.jpg",
+        )
+
+    def test_cloud_image_url_returns_none_without_base_url(self):
+        images_root = self.root / "images"
+
+        self.assertIsNone(
+            call_cloud_image_url(images_root / "photo.jpg", images_root, None)
+        )
+
+    def test_cloud_image_url_returns_none_for_annotated_fallback(self):
+        images_root = self.root / "images"
+        annotated_path = self.root / "labels" / "images" / "camera1_photo.png"
+
+        self.assertIsNone(
+            call_cloud_image_url(
+                annotated_path, images_root, "https://cdn.example.test/images"
+            )
+        )
+
+    async def test_review_page_passes_cloud_image_base_url(self):
+        self.write_valid_review_data()
+        reviewer = Mock()
+        base_url = "https://cdn.example.test/images"
+
+        with (
+            patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}),
+            patch.object(web_app, "ReviewApp", return_value=reviewer) as factory,
+        ):
+            async with self.app_user("/review") as user:
+                await user.should_see(kind=ui.image)
+
+        self.assertGreater(factory.call_count, 0)
+        for call_args in factory.call_args_list:
+            self.assertEqual(call_args.args, (self.csv_path,))
+            self.assertEqual(call_args.kwargs, {"image_base_url": base_url})
+
+    async def test_review_viewer_uses_cloud_url_and_keeps_local_image_path(self):
+        self.write_valid_review_data()
+        images_root = self.root / "source-images"
+        local_image = images_root / "2026" / "camera1" / "photo.png"
+        local_image.parent.mkdir(parents=True)
+        Image.new("RGB", (16, 16), "green").save(local_image)
+        base_url = "https://cdn.example.test/images"
+        created_reviewers = []
+        review_app_class = web_app.ReviewApp
+
+        def create_reviewer(csv_path, image_base_url=None):
+            reviewer = review_app_class(csv_path, image_base_url=image_base_url)
+            created_reviewers.append(reviewer)
+            return reviewer
+
+        with (
+            patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}),
+            patch.object(web_app, "ReviewApp", side_effect=create_reviewer),
+            patch.object(review_module, "IMAGES_DIR", images_root),
+            patch.object(
+                review_module.LabelReview, "original_path", return_value=local_image
+            ),
+        ):
+            async with self.app_user("/review") as user:
+                await user.should_see("Wildlife label review")
+
+        reviewer = created_reviewers[-1]
+        self.assertIn(
+            "https://cdn.example.test/images/2026/camera1/photo.png",
+            str(reviewer.image._props),
+        )
+        self.assertEqual(reviewer.current_image_path, local_image)
+        self.assertEqual(reviewer.image_size, (16, 16))
 
     async def test_review_page_shows_labels_and_hides_remove_empty(self):
         self.write_valid_review_data()

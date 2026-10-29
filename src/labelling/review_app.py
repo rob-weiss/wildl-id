@@ -6,6 +6,7 @@ import html
 import math
 import textwrap
 from pathlib import Path
+from urllib.parse import quote
 
 from nicegui import events, run, ui
 from PIL import Image
@@ -18,6 +19,20 @@ from .review_labels import (
     LabelReview,
     box_from_drag,
 )
+
+IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
+
+
+def cloud_image_url(
+    image_path: Path, images_root: Path, base_url: str | None
+) -> str | None:
+    if not base_url or not base_url.strip():
+        return None
+    try:
+        relative_path = image_path.resolve().relative_to(images_root.resolve())
+    except ValueError:
+        return None
+    return f"{base_url.rstrip('/')}/{quote(relative_path.as_posix(), safe='/')}"
 
 
 def parse_box(value):
@@ -105,8 +120,9 @@ class ZoomViewer(
 
 
 class ReviewApp:
-    def __init__(self, csv_path, images_dir=None):
+    def __init__(self, csv_path, images_dir=None, image_base_url=None):
         self.review = LabelReview(csv_path, images_dir)
+        self.image_base_url = image_base_url
         self.current_index = None
         self.current_image_path = None
         self.image_size = None
@@ -354,7 +370,10 @@ class ReviewApp:
                 with Image.open(self.current_image_path) as source:
                     self.image_size = source.size
                 self.viewer._props["imageSize"] = list(self.image_size)
-                self.image.set_source(self.current_image_path)
+                image_url = cloud_image_url(
+                    self.current_image_path, IMAGES_DIR, self.image_base_url
+                )
+                self.image.set_source(image_url or self.current_image_path)
                 self.image.set_content(
                     box_overlay_svg(
                         row,

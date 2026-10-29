@@ -1,10 +1,12 @@
 import csv
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
+
 from src.labelling.review_app import ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.visualisations import VisualisationRunStore
@@ -30,7 +32,10 @@ def health() -> dict[str, str]:
 def build_review_page(csv_path: Path = DEFAULT_CSV) -> None:
     add_brand_logo()
     try:
-        reviewer = ReviewApp(csv_path)
+        reviewer = ReviewApp(
+            csv_path,
+            image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL"),
+        )
         reviewer.build()
     except (OSError, ValueError, csv.Error) as error:
         ui.label("Review data unavailable").classes("text-lg font-semibold")
