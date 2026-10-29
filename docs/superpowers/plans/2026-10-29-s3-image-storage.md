@@ -99,11 +99,6 @@ After a successful non-dry-run sync or force-upload, call `aws cloudfront create
 Run: `PYTHONPATH=. uv run --locked python -m unittest discover -s tests -p test_publish_images.py -v`
 Expected: PASS, including dry-run, missing stack outputs, sync failure, unsafe paths, and no invalidation after failure.
 
-- [ ] **Step 6: Preview the live sync**
-
-Run: `uv run --locked python src/labelling/publish_images.py --dry-run --profile wildl-id --region eu-central-1`
-Expected: Planned uploads, updates, and deletions only; no bucket writes or invalidation.
-
 ## Task 3: Display CloudFront URLs in the Review App
 
 **Files:**
