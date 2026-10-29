@@ -58,8 +58,8 @@ Define an S3 bucket with versioning enabled, all four Block Public Access settin
 
 - [ ] **Step 2: Validate the template**
 
-Run: `aws cloudformation validate-template --template-body file://infra/images-stack.yaml --profile wildl-id --region eu-central-1 --no-cli-pager`
-Expected: CloudFormation returns the template description without validation errors.
+Run: `uvx --from cfn-lint cfn-lint infra/images-stack.yaml`
+Expected: No lint errors. CloudFormation API validation remains gated on granting `cloudformation:ValidateTemplate`.
 
 - [ ] **Step 3: Review security invariants**
 
