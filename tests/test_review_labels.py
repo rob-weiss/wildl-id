@@ -750,8 +750,7 @@ class LabelReviewTests(unittest.TestCase):
         tooltips = [
             element.text
             for element in app.subject_zoom_button._client().elements.values()
-            if element.tag == "q-tooltip"
-            and element.text.startswith("Focus subject")
+            if element.tag == "q-tooltip" and element.text.startswith("Focus subject")
         ]
 
         self.assertEqual(tooltips, ["Focus subject [Z]"])
