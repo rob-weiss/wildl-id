@@ -207,6 +207,39 @@ class PublishImagesTests(unittest.TestCase):
         self.assertIn("E123EXAMPLE", commands[2])
         self.assertIn("/*", commands[2])
 
+    @patch("time.sleep")
+    @patch("src.labelling.publish_images.subprocess.run")
+    def test_progress_waits_for_cloudfront_invalidation_completion(self, run, sleep):
+        invalidation_result = subprocess.CompletedProcess(
+            [], 0, json.dumps({"Invalidation": {"Id": "I123EXAMPLE"}}), ""
+        )
+        run.side_effect = [
+            self.stack_output_result(),
+            subprocess.CompletedProcess([], 0),
+            invalidation_result,
+            subprocess.CompletedProcess([], 0, "InProgress", ""),
+            subprocess.CompletedProcess([], 0, "Completed", ""),
+        ]
+        output = StringIO()
+
+        with redirect_stdout(output):
+            publish_images(
+                "wildl-id-images",
+                "wildl-id",
+                "eu-central-1",
+                self.images_directory,
+                dry_run=False,
+                force_upload=None,
+                progress=True,
+            )
+
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertIn("I123EXAMPLE", commands[-2])
+        self.assertIn("get-invalidation", commands[-2])
+        self.assertIn("InProgress", output.getvalue())
+        self.assertIn("Completed", output.getvalue())
+        sleep.assert_called_once_with(20)
+
 
 if __name__ == "__main__":
     unittest.main()

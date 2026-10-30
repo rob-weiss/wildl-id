@@ -66,11 +66,13 @@ Review every planned deletion. The real command mirrors all files below `images/
 uv run --locked python src/labelling/publish_images.py
 ```
 
-Add `--progress` to show the AWS CLI transfer progress in the terminal:
+Add `--progress` to show AWS CLI transfer progress and wait for CloudFront invalidation:
 
 ```bash
 uv run --locked python src/labelling/publish_images.py --progress
 ```
+
+CloudFront reports invalidation status, not a percentage. Progress mode prints the status every 20 seconds until it reaches `Completed`, with a maximum of 30 checks.
 
 Before the first upload, check the transfer size and file count, then review the dry-run:
 

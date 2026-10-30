@@ -2,6 +2,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 DEFAULT_PROFILE = "wildl-id"
@@ -113,6 +114,35 @@ def stack_outputs(stack_name: str, profile: str, region: str) -> dict[str, str]:
     return {output["OutputKey"]: output["OutputValue"] for output in outputs}
 
 
+def wait_for_invalidation(
+    distribution_id: str, invalidation_id: str, profile: str, region: str
+) -> None:
+    command = [
+        "aws",
+        "cloudfront",
+        "get-invalidation",
+        "--distribution-id",
+        distribution_id,
+        "--id",
+        invalidation_id,
+        "--query",
+        "Invalidation.Status",
+        "--output",
+        "text",
+    ]
+    for attempt in range(30):
+        result = run_aws(command, profile, region, echo_output=False)
+        status = result.stdout.strip()
+        print(f"CloudFront invalidation: {status}", flush=True)
+        if status == "Completed":
+            return
+        if status != "InProgress":
+            raise RuntimeError(f"Unexpected CloudFront invalidation status: {status}")
+        if attempt < 29:
+            time.sleep(20)
+    raise TimeoutError("CloudFront invalidation did not complete after 30 checks")
+
+
 def publish_images(
     stack_name: str,
     profile: str,
@@ -141,7 +171,7 @@ def publish_images(
     run_aws(transfer_command, profile, region, stream_output=progress)
 
     if not dry_run:
-        run_aws(
+        result = run_aws(
             [
                 "aws",
                 "cloudfront",
@@ -153,7 +183,14 @@ def publish_images(
             ],
             profile,
             region,
+            echo_output=not progress,
         )
+        if progress:
+            try:
+                invalidation_id = json.loads(result.stdout)["Invalidation"]["Id"]
+            except (KeyError, json.JSONDecodeError) as error:
+                raise RuntimeError("CloudFront invalidation response has no ID") from error
+            wait_for_invalidation(distribution_id, invalidation_id, profile, region)
 
 
 def main() -> int:
@@ -164,7 +201,7 @@ def main() -> int:
     parser.add_argument(
         "--progress",
         action="store_true",
-        help="show multiline transfer progress in the terminal",
+        help="show transfer progress and wait for CloudFront invalidation",
     )
     parser.add_argument("--stack-name", default=DEFAULT_STACK_NAME)
     parser.add_argument("--profile", default=DEFAULT_PROFILE)
