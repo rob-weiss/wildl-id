@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import csv
 import tempfile
 import threading
@@ -115,7 +114,9 @@ class FilteredPlotTests(unittest.TestCase):
     def setUp(self):
         temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(temporary_directory.cleanup)
-        self.csv_path = Path(temporary_directory.name) / "labels.csv"
+        self.root = Path(temporary_directory.name)
+        self.csv_path = self.root / "labels.csv"
+        self.output_directory = self.root / "plots"
         rows = [
             ("camera1", "fox-jan.jpg", "2024-01-15T08:00:00", "fox", ""),
             ("camera1", "fox-mar.jpg", "2024-03-15T20:00:00", "fox", ""),
@@ -160,23 +161,45 @@ class FilteredPlotTests(unittest.TestCase):
         self.assertEqual(set(frame["species"]), {"fox"})
         self.assertEqual(set(frame["year"]), {2024})
 
-    def test_generates_both_dynamic_plot_types_as_svg_data_uris(self):
-        make_plot = getattr(visualisations, "generate_filtered_plot_svg", None)
-        self.assertTrue(callable(make_plot), "generate_filtered_plot_svg is required")
+    def test_daily_yearly_plot_writes_one_svg_for_every_filtered_species(self):
+        generate = getattr(visualisations, "generate_filtered_plot_svgs", None)
+        self.assertTrue(callable(generate), "generate_filtered_plot_svgs is required")
 
-        for plot_type in ("yearly-seasonal", "month-hour-heatmap"):
-            with self.subTest(plot_type=plot_type):
-                data_uri = make_plot(self.csv_path, "foxes", plot_type)
-                self.assertTrue(data_uri.startswith("data:image/svg+xml;base64,"))
-                svg = base64.b64decode(data_uri.split(",", 1)[1])
-                self.assertIn(b"<svg", svg[:500])
+        paths = generate(
+            self.csv_path, "in 2024", "daily-yearly", self.output_directory
+        )
+
+        self.assertEqual(
+            [path.name for path in paths],
+            [
+                "14_fox_daily_yearly_activity_pattern.svg",
+                "15_wild_boar_daily_yearly_activity_pattern.svg",
+            ],
+        )
+        for path in paths:
+            self.assertIn(b"<svg", path.read_bytes()[:500])
+
+    def test_individual_timelines_include_every_species_in_filtered_interval(self):
+        generate = getattr(visualisations, "generate_filtered_plot_svgs", None)
+        self.assertTrue(callable(generate), "generate_filtered_plot_svgs is required")
+
+        paths = generate(
+            self.csv_path, "in 2024", "individual-timelines", self.output_directory
+        )
+
+        self.assertEqual(
+            [path.name for path in paths], ["09_individual_species_timelines.svg"]
+        )
+        svg = paths[0].read_text(encoding="utf-8")
+        self.assertIn("Fox Activity", svg)
+        self.assertIn("Wild boar Activity", svg)
 
     def test_plot_with_no_timestamped_matches_reports_empty_data(self):
-        make_plot = getattr(visualisations, "generate_filtered_plot_svg", None)
-        self.assertTrue(callable(make_plot), "generate_filtered_plot_svg is required")
+        generate = getattr(visualisations, "generate_filtered_plot_svgs", None)
+        self.assertTrue(callable(generate), "generate_filtered_plot_svgs is required")
 
         with self.assertRaisesRegex(ValueError, "No timestamped rows match"):
-            make_plot(self.csv_path, "badgers", "yearly-seasonal")
+            generate(self.csv_path, "badgers", "daily-yearly", self.output_directory)
 
 
 if __name__ == "__main__":

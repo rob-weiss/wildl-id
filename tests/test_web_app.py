@@ -38,6 +38,30 @@ class FakeVisualisationRunStore:
         return self.result
 
 
+class FakeFilteredPlotRunStore:
+    def __init__(self, output_directory):
+        self.output_directory = output_directory
+        self.current_directory = None
+        self.current_paths = []
+        self.calls = []
+
+    async def generate(self, csv_path, prompt, plot_type):
+        self.calls.append((csv_path, prompt, plot_type))
+        self.output_directory.mkdir(parents=True, exist_ok=True)
+        for path in self.output_directory.glob("*.svg"):
+            path.unlink()
+        filename = (
+            "14_fox_daily_yearly_activity_pattern.svg"
+            if plot_type == "daily-yearly"
+            else "09_individual_species_timelines.svg"
+        )
+        path = self.output_directory / filename
+        path.write_text("<svg/>", encoding="utf-8")
+        self.current_directory = self.output_directory
+        self.current_paths = [path]
+        return self.current_paths
+
+
 class WebAppTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
@@ -74,6 +98,13 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     def patch_run_store(self, store):
         run_store_patch = patch.object(
             web_app, "visualisation_runs", store, create=True
+        )
+        run_store_patch.start()
+        self.addCleanup(run_store_patch.stop)
+
+    def patch_filtered_plot_store(self, store):
+        run_store_patch = patch.object(
+            web_app, "filtered_plot_runs", store, create=True
         )
         run_store_patch.start()
         self.addCleanup(run_store_patch.stop)
@@ -539,17 +570,29 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 },
             ],
         )
-        run_store = FakeVisualisationRunStore()
-        self.patch_run_store(run_store)
+        filtered_plot_store = FakeFilteredPlotRunStore(self.root / "filtered-run")
+        self.patch_filtered_plot_store(filtered_plot_store)
 
         async with self.app_user("/visualisations") as user:
             user.find("Plot filter").type("foxes in 2024")
             user.find("Generate filtered plot").click()
-            await user.should_see("Filtered plot ready")
-            await user.should_see(kind=ui.image, content="data:image/svg+xml;base64,")
+            await user.should_see("1 filtered SVG ready")
+            await user.should_see("14_fox_daily_yearly_activity_pattern.svg")
+
+            user.find("Plot type").click()
+            user.find("Individual species timelines").click()
+            user.find("Generate filtered plot").click()
+            await user.should_see("1 filtered SVG ready")
+            await user.should_see("09_individual_species_timelines.svg")
             await user.should_see("Generate visualisations")
 
-        self.assertEqual(run_store.generate_calls, 0)
+        self.assertEqual(
+            [call[1:] for call in filtered_plot_store.calls],
+            [
+                ("foxes in 2024", "daily-yearly"),
+                ("foxes in 2024", "individual-timelines"),
+            ],
+        )
 
     async def test_successful_run_shows_summary_and_selected_chart(self):
         output_dir = self.root / "results"

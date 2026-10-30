@@ -5,18 +5,19 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from nicegui import run, ui
+from nicegui import ui
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page
 from web.visualisations import (
     FILTERED_PLOT_TYPES,
+    FilteredPlotRunStore,
     VisualisationRunStore,
-    generate_filtered_plot_svg,
 )
 
 app = FastAPI()
 visualisation_runs = VisualisationRunStore()
+filtered_plot_runs = FilteredPlotRunStore()
 logger = logging.getLogger(__name__)
 ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
 app.mount("/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets")
@@ -174,9 +175,9 @@ def visualisations_page() -> None:
     ui.label("Visualisations").classes("text-xl font-semibold")
     ui.label("Filter-based plots").classes("text-lg font-semibold mt-4")
     ui.label(
-        "Uses the gallery filter syntax. Sort order and result limits do not "
-        "affect aggregate plots. Unfiltered species plots show the top six; "
-        "filter by species to narrow them."
+        "Uses the gallery filter syntax. Daily yearly plots create one SVG per "
+        "matching species; timelines include all matching species. Sort order "
+        "and result limits do not affect plots."
     ).classes("text-sm text-gray-600")
     with ui.row().classes("w-full items-center gap-2"):
         plot_filter = (
@@ -186,7 +187,7 @@ def visualisations_page() -> None:
         )
         plot_type = ui.select(
             FILTERED_PLOT_TYPES,
-            value="yearly-seasonal",
+            value="daily-yearly",
             label="Plot type",
         ).classes("min-w-64")
         dynamic_button = ui.button("Generate filtered plot", icon="show_chart").props(
@@ -195,23 +196,35 @@ def visualisations_page() -> None:
     dynamic_status = ui.label().classes("text-sm text-gray-600")
     dynamic_spinner = ui.spinner(size="sm")
     dynamic_spinner.set_visibility(False)
-    dynamic_image = ui.image().classes("w-full max-w-6xl")
-    dynamic_image.set_visibility(False)
+    filtered_results = ui.column().classes("w-full gap-3")
+
+    def show_filtered_results(paths: list[Path]) -> None:
+        filtered_results.clear()
+        with filtered_results:
+            chart_image = {}
+            ui.select(
+                {str(path): path.name for path in paths},
+                value=str(paths[0]),
+                label="Filtered SVG",
+                on_change=lambda event: chart_image["element"].set_source(event.value),
+            ).classes("w-full")
+            chart_image["element"] = ui.image(paths[0]).classes("w-full max-w-6xl")
+
+    if filtered_plot_runs.current_paths:
+        show_filtered_results(filtered_plot_runs.current_paths)
 
     async def generate_filtered_plot() -> None:
         dynamic_button.disable()
         dynamic_spinner.set_visibility(True)
         dynamic_status.set_text("Generating filtered plot...")
         try:
-            svg_data_uri = await run.io_bound(
-                generate_filtered_plot_svg,
+            paths = await filtered_plot_runs.generate(
                 DEFAULT_CSV,
                 plot_filter.value or "",
                 plot_type.value,
             )
-            dynamic_image.set_source(svg_data_uri)
-            dynamic_image.set_visibility(True)
-            dynamic_status.set_text("Filtered plot ready")
+            show_filtered_results(paths)
+            dynamic_status.set_text(f"{len(paths)} filtered SVG ready")
         except ValueError as error:
             dynamic_status.set_text(str(error))
         except Exception:
