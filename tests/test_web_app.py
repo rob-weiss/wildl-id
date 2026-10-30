@@ -255,6 +255,89 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find("Only foxes").click()
                 await user.should_see("1 images · only 🦊 fox")
 
+    async def test_gallery_viewer_navigates_filtered_images_and_preserves_aspect(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "boar.jpg",
+                    "timestamp": "2025-01-03T00:00:00",
+                    "class": "wild boar",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-02T00:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "badger.jpg",
+                    "timestamp": "2025-01-01T00:00:00",
+                    "class": "badger",
+                },
+            ],
+        )
+        base_url = "https://cdn.example.test/images"
+        boar_url = f"{base_url}/2025/camera1/boar.jpg"
+        badger_url = f"{base_url}/2025/camera1/badger.jpg"
+        with patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}):
+            async with self.app_user("/gallery") as user:
+                user.find("Smart filter").type("not foxes").trigger("keydown.enter")
+                await user.should_see("2 images · excluding 🦊 fox")
+                user.find(kind=ui.image, content=boar_url).click()
+                await user.should_see("1 / 2")
+                self.assertTrue(
+                    any(
+                        image.props.get("fit") == "contain"
+                        for image in user.find(kind=ui.image, content=boar_url).elements
+                    )
+                )
+
+                user.find("Previous image").click()
+                await user.should_see("1 / 2")
+                user.find("Next image").click()
+                await user.should_see("2 / 2")
+                self.assertTrue(user.find(kind=ui.image, content=badger_url).elements)
+                user.find("Next image").click()
+                await user.should_see("2 / 2")
+                user.find("Previous image").click()
+                await user.should_see("1 / 2")
+
+                keyboard = user.find(kind=ui.keyboard)
+
+                def press(key):
+                    keyboard.trigger(
+                        "key",
+                        {
+                            "action": "keydown",
+                            "repeat": False,
+                            "altKey": False,
+                            "ctrlKey": False,
+                            "metaKey": False,
+                            "shiftKey": False,
+                            "key": key,
+                            "code": key,
+                            "location": 0,
+                        },
+                    )
+
+                press("ArrowRight")
+                await user.should_see("2 / 2")
+                press("ArrowLeft")
+                await user.should_see("1 / 2")
+                press("Escape")
+                dialog = next(iter(user.find(kind=ui.dialog).elements))
+                self.assertFalse(dialog.value)
+
+                user.find(kind=ui.image, content=badger_url).click()
+                await user.should_see("2 / 2")
+                user.find("Close").click()
+                self.assertFalse(dialog.value)
+                press("ArrowLeft")
+                self.assertFalse(dialog.value)
+
     async def test_gallery_page_reports_missing_csv(self):
         async with self.app_user("/gallery") as user:
             await user.should_see("Gallery data unavailable")
