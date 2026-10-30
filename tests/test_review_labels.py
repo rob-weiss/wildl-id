@@ -147,7 +147,7 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         app.change_mode("All")
         app.review.history.append((0, "none"))
         app.box_history.append((0, ""))
-        self.assertEqual(app.remove_empty_button.text, "Remove empty")
+        self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
 
         with patch.object(review_app_module.ui, "notify"):
             asyncio.run(app.remove_empty())
@@ -336,11 +336,16 @@ class LabelReviewTests(unittest.TestCase):
         self.addCleanup(container.delete)
         captions = [button.text for button in app.label_buttons]
 
-        self.assertEqual(captions.count("red deer"), 1)
-        self.assertEqual(captions.count("fox [f]"), 1)
-        self.assertIn("machine class", captions)
+        self.assertEqual(captions.count("🦌 red deer"), 1)
+        self.assertEqual(captions.count("🦊 fox [f]"), 1)
+        self.assertIn("🐾 machine class", captions)
         self.assertTrue(all(caption.strip() for caption in captions))
         self.assertNotIn(" red deer ", captions)
+        self.assertEqual(app.accept_button.text, "✅ Accept prediction")
+        self.assertEqual(app.undo_button.text, "↩️ Undo label")
+        self.assertEqual(app.undo_box_button.text, "↩️ Undo box")
+        self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
+        self.assertEqual(app.save_label_button.text, "💾 Save label")
 
     def test_unseen_image_omits_prediction_prefix_in_overlay_and_sidebar(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -351,15 +356,17 @@ class LabelReviewTests(unittest.TestCase):
             ):
                 app.build()
                 self.addCleanup(container.delete)
-                self.assertEqual(app.prediction.text, "fox")
+                self.assertEqual(app.prediction.text, "🏷️ 🦊 fox")
                 overlay = review_app_module.box_overlay_svg(
                     app.review.rows[0], (4000, 3000)
                 )
                 root = ET.fromstring(f"<svg>{overlay}</svg>")
-                self.assertEqual("".join(root.find("g/text").itertext()), "fox")
+                self.assertEqual(
+                    "".join(root.find("g/text").itertext()), "🏷️ 🦊 fox"
+                )
 
                 app.change_mode("Seen")
-                self.assertEqual(app.prediction.text, "Predicted: fox")
+                self.assertEqual(app.prediction.text, "🏷️ Predicted: 🦊 fox")
 
     def test_unseen_mode_hides_validation_truth_but_incorrect_mode_shows_it(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -385,13 +392,14 @@ class LabelReviewTests(unittest.TestCase):
             ):
                 app.build()
                 self.addCleanup(container.delete)
-                self.assertEqual(app.prediction.text, "fox")
+                self.assertEqual(app.prediction.text, "🏷️ 🦊 fox")
                 self.assertIsNone(render_overlay.call_args.args[2])
 
                 app.change_mode("Latest model incorrect")
 
                 self.assertEqual(
-                    app.prediction.text, "True: hare | Predicted: song bird"
+                    app.prediction.text,
+                    "🏷️ True: 🐇 hare | Predicted: 🐦 song bird",
                 )
                 self.assertEqual(render_overlay.call_args.args[2], prediction)
 
@@ -579,8 +587,8 @@ class LabelReviewTests(unittest.TestCase):
 
         overlay = review_app_module.box_overlay_svg(row, (4000, 3000), prediction)
 
-        self.assertIn("True: jay | Predicted: song bird", overlay)
-        self.assertNotIn("True: jay | Predicted: jay", overlay)
+        self.assertIn("🏷️ True: 🐦 jay | Predicted: 🐦 song bird", overlay)
+        self.assertNotIn("🏷️ True: 🐦 jay | Predicted: 🐦 jay", overlay)
         self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
         self.assertIn('font-size="16"', overlay)
@@ -638,7 +646,10 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(text.get("font-size"), "16")
         self.assertEqual(len(text.findall("tspan")), 2)
         self.assertEqual(annotation.find("rect").get("height"), "48")
-        self.assertEqual(" ".join(text.itertext()), "True: pigeon | Predicted: jay")
+        self.assertEqual(
+            " ".join(text.itertext()),
+            "🏷️ True: 🐦 pigeon | Predicted: 🐦 jay",
+        )
 
     def test_accept_prediction_uses_latest_finetuned_class(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -750,10 +761,10 @@ class LabelReviewTests(unittest.TestCase):
         tooltips = [
             element.text
             for element in app.subject_zoom_button._client().elements.values()
-            if element.tag == "q-tooltip" and element.text.startswith("Focus subject")
+            if element.tag == "q-tooltip" and element.text.startswith("🎯 Focus subject")
         ]
 
-        self.assertEqual(tooltips, ["Focus subject [Z]"])
+        self.assertEqual(tooltips, ["🎯 Focus subject [Z]"])
 
     def test_letter_shortcut_selects_matching_label(self):
         app = review_app_module.ReviewApp(self.csv_path)

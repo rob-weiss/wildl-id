@@ -21,6 +21,42 @@ from .review_labels import (
 )
 
 IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
+LABEL_EMOJIS = {
+    "roe deer": "🦌",
+    "red deer": "🦌",
+    "wild boar": "🐗",
+    "pigeon": "🐦",
+    "badger": "🦡",
+    "dog": "🐕",
+    "fox": "🦊",
+    "hare": "🐇",
+    "squirrel": "🐿️",
+    "jay": "🐦",
+    "raccoon": "🦝",
+    "crow": "🐦‍⬛",
+    "human": "🧍",
+    "none": "🚫",
+    "unknown": "❓",
+    "owl": "🦉",
+    "cat": "🐈",
+    "vehicle": "🚗",
+    "song bird": "🐦",
+}
+
+
+def display_label(label):
+    label = str(label).strip()
+    emoji = LABEL_EMOJIS.get(label.casefold(), "🐾")
+    return f"{emoji} {label}"
+
+
+def format_annotation(true_label, predicted_label):
+    if true_label:
+        return (
+            f"🏷️ True: {display_label(true_label)} | "
+            f"Predicted: {display_label(predicted_label)}"
+        )
+    return f"🏷️ {display_label(predicted_label)}"
 
 
 def cloud_image_url(
@@ -72,11 +108,7 @@ def box_overlay_svg(row, image_size, prediction=None, display_size=None, zoom_sc
         predicted_label = row["class"]
         is_correct = bool(manual_label) and manual_label == row["class"]
     color = "#2e7d32" if is_correct else "#c62828"
-    label = (
-        f"True: {true_label} | Predicted: {predicted_label}"
-        if true_label
-        else predicted_label
-    )
+    label = format_annotation(true_label, predicted_label)
     font_size = 16
     padding_x = round(font_size * 0.45)
     line_height = round(font_size * 1.5)
@@ -194,17 +226,17 @@ class ReviewApp:
                             icon="zoom_in",
                             on_click=lambda: self.viewer.run_method("zoomIn"),
                         ).props("flat round dense aria-label='Zoom in'").tooltip(
-                            "Zoom in"
+                            "🔎 Zoom in"
                         )
                         ui.button(
                             icon="zoom_out",
                             on_click=lambda: self.viewer.run_method("zoomOut"),
                         ).props("flat round dense aria-label='Zoom out'").tooltip(
-                            "Zoom out"
+                            "➖ Zoom out"
                         )
                         ui.button(icon="fit_screen", on_click=self.fit_image).props(
                             "flat round dense aria-label='Fit image'"
-                        ).tooltip("Fit image")
+                        ).tooltip("🖼️ Fit image")
                         self.subject_zoom_button = (
                             ui.button(
                                 icon="center_focus_strong",
@@ -213,10 +245,10 @@ class ReviewApp:
                             .props(
                                 "flat round dense id=focus-subject-button aria-label='Focus subject' aria-pressed=false"
                             )
-                            .tooltip("Focus subject [Z]")
+                            .tooltip("🎯 Focus subject [Z]")
                         )
                         ui.toggle(
-                            {"box": "Box", "pan": "Pan"},
+                            {"box": "📦 Box", "pan": "✋ Pan"},
                             value="box",
                             on_change=lambda event: self.set_image_mode(event.value),
                         ).props("dense no-caps").classes("ml-auto")
@@ -243,25 +275,25 @@ class ReviewApp:
                     self.prediction = ui.label().classes("text-gray-700")
                     with ui.row().classes("w-full gap-2"):
                         self.accept_button = ui.button(
-                            "Accept prediction", icon="check", on_click=self.accept
+                            "✅ Accept prediction", icon="check", on_click=self.accept
                         ).props("no-caps")
                         self.undo_button = ui.button(
-                            "Undo label", icon="undo", on_click=self.undo_label
+                            "↩️ Undo label", icon="undo", on_click=self.undo_label
                         ).props("no-caps")
                     with ui.row().classes("w-full gap-2"):
                         self.undo_box_button = ui.button(
-                            "Undo box", icon="crop_free", on_click=self.undo_box
+                            "↩️ Undo box", icon="crop_free", on_click=self.undo_box
                         ).props("no-caps")
                         self.remove_empty_button = (
                             ui.button(
-                                "Remove empty",
+                                "🗑️ Remove empty",
                                 icon="delete_sweep",
                                 on_click=self.confirm_remove_empty,
                             )
                             .props("outline no-caps")
                             .classes("text-red-700")
                         )
-                    ui.label("Labels").classes("font-medium mt-2")
+                    ui.label("🏷️ Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
                         manual_labels = (
                             str(row.get("manual_label") or "").strip()
@@ -285,18 +317,20 @@ class ReviewApp:
                                 ),
                                 None,
                             )
-                            caption = f"{label} [{key}]" if key else label
+                            caption = display_label(label)
+                            if key:
+                                caption = f"{caption} [{key}]"
                             button = ui.button(
                                 caption,
                                 on_click=lambda label=label: self.choose_label(label),
                             ).props("outline no-caps dense")
                             self.label_buttons.append(button)
-                    self.custom_label = ui.input(label="Other label").classes("w-full")
+                    self.custom_label = ui.input(label="✏️ Other label").classes("w-full")
                     self.custom_label.on(
                         "keydown.enter", lambda event: self.save_custom_label()
                     )
-                    ui.button(
-                        "Save label", icon="save", on_click=self.save_custom_label
+                    self.save_label_button = ui.button(
+                        "💾 Save label", icon="save", on_click=self.save_custom_label
                     ).props("no-caps")
         self.undo_box_button.disable()
         self.refresh()
@@ -360,14 +394,14 @@ class ReviewApp:
         )
         if prediction:
             self.prediction.set_text(
-                f"True: {prediction['true_label']} | "
-                f"Predicted: {prediction['predicted_label']}"
+                f"🏷️ True: {display_label(prediction['true_label'])} | "
+                f"Predicted: {display_label(prediction['predicted_label'])}"
             )
         else:
             self.prediction.set_text(
-                f"Predicted: {row['class']}"
+                f"🏷️ Predicted: {display_label(row['class'])}"
                 if str(row.get("manual_label") or "").strip()
-                else row["class"]
+                else f"🏷️ {display_label(row['class'])}"
             )
         self.empty_message.set_visibility(self.current_image_path is None)
         if self.current_image_path is None:
