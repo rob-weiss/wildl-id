@@ -1,6 +1,7 @@
 # Wildlife Activity Forecast Design
 
-Status: Awaiting written-spec approval before implementation planning.
+Status: User approved proceeding on 2026-10-30, including the neural comparison
+and Holzgerlingen weather clarification. Implementation plan awaits review.
 
 ## Purpose
 
@@ -18,14 +19,15 @@ the existing visualisation script and honour manual class corrections.
 
 - A standalone Python module CLI for auditing data, backtesting, and forecasting.
 - Explicit location, timestamp, and observation-coverage configuration.
-- A count baseline and a regularised Poisson model shared across locations for
-  each sufficiently supported species.
+- A count baseline, a regularised Poisson model shared across locations for
+   each sufficiently supported species, and a small shared temporal convolutional
+   network (TCN) as an experimental neural candidate.
 - Historical and forecast weather from Open-Meteo, with local cached snapshots.
 - Calendar, solar, and optional lunar features computed deterministically.
 - CSV outputs containing expected counts and a training-reference activity index.
 - Offline regression tests and concise usage documentation.
 
-No web integration, automatic scheduling, neural networks, independent-visit
+No web integration, automatic scheduling, independent-visit
 grouping, model-selection framework, or calibrated prediction intervals in this
 version. No edits to existing labelled data, camera EXIF, or visualisation output.
 
@@ -90,6 +92,12 @@ use the labelled baseline fallback. Store training support in output metadata.
 
 ## Weather And Astronomy
 
+Use one shared weather location in Holzgerlingen, Germany, for all nearby camera
+locations. Record its configured coordinates explicitly; do not silently reuse the
+visualisation script's Renningen coordinates. Site coordinates remain separate
+inputs for astronomy. If a representative coordinate is used for astronomy too,
+record that approximation in configuration and output metadata.
+
 Use the official `openmeteo-requests` client. Request temperature, relative
 humidity, sea-level pressure, precipitation, wind speed, and cloud cover. A single
 configured model serves both live forecasts and available archived runs; default
@@ -119,13 +127,37 @@ optional ablation, not a built-in claim that solunar tables predict wildlife.
 On missing or invalid live weather, return the labelled count baseline rather than
 substituting invented weather. A failed baseline prerequisite remains an error.
 
+## Neural Candidate
+
+Train one small TCN across locations and species using existing PyTorch. Its input
+is 168 hourly steps of species image counts and historical weather, plus coverage
+masks. Complete context is required in this version; masks do not permit unknown
+hours to become zeros. A site embedding distinguishes cameras.
+
+Use seven causal residual convolution blocks with kernel size 3, 16 channels,
+dilations 1, 2, 4, 8, 16, 32, 64, one convolution per block, and dropout 0.1. The
+receptive field covers all 168 historical hours. Combine the final historical
+state with a four-dimensional site embedding and each future hour's weather,
+calendar, solar, horizon, and optional lunar features. A shared decoder with one
+32-unit hidden layer and Softplus outputs predicts a 24-by-9 count-mean tensor.
+No future sighting count enters the decoder.
+
+Train using Poisson negative log likelihood, AdamW, chronological validation,
+early stopping, and a fixed seed. Scale weather and log-transform count inputs
+using training-only information; targets remain raw counts. Do not equate Poisson
+loss with calibrated uncertainty or claim that a deep network must win.
+Retain the same training-support and unseen-location fallback rules as Poisson
+regression. Negative-binomial output is deferred unless later evidence warrants it.
+
 ## Backtesting And Normalisation
 
 Use daily forecast origins and rolling chronological evaluation. Every training
 target must end before the held-out origin. No random splits. Training origins
 must have complete context and full 24-hour targets; validation origins likewise.
 Compare zero prediction, the count baseline, a history/calendar/solar Poisson
-model, that model plus weather, and optionally that model plus lunar features.
+model, that model plus weather, and the TCN with the same weather covariates.
+Optionally compare lunar features for both model families. Compare methods on
+the same eligible evaluation origins and report skipped-origin reasons.
 Declare the feature configuration before evaluating a separate final holdout;
 do not select a winning model using final-holdout scores.
 
@@ -152,6 +184,8 @@ Proposed implementation files:
   interval alignment.
 - `src/forecasting/predictor.py`: audit/backtest/forecast CLI, baseline and Poisson
   training, metrics, and CSV serialisation.
+- `src/forecasting/neural.py`: small TCN, deterministic training, and neural
+   inference; keep PyTorch imports out of the audit-only path.
 - `tests/test_activity_forecast.py`: focused synthetic regression coverage.
 - `docs/activity-forecast.md`: configuration schemas, commands, limitations, and
   Open-Meteo attribution.
@@ -192,6 +226,7 @@ proof, not a fabricated live forecast or unsupported accuracy claim.
 
 ## Approval And Next Step
 
-This document records the proposed contracts, not camera facts. After the user
-reviews and approves this written specification, prepare a test-first implementation
-plan and agree its execution method before implementing product code.
+This document records the proposed contracts, not camera facts. The accompanying
+test-first implementation plan includes the approved neural comparison and shared
+weather location. Review that plan and agree its execution method before
+implementing product code.
