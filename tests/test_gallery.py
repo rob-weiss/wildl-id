@@ -110,6 +110,67 @@ class RecentSightingsTests(unittest.TestCase):
 
 
 class SmartFilterTests(unittest.TestCase):
+    def test_hour_prompts_are_time_windows_not_image_limits(self):
+        for prompt, hours in (
+            ("last 24h", 24),
+            ("last 24 hours", 24),
+            ("past 24 hrs", 24),
+            ("previous 2h", 2),
+            ("in the last hour", 1),
+            ("past an hour", 1),
+        ):
+            with self.subTest(prompt=prompt):
+                gallery_filter = parse(prompt)
+                self.assertFalse(gallery_filter.is_empty())
+                self.assertIsNone(gallery_filter.limit)
+                self.assertEqual(gallery_filter.hours, hours)
+                self.assertIn(f"last {hours} hours", describe_filter(gallery_filter))
+
+    def test_hour_window_uses_timestamps_offsets_and_has_no_count_limit(self):
+        now = datetime.fromisoformat("2026-10-30T12:00:00+00:00")
+        rows = [
+            make_row(
+                f"recent-{index}.jpg",
+                "fox",
+                (now - timedelta(minutes=index)).isoformat(),
+            )
+            for index in range(30)
+        ]
+        rows += [
+            make_row("boundary.jpg", "fox", "2026-10-29T13:00:00+01:00"),
+            make_row("old.jpg", "fox", "2026-10-29T12:59:59+01:00"),
+            make_row("future.jpg", "fox", (now + timedelta(seconds=1)).isoformat()),
+            make_row("invalid.jpg", "fox", "invalid"),
+            make_row("undated.jpg", "fox", ""),
+        ]
+        for prompt in ("last 24h", "last 24 hours"):
+            with self.subTest(prompt=prompt):
+                gallery_filter = parse(prompt)
+                self.assertFalse(gallery_filter.is_empty())
+                self.assertIsNone(gallery_filter.limit)
+                self.assertEqual(
+                    names(filter_rows(rows, gallery_filter, now=now)),
+                    [f"recent-{index}.jpg" for index in range(30)] + ["boundary.jpg"],
+                )
+
+    def test_hour_window_composes_with_filters_and_matches_home(self):
+        now = datetime(2026, 10, 30, 12)
+        rows = [
+            make_row("recent.jpg", "fox", "2026-10-30T11:00:00"),
+            make_row("boundary.jpg", "fox", "2026-10-29T12:00:00"),
+            make_row("old.jpg", "fox", "2026-10-29T11:59:59"),
+            make_row("human.jpg", "human", "2026-10-30T11:00:00"),
+        ]
+        gallery_filter = parse("only foxes last 24h")
+        self.assertIn("last 24 hours", describe_filter(gallery_filter))
+        self.assertEqual(
+            names(filter_rows(rows, gallery_filter, now=now)),
+            names(gallery.recent_rows(rows, now)),
+        )
+        self.assertEqual(parse("latest 24").limit, 24)
+        self.assertEqual(parse("last 24").limit, 24)
+        self.assertEqual(parse("foxes last 24h latest 2").limit, 2)
+
     def test_all_dropdown_examples_produce_supported_filters(self):
         for category, examples in FILTER_EXAMPLES.items():
             for prompt in examples:

@@ -100,10 +100,15 @@ filter inside the app; no prompt leaves the machine and no generated code is
 executed. The line under the filter shows how the prompt was interpreted. It
 understands labels and aliases (“boar”, “birds”, “deer”), locations, negation
 (“except foxes”, “not at Douglasien”), relative and absolute dates (“last 3
-months”, “this year”, “in March 2025”, “since 2025-06-01”, “in winter”), night
+months”, “last 24h”, “last 24 hours”, “this year”, “in March 2025”,
+“since 2025-06-01”, “in winter”), night
 or day, temperatures (“below 0 °C”, “freezing”), labelling status
 (“unlabelled”, “misclassified”), and order or count (“oldest first”, “latest
 20”).
+
+Hour filters use an exact rolling window ending now, shared with the home
+gallery. They exclude undated and future images and do not limit the image
+count. “Latest 24” still selects the newest 24 images regardless of age.
 
 On a Pi, `localhost` means the Pi; open the app in a browser on the Pi itself.
 Pi hardware and cross-architecture execution have not been verified.

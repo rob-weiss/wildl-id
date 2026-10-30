@@ -85,7 +85,11 @@ location, date, lighting, temperature, and review conditions combine together.
 
 Supported relative dates: `today`, `yesterday`, `this week`, `this month`,
 `this year`, and `last`, `past`, `previous`, or `recent` followed by an optional
-count and `day`, `week`, `month`, or `year`. Counts accept digits, `a`/`an`,
+count and `hour`, `day`, `week`, `month`, or `year`. Hours also accept `h`
+or `hr`, such as `last 24h` or `last 24 hours`. Hour filters use a rolling
+timestamp window ending now, not a calendar-day range or image count.
+Undated and future images are excluded; timestamps without an offset use
+the server's local time zone. Counts accept digits, `a`/`an`,
 `one` through `twelve`, `couple of`, `few`, and `several`.
 
 Absolute dates accept `YYYY-MM-DD`, `D.M.YYYY`, `D Month YYYY`, `Month D YYYY`,
@@ -233,7 +237,7 @@ _NUMBER = "|".join(
 RELATIVE_PERIOD = re.compile(
     r"\b(?:(?:in|over|during|within|from)\s+)?(?:the\s+)?"
     r"(?:last|past|previous|recent)\s+"
-    rf"(?:(?P<count>{_NUMBER})\s+)?(?P<unit>day|week|month|year)s?\b"
+    rf"(?:(?P<count>{_NUMBER})\s*)?(?P<unit>hour|hr|h|day|week|month|year)s?\b"
 )
 CURRENT_PERIOD = re.compile(
     r"\b(?:(?:in|during)\s+)?this\s+(?P<unit>week|month|year)\b"
@@ -300,6 +304,7 @@ class GalleryFilter:
     misclassified: bool = False
     oldest_first: bool = False
     limit: int | None = None
+    hours: int | None = None
 
     def is_empty(self):
         return self == GalleryFilter()
@@ -336,17 +341,7 @@ def row_datetime(row):
 
 
 def recent_rows(rows, now=None):
-    now = (now or datetime.now().astimezone()).astimezone()
-    cutoff = now - timedelta(hours=24)
-    matches = []
-    for row in rows:
-        taken = row_datetime(row)
-        if taken is None or row_label(row).casefold() not in RECENT_SPECIES:
-            continue
-        taken = taken.astimezone(now.tzinfo)
-        if cutoff <= taken <= now:
-            matches.append((taken, row))
-    return [row for _, row in sorted(matches, key=lambda match: match[0], reverse=True)]
+    return filter_rows(rows, GalleryFilter(labels=RECENT_SPECIES, hours=24), now=now)
 
 
 def shift_months(day, months):
@@ -475,6 +470,11 @@ def _extract_dates(prompt, result, today):
         count = match["count"] or "1"
         amount = int(count) if count.isdigit() else NUMBER_WORDS[count]
         unit = match["unit"]
+        if unit in {"hour", "hr", "h"}:
+            result.hours = (
+                min(result.hours, amount) if result.hours is not None else amount
+            )
+            continue
         if unit == "day":
             start = today - timedelta(days=amount)
         elif unit == "week":
@@ -586,10 +586,13 @@ def parse_filter_prompt(prompt, labels=(), locations=(), today=None):
     return result
 
 
-def filter_rows(rows, gallery_filter):
+def filter_rows(rows, gallery_filter, now=None):
     """Return matching rows, newest first unless the filter asks otherwise."""
     f = gallery_filter
-    has_date_filter = bool(f.start or f.end or f.months)
+    has_date_filter = bool(f.start or f.end or f.months or f.hours is not None)
+    if f.hours is not None:
+        now = (now or datetime.now().astimezone()).astimezone()
+        cutoff = now - timedelta(hours=f.hours)
     locations = {normalize_text(location) for location in f.locations}
     excluded_locations = {normalize_text(location) for location in f.excluded_locations}
     dated, undated = [], []
@@ -627,6 +630,10 @@ def filter_rows(rows, gallery_filter):
         if has_date_filter:
             if taken is None:
                 continue
+            if f.hours is not None:
+                taken = taken.astimezone(now.tzinfo)
+                if not cutoff <= taken <= now:
+                    continue
             day = taken.date()
             if f.start and day < f.start or f.end and day > f.end:
                 continue
@@ -653,6 +660,8 @@ def describe_filter(gallery_filter):
         parts.append("not at " + ", ".join(sorted(f.excluded_locations)))
     if f.start or f.end:
         parts.append(f"📅 {f.start or '…'} – {f.end or '…'}")
+    if f.hours is not None:
+        parts.append(f"last {f.hours} hours")
     if f.months:
         parts.append(
             "in " + ", ".join(calendar.month_name[month] for month in sorted(f.months))
