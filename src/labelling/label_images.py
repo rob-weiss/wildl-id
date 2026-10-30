@@ -950,11 +950,14 @@ def process_images_with_pytorch_wildlife(
         classification_model.weights_path.parent.name
         if classification_model is not None
         and classification_model.weights_path is not None
-        else "deepfaune_pretrained" if use_classification else ""
+        else "deepfaune_pretrained"
+        if use_classification
+        else ""
     )
     run_suffix = f"_{classifier_run}" if classifier_run else ""
     labels_dir = (
-        repo_dir / "labels"
+        repo_dir
+        / "labels"
         / f"labels_{model_version}_{model_name}{classifier_suffix}{run_suffix}"
     )
     labels_dir.mkdir(parents=True, exist_ok=True)
