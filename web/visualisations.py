@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg", force=True)
+import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -95,6 +96,11 @@ def _add_solar_activity(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def matplotlib_date_values(values) -> np.ndarray:
+    dates = pd.DatetimeIndex(pd.to_datetime(values))
+    return np.asarray(mdates.date2num(dates.to_pydatetime()))
+
+
 def _create_daily_yearly_figure(frame: pd.DataFrame):
     species = frame["species"].iloc[0]
     start_date = frame["date"].min()
@@ -117,9 +123,10 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     frame["hour_decimal"] = (
         frame["timestamp"].dt.hour + frame["timestamp"].dt.minute / 60
     )
+    date_values = matplotlib_date_values(frame["date"])
     scatter = ax_main.scatter(
         frame["hour_decimal"],
-        frame["date"],
+        date_values,
         c=frame["hours_from_sunset"],
         cmap="RdYlBu_r",
         alpha=0.6,
@@ -140,9 +147,9 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     if valid_solar:
         sunrise_hours = [value.hour + value.minute / 60 for value, _, _ in valid_solar]
         sunset_hours = [value.hour + value.minute / 60 for _, value, _ in valid_solar]
-        dates = [day for _, _, day in valid_solar]
+        solar_date_values = matplotlib_date_values([day for _, _, day in valid_solar])
         ax_main.fill_betweenx(
-            dates,
+            solar_date_values,
             [value - 0.5 for value in sunrise_hours],
             sunrise_hours,
             alpha=0.3,
@@ -151,7 +158,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
             zorder=5,
         )
         ax_main.fill_betweenx(
-            dates,
+            solar_date_values,
             sunrise_hours,
             [value + 1.5 for value in sunrise_hours],
             alpha=0.2,
@@ -160,7 +167,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
             zorder=5,
         )
         ax_main.fill_betweenx(
-            dates,
+            solar_date_values,
             [value - 1.5 for value in sunset_hours],
             sunset_hours,
             alpha=0.2,
@@ -169,7 +176,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
             zorder=5,
         )
         ax_main.fill_betweenx(
-            dates,
+            solar_date_values,
             sunset_hours,
             [value + 0.5 for value in sunset_hours],
             alpha=0.3,
@@ -179,7 +186,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
         )
         ax_main.plot(
             sunset_hours,
-            dates,
+            solar_date_values,
             color="orange",
             linewidth=3,
             label="Sunset Time",
@@ -187,14 +194,20 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
         )
         ax_main.plot(
             sunrise_hours,
-            dates,
+            solar_date_values,
             color="gold",
             linewidth=3,
             label="Sunrise Time",
             zorder=10,
         )
 
-    ax_top.hist(frame["hour_decimal"], bins=48, color="steelblue", alpha=0.5)
+    ax_top.hist(
+        frame["hour_decimal"],
+        bins=48,
+        color="steelblue",
+        alpha=0.5,
+        density=True,
+    )
     if frame["hour_decimal"].nunique() > 1:
         from scipy import stats
 
@@ -206,9 +219,6 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     ax_top.grid(True, alpha=0.3, axis="y")
     ax_top.set_xlim(0, 24)
 
-    date_values = np.asarray(
-        pd.to_datetime(frame["date"]).map(pd.Timestamp.toordinal), dtype=float
-    )
     ax_right.hist(
         date_values,
         bins=min(52, max(1, len(np.unique(date_values)))),
@@ -227,12 +237,15 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     ax_right.set_xlabel("Density")
     ax_right.tick_params(labelleft=False)
     ax_right.grid(True, alpha=0.3, axis="x")
-    ax_right.invert_yaxis()
 
     ax_main.set_xlabel("Hour of Day")
     ax_main.set_ylabel("Date")
     ax_main.set_xlim(0, 24)
     ax_main.set_xticks(range(0, 25, 2), [f"{hour:02d}:00" for hour in range(0, 25, 2)])
+    ax_main.yaxis_date()
+    date_locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
+    ax_main.yaxis.set_major_locator(date_locator)
+    ax_main.yaxis.set_major_formatter(mdates.ConciseDateFormatter(date_locator))
     ax_main.grid(True, alpha=0.3)
     ax_main.legend(loc="upper right", fontsize=8)
     ax_main.invert_yaxis()

@@ -3,6 +3,7 @@ import csv
 import tempfile
 import threading
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -160,6 +161,30 @@ class FilteredPlotTests(unittest.TestCase):
         self.assertEqual(len(frame), 2)
         self.assertEqual(set(frame["species"]), {"fox"})
         self.assertEqual(set(frame["year"]), {2024})
+
+    def test_plot_date_coordinates_use_matplotlib_calendar_days(self):
+        convert_dates = getattr(visualisations, "matplotlib_date_values", None)
+        self.assertTrue(callable(convert_dates), "matplotlib_date_values is required")
+
+        values = convert_dates([date(2025, 1, 1), date(2025, 1, 15)])
+
+        self.assertAlmostEqual(values[1] - values[0], 14)
+        self.assertGreater(values[0], 10_000)
+
+    def test_daily_yearly_axes_use_calendar_dates_and_density_units(self):
+        frame = visualisations._add_solar_activity(
+            visualisations.filtered_activity_frame(self.csv_path, "foxes in 2024")
+        )
+        figure = visualisations._create_daily_yearly_figure(frame)
+        self.addCleanup(visualisations.plt.close, figure)
+
+        main_axis = figure.axes[1]
+        self.assertGreater(min(main_axis.get_yticks()), 10_000)
+        hourly_axis = figure.axes[0]
+        histogram_area = sum(
+            patch.get_height() * patch.get_width() for patch in hourly_axis.patches
+        )
+        self.assertAlmostEqual(histogram_area, 1.0, places=5)
 
     def test_daily_yearly_plot_writes_one_svg_for_every_filtered_species(self):
         generate = getattr(visualisations, "generate_filtered_plot_svgs", None)
