@@ -189,7 +189,9 @@ def publish_images(
             try:
                 invalidation_id = json.loads(result.stdout)["Invalidation"]["Id"]
             except (KeyError, json.JSONDecodeError) as error:
-                raise RuntimeError("CloudFront invalidation response has no ID") from error
+                raise RuntimeError(
+                    "CloudFront invalidation response has no ID"
+                ) from error
             wait_for_invalidation(distribution_id, invalidation_id, profile, region)
 
 
