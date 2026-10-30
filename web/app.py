@@ -29,6 +29,60 @@ def add_brand_logo() -> None:
     )
 
 
+def add_navigation(current_path: str) -> None:
+    with (
+        ui.left_drawer(value=True, bordered=True)
+        .props("mini mini-width=64 width=240 behavior=desktop")
+        .classes("bg-gray-50 p-0 gap-2") as drawer
+    ):
+
+        def toggle_navigation() -> None:
+            collapsed = not drawer.props.get("mini", False)
+            drawer.props["mini"] = collapsed
+            drawer.update()
+            toggle.props(
+                f"icon={'chevron_right' if collapsed else 'chevron_left'} "
+                f'aria-label="{"Expand" if collapsed else "Collapse"} navigation" '
+                f"aria-expanded={str(not collapsed).lower()}"
+            )
+
+        with ui.row().classes("w-full items-center gap-0 flex-nowrap"):
+            with ui.link(target="/").classes("shrink-0 p-2"):
+                ui.image("/assets/wildl-id-icon.svg").props(
+                    'alt="wildl-id home"'
+                ).classes("w-8 h-8")
+            ui.image("/assets/wildl-id-logo.svg").props('alt="wildl-id logo"').classes(
+                "q-mini-drawer-hide w-40 max-w-full"
+            )
+
+        toggle = (
+            ui.button(icon="chevron_right", on_click=toggle_navigation)
+            .props('flat round aria-label="Expand navigation" aria-expanded=false')
+            .classes("self-start ml-1")
+            .mark("navigation-toggle")
+        )
+        toggle.tooltip("Toggle navigation")
+        with ui.list().classes("w-full"):
+            for title, target, icon in (
+                ("Home", "/", "home"),
+                ("Manual review", "/review", "fact_check"),
+                ("Gallery", "/gallery", "photo_library"),
+                ("Visualisations", "/visualisations", "bar_chart"),
+            ):
+                with (
+                    ui.item()
+                    .props(f'href="{target}" clickable aria-label="{title}"')
+                    .classes("min-h-12") as item
+                ):
+                    if current_path == target:
+                        item.props('active aria-current="page"')
+                    with ui.item_section().props("avatar"):
+                        ui.icon(icon).classes("text-2xl")
+                    with ui.item_section():
+                        ui.item_label(title)
+                    ui.tooltip(title)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -56,21 +110,53 @@ def build_default_review_page() -> None:
 
 @ui.page("/")
 def home_page() -> None:
-    with ui.column().classes("w-full max-w-3xl mx-auto p-6 gap-4"):
+    add_navigation("/")
+    with ui.column().classes("w-full max-w-3xl mx-auto p-4 sm:p-6 gap-6"):
         add_brand_logo()
         ui.label("Wildlife analysis").classes("text-2xl font-semibold")
-        ui.link("Manual review", "/review").classes("text-lg")
-        ui.link("Gallery", "/gallery").classes("text-lg")
-        ui.link("Visualisations", "/visualisations").classes("text-lg")
+        ui.label(
+            "Explore camera-trap images, review wildlife labels, "
+            "and visualise animal activity."
+        ).classes("text-base text-gray-700 max-w-xl")
+        with ui.column().classes("w-full gap-0"):
+            for title, target, icon, description in (
+                (
+                    "Manual review",
+                    "/review",
+                    "fact_check",
+                    "Check detections and correct species labels.",
+                ),
+                (
+                    "Gallery",
+                    "/gallery",
+                    "photo_library",
+                    "Browse wildlife images and filter your sightings.",
+                ),
+                (
+                    "Visualisations",
+                    "/visualisations",
+                    "bar_chart",
+                    "Generate charts and summary statistics.",
+                ),
+            ):
+                with ui.row().classes(
+                    "w-full items-start flex-nowrap gap-4 py-5 border-t border-gray-200"
+                ):
+                    ui.icon(icon).classes("text-2xl text-gray-600 shrink-0 mt-1")
+                    with ui.column().classes("min-w-0 gap-1"):
+                        ui.link(title, target).classes("text-lg font-medium")
+                        ui.label(description).classes("text-gray-600")
 
 
 @ui.page("/review")
 def review_page() -> None:
+    add_navigation("/review")
     build_default_review_page()
 
 
 @ui.page("/gallery")
 def gallery_page() -> None:
+    add_navigation("/gallery")
     add_brand_logo()
     build_gallery_page(
         DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
@@ -79,6 +165,7 @@ def gallery_page() -> None:
 
 @ui.page("/visualisations")
 def visualisations_page() -> None:
+    add_navigation("/visualisations")
     add_brand_logo()
     ui.label("Visualisations").classes("text-xl font-semibold")
     status = ui.label()

@@ -1,7 +1,11 @@
 # Local Web App
 
 The home page at <http://127.0.0.1:8080> links to manual review, the gallery,
-and visualisations. The app binds only to localhost; it is not available from the
+and visualisations, with a brief description of each. Every page includes a
+navigation rail that starts collapsed to icons. Hover for page names, or expand
+the rail to show the full logo and navigation labels.
+
+The app binds only to localhost; it is not available from the
 LAN or internet. There is no login, so other local processes may access it.
 
 ## Requirements

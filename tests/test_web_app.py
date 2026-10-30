@@ -201,6 +201,52 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Gallery")
             await user.should_see("Visualisations")
 
+    async def test_navigation_starts_as_icon_rail_on_every_page(self):
+        for path in ("/", "/review", "/gallery", "/visualisations"):
+            with self.subTest(path=path):
+                async with self.app_user(path) as user:
+                    drawers = user.find(kind=ui.left_drawer).elements
+                    self.assertEqual(len(drawers), 1)
+                    drawer = next(iter(drawers))
+                    self.assertTrue(drawer.value)
+                    self.assertTrue(drawer.props.get("mini"))
+                    self.assertEqual(drawer.props.get("behavior"), "desktop")
+                    links = {
+                        item.props["href"]
+                        for item in drawer.descendants()
+                        if isinstance(item, ui.item) and "href" in item.props
+                    }
+                    self.assertEqual(
+                        links, {"/", "/review", "/gallery", "/visualisations"}
+                    )
+                    user.find(marker="navigation-toggle").click()
+                    self.assertFalse(drawer.props.get("mini"))
+                    user.find(marker="navigation-toggle").click()
+                    self.assertTrue(drawer.props.get("mini"))
+
+    async def test_home_shows_summary_and_descriptive_page_links(self):
+        async with self.app_user("/") as user:
+            await user.should_see(
+                "Explore camera-trap images, review wildlife labels, "
+                "and visualise animal activity."
+            )
+            await user.should_see("Check detections and correct species labels.")
+            await user.should_see("Browse wildlife images and filter your sightings.")
+            await user.should_see("Generate charts and summary statistics.")
+            links = {
+                link.text: link.props["href"]
+                for link in user.find(kind=ui.link).elements
+                if link.text
+            }
+            self.assertEqual(
+                links,
+                {
+                    "Manual review": "/review",
+                    "Gallery": "/gallery",
+                    "Visualisations": "/visualisations",
+                },
+            )
+
     async def test_gallery_page_applies_smart_filter(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class"],
@@ -386,7 +432,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             favicon = await client.get("/favicon.ico")
 
         self.assertIn('href="/favicon.ico"', response.text)
-        self.assertNotIn("/assets/wildl-id-icon.svg", response.text)
+        self.assertNotIn('href="/assets/wildl-id-icon.svg"', response.text)
         self.assertEqual(favicon.status_code, 200)
         self.assertIn("image/svg+xml", favicon.headers["content-type"])
         self.assertEqual(
