@@ -228,6 +228,33 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find("Smart filter").type("only foxes").trigger("keydown.enter")
                 await user.should_see("1 images · only 🦊 fox")
 
+    async def test_gallery_example_applies_filter(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-01T00:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "boar.jpg",
+                    "timestamp": "2025-01-02T00:00:00",
+                    "class": "wild boar",
+                },
+            ],
+        )
+        with patch.dict(
+            os.environ,
+            {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+        ):
+            async with self.app_user("/gallery") as user:
+                await user.should_see("Example filters")
+                user.find("Only foxes").click()
+                await user.should_see("1 images · only 🦊 fox")
+
     async def test_gallery_page_reports_missing_csv(self):
         async with self.app_user("/gallery") as user:
             await user.should_see("Gallery data unavailable")

@@ -605,6 +605,22 @@ def build_gallery_page(
             .classes("flex-grow")
         )
         ui.button("Filter", icon="search", on_click=lambda: apply()).props("no-caps")
+    examples = (
+        "Show only wild boar of the last two weeks",
+        "Only foxes",
+        "Foxes at night in winter",
+        "Badgers at Sauloch in March 2025",
+        "Unlabelled images below 0 °C",
+        "Latest 20 misclassified",
+    )
+    with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
+        ui.label("Example filters").classes("font-medium")
+        with ui.row().classes("w-full flex-wrap gap-2"):
+            for example in examples:
+                ui.button(
+                    example,
+                    on_click=lambda example=example: select_example(example),
+                ).props("flat no-caps dense")
     summary = ui.label().classes("text-sm text-gray-600")
     pagination = ui.pagination(
         1, 1, direction_links=True, on_change=lambda: show_page()
@@ -661,6 +677,11 @@ def build_gallery_page(
             pagination.set_value(1)
         else:
             show_page()
+
+    def select_example(example):
+        prompt.value = example
+        prompt.update()
+        apply()
 
     prompt.on("keydown.enter", apply)
     apply()
