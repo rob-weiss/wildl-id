@@ -9,6 +9,7 @@ Each run writes to models/deepfaune_finetuned_<date>_<git hash>/:
 - metadata.json       the same metadata without the weights, plus training history
 - training_data/      the exact crops used for training and validation, with labels.csv
 - validation_predictions/predictions.csv  true and predicted class for each validation image
+- confusion_matrix.svg  validation counts for the best model, with class labels
 - finetune_classifier.py and git_diff.patch (if the work tree was dirty)
 
 Usage:
@@ -28,9 +29,15 @@ import numpy as np
 import pandas as pd
 import timm
 import torch
+from matplotlib import rc_context
+from matplotlib.figure import Figure
 from PIL import Image, ImageDraw
 from PytorchWildlife.models.classification import DeepfauneClassifier
-from sklearn.metrics import balanced_accuracy_score, classification_report
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    balanced_accuracy_score,
+    classification_report,
+)
 from sklearn.model_selection import StratifiedGroupKFold
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
@@ -315,6 +322,27 @@ def save_validation_predictions(rows, targets, predictions, class_names, output_
         writer.writerows(prediction_rows)
 
 
+def save_confusion_matrix(targets, predictions, class_names, output_path):
+    size = max(8, len(class_names) * 0.6)
+    figure = Figure(figsize=(size, size), layout="constrained")
+    axes = figure.subplots()
+    ConfusionMatrixDisplay.from_predictions(
+        targets,
+        predictions,
+        labels=list(range(len(class_names))),
+        display_labels=class_names,
+        cmap="Blues",
+        values_format="d",
+        xticks_rotation=45,
+        ax=axes,
+    )
+    axes.set_title("Validation confusion matrix (best model)")
+    for label in axes.get_xticklabels():
+        label.set_horizontalalignment("right")
+    with rc_context({"svg.fonttype": "none"}):
+        figure.savefig(output_path, format="svg", bbox_inches="tight")
+
+
 def build_model(class_names, device):
     pretrained = DeepfauneClassifier(device="cpu", class_name_lang="en")
     model = pretrained.predictor
@@ -493,6 +521,9 @@ def main():
     writer.close()
     model.load_state_dict(best_state, strict=False)
     _, preds, targets = evaluate(model, val_loader, criterion, device)
+    confusion_matrix_path = out_dir / "confusion_matrix.svg"
+    save_confusion_matrix(targets, preds, class_names, confusion_matrix_path)
+    print(f"Validation confusion matrix saved to {confusion_matrix_path}")
     val_df = df[~train_mask]
     validation_images_dir = out_dir / "validation_predictions"
     save_validation_predictions(
