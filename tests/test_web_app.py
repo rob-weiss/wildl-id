@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import httpx
@@ -42,25 +43,35 @@ class FakeVisualisationRunStore:
 class FakeFilteredPlotRunStore:
     def __init__(self, output_directory):
         self.output_directory = output_directory
-        self.current_directory = None
-        self.current_paths = []
+        self.runs = []
         self.calls = []
 
     async def generate(self, csv_path, prompt, plot_type):
         self.calls.append((csv_path, prompt, plot_type))
-        self.output_directory.mkdir(parents=True, exist_ok=True)
-        for path in self.output_directory.glob("*.svg"):
-            path.unlink()
+        run_directory = self.output_directory / f"run-{len(self.runs) + 1}"
+        run_directory.mkdir(parents=True)
         filename = (
             "14_fox_daily_yearly_activity_pattern.svg"
             if plot_type == "daily-yearly"
             else "09_individual_species_timelines.svg"
         )
-        path = self.output_directory / filename
+        path = run_directory / filename
         path.write_text("<svg/>", encoding="utf-8")
-        self.current_directory = self.output_directory
-        self.current_paths = [path]
-        return self.current_paths
+        plot_run = SimpleNamespace(
+            directory=run_directory,
+            prompt=prompt,
+            plot_type=plot_type,
+            paths=[path],
+        )
+        self.runs.append(plot_run)
+        return plot_run
+
+    async def remove_plot(self, plot_run, path):
+        path.unlink()
+        plot_run.paths.remove(path)
+        if not plot_run.paths:
+            plot_run.directory.rmdir()
+            self.runs.remove(plot_run)
 
 
 class WebAppTests(unittest.IsolatedAsyncioTestCase):
@@ -843,16 +854,30 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
             user.find("Plot type").click()
             user.find("Individual species timelines").click()
+            user.find("Plot filter").clear().type("wild boar in 2025")
             user.find("Generate filtered plot").click()
-            await user.should_see("1 filtered SVG ready")
-            await user.should_see("09_individual_species_timelines.svg")
-            await user.should_see("Generate visualisations")
+            await user.should_see("1 filtered SVG ready; 2 runs retained")
+            first_label = "foxes in 2024 · 14_fox_daily_yearly_activity_pattern.svg"
+            second_label = "wild boar in 2025 · 09_individual_species_timelines.svg"
+            filtered_svg_selector = user.find("Filtered SVGs")
+            filtered_svg_selector.click()
+            await user.should_see(first_label)
+            await user.should_see(second_label)
+            user.find(second_label).click()
+
+            first_path = filtered_plot_store.runs[0].paths[0]
+            second_path = filtered_plot_store.runs[1].paths[0]
+            user.find("Remove selected SVG").click()
+            await user.should_see("Filtered SVG removed")
+            self.assertTrue(first_path.exists())
+            self.assertFalse(second_path.exists())
+            self.assertEqual(len(filtered_plot_store.runs), 1)
 
         self.assertEqual(
             [call[1:] for call in filtered_plot_store.calls],
             [
                 ("foxes in 2024", "daily-yearly"),
-                ("foxes in 2024", "individual-timelines"),
+                ("wild boar in 2025", "individual-timelines"),
             ],
         )
 

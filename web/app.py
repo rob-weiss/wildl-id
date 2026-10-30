@@ -200,34 +200,76 @@ def visualisations_page() -> None:
     dynamic_spinner = ui.spinner(size="sm")
     dynamic_spinner.set_visibility(False)
     filtered_results = ui.column().classes("w-full gap-3")
+    selected_plot = {"path": None}
 
-    def show_filtered_results(paths: list[Path]) -> None:
+    def show_filtered_results(preferred_path: Path | None = None) -> None:
         filtered_results.clear()
+        available_plots = [
+            (path, f"{plot_run.prompt or 'All images'} · {path.name}")
+            for plot_run in filtered_plot_runs.runs
+            for path in plot_run.paths
+        ]
+        if not available_plots:
+            selected_plot["path"] = None
+            return
+        options = {str(path): label for path, label in available_plots}
+        selected_path = str(preferred_path or selected_plot["path"] or "")
+        if selected_path not in options:
+            selected_path = str(available_plots[-1][0])
+        selected_plot["path"] = selected_path
         with filtered_results:
             chart_image = {}
             ui.select(
-                {str(path): path.name for path in paths},
-                value=str(paths[0]),
-                label="Filtered SVG",
-                on_change=lambda event: chart_image["element"].set_source(event.value),
+                options,
+                value=selected_path,
+                label="Filtered SVGs",
+                on_change=lambda event: show_selected_plot(event, chart_image),
             ).classes("w-full")
-            chart_image["element"] = ui.image(paths[0]).classes("w-full max-w-6xl")
+            chart_image["element"] = ui.image(selected_path).classes("w-full max-w-6xl")
+            ui.button(
+                "Remove selected SVG",
+                icon="delete",
+                on_click=remove_selected_plot,
+            ).props("outline no-caps")
 
-    if filtered_plot_runs.current_paths:
-        show_filtered_results(filtered_plot_runs.current_paths)
+    def show_selected_plot(event, chart_image) -> None:
+        selected_plot["path"] = event.value
+        chart_image["element"].set_source(event.value)
+
+    async def remove_selected_plot() -> None:
+        selected_path = selected_plot["path"]
+        if selected_path is None:
+            return
+        path = Path(selected_path)
+        plot_run = next(
+            (run for run in filtered_plot_runs.runs if path in run.paths), None
+        )
+        if plot_run is None:
+            dynamic_status.set_text("Selected SVG is no longer available")
+            show_filtered_results()
+            return
+        await filtered_plot_runs.remove_plot(plot_run, path)
+        dynamic_status.set_text("Filtered SVG removed")
+        show_filtered_results()
+
+    if filtered_plot_runs.runs:
+        show_filtered_results()
 
     async def generate_filtered_plot() -> None:
         dynamic_button.disable()
         dynamic_spinner.set_visibility(True)
         dynamic_status.set_text("Generating filtered plot...")
         try:
-            paths = await filtered_plot_runs.generate(
+            plot_run = await filtered_plot_runs.generate(
                 DEFAULT_CSV,
                 plot_filter.value or "",
                 plot_type.value,
             )
-            show_filtered_results(paths)
-            dynamic_status.set_text(f"{len(paths)} filtered SVG ready")
+            show_filtered_results(plot_run.paths[-1])
+            dynamic_status.set_text(
+                f"{len(plot_run.paths)} filtered SVG ready; "
+                f"{len(filtered_plot_runs.runs)} runs retained"
+            )
         except ValueError as error:
             dynamic_status.set_text(str(error))
         except Exception:

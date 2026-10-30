@@ -227,5 +227,44 @@ class FilteredPlotTests(unittest.TestCase):
             generate(self.csv_path, "badgers", "daily-yearly", self.output_directory)
 
 
+class FilteredPlotRunStoreTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary_directory.cleanup)
+        self.root = Path(temporary_directory.name)
+        self.output_root = self.root / "filtered-runs"
+        self.csv_path = self.root / "labels.csv"
+        self.csv_path.write_text("fixture", encoding="utf-8")
+        self.store = visualisations.FilteredPlotRunStore(self.output_root)
+
+    @staticmethod
+    def write_plot(csv_path, prompt, plot_type, output_dir):
+        path = output_dir / f"{plot_type}.svg"
+        path.write_text("<svg/>", encoding="utf-8")
+        return [path]
+
+    async def test_runs_remain_until_each_svg_is_explicitly_removed(self):
+        with patch(
+            "web.visualisations.generate_filtered_plot_svgs",
+            side_effect=self.write_plot,
+        ):
+            first = await self.store.generate(
+                self.csv_path, "foxes in 2024", "daily-yearly"
+            )
+            second = await self.store.generate(
+                self.csv_path, "wild boar in 2025", "daily-yearly"
+            )
+
+        self.assertEqual(len(self.store.runs), 2)
+        self.assertTrue(first.paths[0].is_file())
+        self.assertTrue(second.paths[0].is_file())
+
+        await self.store.remove_plot(first, first.paths[0])
+
+        self.assertEqual(self.store.runs, [second])
+        self.assertFalse(first.directory.exists())
+        self.assertTrue(second.paths[0].is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

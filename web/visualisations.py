@@ -3,6 +3,7 @@ import math
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -388,8 +389,7 @@ def generate_filtered_plot_svgs(
 class FilteredPlotRunStore:
     def __init__(self, output_root: Path = FILTERED_PLOT_ROOT):
         self.output_root = Path(output_root)
-        self.current_directory: Path | None = None
-        self.current_paths: list[Path] = []
+        self.runs: list[FilteredPlotRun] = []
         self._lock = asyncio.Lock()
         self._is_running = False
 
@@ -397,7 +397,9 @@ class FilteredPlotRunStore:
     def is_running(self) -> bool:
         return self._is_running
 
-    async def generate(self, csv_path: Path, prompt: str, plot_type: str) -> list[Path]:
+    async def generate(
+        self, csv_path: Path, prompt: str, plot_type: str
+    ) -> "FilteredPlotRun":
         if self._lock.locked():
             raise RuntimeError("A filtered plot run is already running")
 
@@ -419,17 +421,32 @@ class FilteredPlotRunStore:
                 if not generated or not all(path.is_file() for path in generated):
                     raise RuntimeError("Filtered plot SVGs were not generated")
 
-                previous_directory = self.current_directory
-                self.current_directory = run_directory
-                self.current_paths = generated
+                plot_run = FilteredPlotRun(run_directory, prompt, plot_type, generated)
+                self.runs.append(plot_run)
                 run_directory = None
-                if previous_directory is not None:
-                    shutil.rmtree(previous_directory, ignore_errors=True)
-                return self.current_paths
+                return plot_run
             finally:
                 if run_directory is not None:
                     shutil.rmtree(run_directory, ignore_errors=True)
                 self._is_running = False
+
+    async def remove_plot(self, plot_run: "FilteredPlotRun", path: Path) -> None:
+        async with self._lock:
+            if plot_run not in self.runs or path not in plot_run.paths:
+                raise ValueError("Filtered plot is no longer available")
+            path.unlink(missing_ok=True)
+            plot_run.paths.remove(path)
+            if not plot_run.paths:
+                shutil.rmtree(plot_run.directory, ignore_errors=True)
+                self.runs.remove(plot_run)
+
+
+@dataclass
+class FilteredPlotRun:
+    directory: Path
+    prompt: str
+    plot_type: str
+    paths: list[Path]
 
 
 class VisualisationRunStore:
