@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
-from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page
+from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.visualisations import (
     FILTERED_PLOT_TYPES,
     FilteredPlotRunStore,
@@ -123,6 +123,9 @@ def home_page() -> None:
             "Explore camera-trap images, review wildlife labels, "
             "and visualise animal activity."
         ).classes("text-base text-gray-700 max-w-xl")
+        build_recent_gallery(
+            DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
+        )
         with ui.column().classes("w-full gap-0"):
             for title, target, icon, description in (
                 (

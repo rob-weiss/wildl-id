@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -13,6 +13,7 @@ from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
 from web import app as web_app
+from web import gallery
 
 review_module = import_module("src.labelling.review_app")
 
@@ -278,6 +279,122 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "Visualisations": "/visualisations",
                 },
             )
+
+    async def test_home_recent_gallery_shows_boxes_and_refreshes_csv(self):
+        now = datetime.now()
+        fields = [
+            "location_id",
+            "image_file",
+            "timestamp",
+            "class",
+            "manual_label",
+            "box",
+        ]
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": "fox.jpg",
+                "timestamp": (now - timedelta(hours=1)).isoformat(),
+                "class": "human",
+                "manual_label": "fox",
+                "box": "[0.5, 0.5, 0.4, 0.2]",
+            },
+            {
+                "location_id": "camera1",
+                "image_file": "human.jpg",
+                "timestamp": now.isoformat(),
+                "class": "human",
+            },
+            {
+                "location_id": "camera1",
+                "image_file": "old.jpg",
+                "timestamp": (now - timedelta(hours=25)).isoformat(),
+                "class": "fox",
+            },
+        ]
+        self.write_csv(fields, rows)
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer") as timer,
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("Last 24 hours")
+                await user.should_see("1 images")
+                image = next(iter(user.find(kind=ui.interactive_image).elements))
+                self.assertTrue(image.source.endswith("/camera1/fox.jpg"))
+                user.find(kind=ui.interactive_image).trigger(
+                    "loaded", {"width": 1600, "height": 900}
+                )
+                self.assertIn('x="480.0" y="360.0" width="640.0"', image.content)
+                self.assertIn("fox", image.content)
+                self.assertIn("True:", image.content)
+                self.assertTrue(timer.call_args_list)
+                self.assertTrue(
+                    all(call.args[0] == 60 for call in timer.call_args_list)
+                )
+                refresh = timer.call_args.args[1]
+                rows[0]["timestamp"] = (now - timedelta(hours=25)).isoformat()
+                rows.append(
+                    {
+                        "location_id": "camera1",
+                        "image_file": "boar.jpg",
+                        "timestamp": now.isoformat(),
+                        "class": "wild boar",
+                    }
+                )
+                self.write_csv(fields, rows)
+                refresh()
+                await user.should_see("1 images")
+                sources = [
+                    image.source
+                    for image in user.find(kind=ui.interactive_image).elements
+                ]
+                self.assertTrue(any(source.endswith("/boar.jpg") for source in sources))
+                self.assertFalse(any(source.endswith("/fox.jpg") for source in sources))
+
+    async def test_home_recent_gallery_recovers_from_missing_csv(self):
+        with patch.object(gallery.ui, "timer") as timer:
+            async with self.app_user("/") as user:
+                await user.should_see("Recent images unavailable")
+                self.write_csv(["location_id", "image_file", "class"], [])
+                timer.call_args.args[1]()
+                await user.should_see("No sightings in the last 24 hours")
+                await user.should_not_see("Recent images unavailable")
+
+    async def test_home_recent_gallery_paginates_and_opens_images(self):
+        now = (datetime.now() - timedelta(minutes=1)).isoformat()
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": f"fox-{index}.jpg",
+                    "timestamp": now,
+                    "class": "fox",
+                }
+                for index in range(gallery.PAGE_SIZE + 1)
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("49 images")
+                self.assertEqual(len(user.find(kind=ui.interactive_image).elements), 48)
+                pagination = next(iter(user.find(kind=ui.pagination).elements))
+                pagination.set_value(2)
+                await user.should_see(content="camera1")
+                images = user.find(kind=ui.interactive_image)
+                self.assertEqual(len(images.elements), 1)
+                images.click()
+                await user.should_see("Close image")
+                dialog = next(iter(user.find(kind=ui.dialog).elements))
+                self.assertTrue(dialog.value)
+                user.find(marker="recent-image-close").click()
+                self.assertFalse(dialog.value)
 
     async def test_gallery_page_applies_smart_filter(self):
         self.write_csv(

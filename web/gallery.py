@@ -15,6 +15,7 @@ from src.labelling.organize_images import image_paths, nfc
 from src.labelling.review_app import (
     IMAGES_DIR,
     LABEL_EMOJIS,
+    box_overlay_svg,
     cloud_image_url,
     display_label,
 )
@@ -22,6 +23,7 @@ from src.labelling.review_labels import SHORTCUTS
 
 LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
+RECENT_SPECIES = {"roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"}
 EXAMPLE_PROMPT = "Show only wild boar of the last two weeks"
 FILTER_EXAMPLES = {
     "Dates": {
@@ -331,6 +333,20 @@ def row_datetime(row):
             except ValueError:
                 continue
     return None
+
+
+def recent_rows(rows, now=None):
+    now = (now or datetime.now().astimezone()).astimezone()
+    cutoff = now - timedelta(hours=24)
+    matches = []
+    for row in rows:
+        taken = row_datetime(row)
+        if taken is None or row_label(row).casefold() not in RECENT_SPECIES:
+            continue
+        taken = taken.astimezone(now.tzinfo)
+        if cutoff <= taken <= now:
+            matches.append((taken, row))
+    return [row for _, row in sorted(matches, key=lambda match: match[0], reverse=True)]
 
 
 def shift_months(day, months):
@@ -682,6 +698,113 @@ def load_rows(csv_path):
         return list(reader)
 
 
+def boxed_image(row, source, classes, display_size=(320, 180)):
+    image = ui.interactive_image(source).classes(classes)
+    image.on(
+        "loaded",
+        lambda event: image.set_content(
+            box_overlay_svg(
+                row,
+                (event.args["width"], event.args["height"]),
+                display_size=display_size,
+            )
+        ),
+    )
+    return image
+
+
+def gallery_card(row, source, on_click, show_boxes=False):
+    taken = row_datetime(row)
+    when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
+    with ui.card().tight().classes("w-full"):
+        classes = "w-full h-40 cursor-pointer"
+        image = (
+            boxed_image(row, source, classes)
+            if show_boxes
+            else ui.image(source).props("fit=cover").classes(classes)
+        )
+        image.on("click", on_click)
+        with ui.card_section().classes("p-2"):
+            ui.label(display_label(row_label(row))).classes("font-medium")
+            ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
+
+
+def build_recent_gallery(csv_path, images_dir=IMAGES_DIR, image_base_url=None):
+    with ui.column().classes("w-full gap-3"):
+        ui.label("Last 24 hours").classes("text-xl font-semibold")
+        status = ui.label().classes("text-sm text-gray-600")
+        grid = ui.grid(
+            columns="repeat(auto-fit, minmax(min(100%, 220px), 1fr))"
+        ).classes("w-full gap-3")
+        pagination = ui.pagination(1, 1, on_change=lambda: show_page()).props(
+            "direction-links max-pages=5"
+        )
+    items = []
+    with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
+        viewer = ui.column().classes("w-full")
+        ui.button(icon="close", on_click=dialog.close).props(
+            'flat round aria-label="Close image"'
+        ).mark("recent-image-close").tooltip("Close image")
+
+    def show_image(row, source):
+        viewer.clear()
+        with viewer:
+            boxed_image(row, source, "w-[85vw] max-w-full max-h-[75vh]", (960, 540))
+            taken = row_datetime(row)
+            ui.label(
+                f"{display_label(row_label(row))} · {row['location_id']} · "
+                f"{taken:%Y-%m-%d %H:%M}"
+            )
+        dialog.open()
+
+    def show_page():
+        grid.clear()
+        first = (pagination.value - 1) * PAGE_SIZE
+        with grid:
+            for row, source in items[first : first + PAGE_SIZE]:
+                gallery_card(
+                    row,
+                    source,
+                    lambda row=row, source=source: show_image(row, source),
+                    show_boxes=True,
+                )
+
+    def refresh():
+        try:
+            rows = recent_rows(load_rows(csv_path))
+            local_images = image_paths(Path(images_dir)) if rows else {}
+            items[:] = [
+                (row, source)
+                for row in rows
+                if (
+                    source := image_source(
+                        row, local_images, Path(images_dir), image_base_url
+                    )
+                )
+            ]
+        except (OSError, ValueError, csv.Error):
+            status.set_text("Recent images unavailable")
+            items.clear()
+            pagination.set_visibility(False)
+            grid.clear()
+            return
+        missing = len(rows) - len(items)
+        status.set_text(
+            f"{len(items)} images" if items else "No sightings in the last 24 hours"
+        )
+        if missing:
+            status.set_text(
+                f"{len(items)} images · {missing} not available locally or in the cloud"
+            )
+        pagination.max = max(1, math.ceil(len(items) / PAGE_SIZE))
+        pagination.set_visibility(pagination.max > 1)
+        pagination.set_value(min(pagination.value, pagination.max))
+        show_page()
+
+    refresh()
+    ui.timer(60, refresh, immediate=False)
+
+
 def build_gallery_page(
     csv_path, images_dir=IMAGES_DIR, image_base_url=None, today=None
 ):
@@ -883,20 +1006,7 @@ def build_gallery_page(
             for index, (row, source) in enumerate(
                 items[first : first + PAGE_SIZE], start=first
             ):
-                taken = row_datetime(row)
-                when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
-                with ui.card().tight().classes("w-full"):
-                    ui.image(source).props("fit=cover").classes(
-                        "w-full h-40 cursor-pointer"
-                    ).on(
-                        "click",
-                        lambda index=index: show_image(index),
-                    )
-                    with ui.card_section().classes("p-2"):
-                        ui.label(display_label(row_label(row))).classes("font-medium")
-                        ui.label(f"{row['location_id']} · {when}").classes(
-                            "text-xs text-gray-600"
-                        )
+                gallery_card(row, source, lambda index=index: show_image(index))
 
     def apply():
         if viewer_index["value"] is not None:

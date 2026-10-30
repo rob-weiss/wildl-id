@@ -5,6 +5,14 @@ and visualisations, with a brief description of each. Every page includes a
 navigation rail that starts collapsed to icons. Hover for page names, or expand
 the rail to show the full logo and navigation labels.
 
+The home page also shows a mini gallery of sightings captured in the last
+24 hours, newest first. It includes roe deer, wild boar, badger, marten, fox,
+hare, and raccoon, using manual labels when available. Bounding boxes and
+labels appear over images when box data is available. Click an image to
+enlarge it. The gallery reloads the CSV and image availability every minute
+without reloading the page; older sightings drop out automatically. Results
+are paginated when there are more than 48 images.
+
 The app binds only to localhost; it is not available from the
 LAN or internet. There is no login, so other local processes may access it.
 

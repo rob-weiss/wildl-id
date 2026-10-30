@@ -1,8 +1,9 @@
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from web import gallery
 from web.gallery import (
     FILTER_EXAMPLES,
     LOCAL_IMAGE_ROUTE,
@@ -44,6 +45,68 @@ def parse(prompt):
 
 def names(rows):
     return [row["image_file"] for row in rows]
+
+
+class RecentSightingsTests(unittest.TestCase):
+    def test_rolling_window_species_and_manual_labels(self):
+        now = datetime(2026, 10, 30, 12)
+        rows = [
+            make_row(f"{label}.jpg", label, now.isoformat())
+            for label in (
+                "roe deer",
+                "wild boar",
+                "badger",
+                "marten",
+                "fox",
+                "hare",
+                "raccoon",
+            )
+        ]
+        rows += [
+            make_row("boundary.jpg", "fox", (now - timedelta(hours=24)).isoformat()),
+            make_row(
+                "old.jpg", "fox", (now - timedelta(hours=24, seconds=1)).isoformat()
+            ),
+            make_row("future.jpg", "fox", (now + timedelta(seconds=1)).isoformat()),
+            make_row("undated.jpg", "fox", "invalid"),
+            make_row("human.jpg", "human", now.isoformat()),
+            make_row("red-deer.jpg", "red deer", now.isoformat()),
+            make_row("corrected.jpg", "human", now.isoformat(), manual_label="Fox"),
+            make_row("excluded.jpg", "fox", now.isoformat(), manual_label="human"),
+        ]
+
+        self.assertTrue(callable(getattr(gallery, "recent_rows", None)))
+        result = names(gallery.recent_rows(rows, now))
+
+        self.assertEqual(
+            set(result),
+            {
+                "roe deer.jpg",
+                "wild boar.jpg",
+                "badger.jpg",
+                "marten.jpg",
+                "fox.jpg",
+                "hare.jpg",
+                "raccoon.jpg",
+                "boundary.jpg",
+                "corrected.jpg",
+            },
+        )
+        self.assertEqual(result[-1], "boundary.jpg")
+
+    def test_timezone_offsets_and_exif_fallback(self):
+        now = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+        rows = [
+            make_row("newest.jpg", "fox", "2026-10-30T12:30:00+01:00"),
+            make_row("old.jpg", "fox", "2026-10-29T12:30:00+01:00"),
+            make_row("exif.jpg", "fox", "invalid"),
+        ]
+        rows[-1]["timestamp_exif"] = "2026-10-30T11:00:00Z"
+
+        self.assertTrue(callable(getattr(gallery, "recent_rows", None)))
+        self.assertEqual(
+            names(gallery.recent_rows(rows, now)), ["newest.jpg", "exif.jpg"]
+        )
 
 
 class SmartFilterTests(unittest.TestCase):
