@@ -129,6 +129,41 @@ class WildlifeCommandLineTests(unittest.TestCase):
         ):
             self.assertEqual(wildl_id.main(), 1)
 
+    def test_download_and_notify_cli_runs_alerts_after_download(self):
+        calls = []
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--notify"]),
+            patch.object(
+                wildl_id,
+                "download_images",
+                side_effect=lambda **kwargs: calls.append("download") or True,
+            ),
+            patch.object(
+                wildl_id,
+                "send_alerts",
+                side_effect=lambda: calls.append("notify") or True,
+            ),
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        self.assertEqual(calls, ["download", "notify"])
+
+    def test_send_alerts_skips_when_not_configured(self):
+        result = SimpleNamespace(enabled=False, sent=0, failures=())
+        with (
+            patch.object(wildl_id, "alerts_main", return_value=result),
+            redirect_stdout(StringIO()),
+        ):
+            self.assertTrue(wildl_id.send_alerts())
+
+    def test_send_alerts_returns_failure_on_alert_errors(self):
+        result = SimpleNamespace(enabled=True, sent=1, failures=("offline",))
+        with (
+            patch.object(wildl_id, "alerts_main", return_value=result),
+            redirect_stdout(StringIO()),
+        ):
+            self.assertFalse(wildl_id.send_alerts())
+
     def test_download_and_organize_cli_only_runs_organizer_once(self):
         with (
             patch.object(sys, "argv", ["wildl_id.py", "--download", "--organize"]),

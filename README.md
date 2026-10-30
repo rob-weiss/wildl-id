@@ -142,6 +142,48 @@ home directory and are not version-controlled. macOS does not run the job while
 asleep; launchd runs a missed interval after the Mac wakes. Downloaded images
 and camera data are ignored by Git, so back up those folders separately.
 
+### Push Alerts
+
+The LaunchAgent also runs `--notify`. It sends an [ntfy](https://ntfy.sh)
+push notification when a newly organised image shows wild boar or raccoon.
+Alerts stay off until the config file exists.
+
+1. Install the ntfy app and subscribe to a long random topic name. On the public
+   server, anyone who knows the topic can read it.
+2. Save the topic in Keychain:
+
+   ```bash
+   security add-generic-password -U -s "wildl-id-ntfy" -a "topic" -w
+   ```
+
+3. Create `~/.config/wildl-id/push-alerts.json`. `{}` uses these defaults:
+
+   ```json
+   {
+     "server": "https://ntfy.sh",
+     "species": ["wild boar", "raccoon"],
+     "min_confidence": 0.5,
+     "cooldown_minutes": 30,
+     "max_age_minutes": 180,
+     "attach_image": true
+   }
+   ```
+
+4. Reinstall the LaunchAgent so it passes `--notify`.
+
+The first run marks all existing images as seen and sends nothing. Later runs
+classify only unseen images captured within `max_age_minutes`, using the
+labelling models. They send at most one alert per site and species per
+cooldown. Images that also contain a person are sent without the photo. Failed
+sends are retried on the next run. State lives in
+`~/Library/Application Support/wildl-id/push-alerts/state.json`.
+
+Run once by hand with:
+
+```bash
+uv run --locked python wildl_id.py --notify
+```
+
 ### Organise Images
 
 Place camera exports in `data/<location>/`, then run:

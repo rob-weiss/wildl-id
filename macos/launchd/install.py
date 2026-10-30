@@ -45,7 +45,12 @@ def install_agent(
     plist = _replace_placeholders(template, replacements)
     if plist.get("Label") != LABEL:
         raise ValueError("LaunchAgent template has an unexpected label")
-    if plist.get("ProgramArguments") != [interpreter, str(script_path), "--download"]:
+    if plist.get("ProgramArguments") != [
+        interpreter,
+        str(script_path),
+        "--download",
+        "--notify",
+    ]:
         raise ValueError("LaunchAgent template has unexpected program arguments")
 
     launch_agents_dir.mkdir(parents=True, exist_ok=True)

@@ -46,6 +46,7 @@ class LaunchAgentInstallerTests(unittest.TestCase):
                 "/env/bin/python",
                 str((self.project_root / "wildl_id.py").resolve()),
                 "--download",
+                "--notify",
             ],
         )
         self.assertEqual(plist["WorkingDirectory"], str(self.project_root.resolve()))

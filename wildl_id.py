@@ -15,6 +15,7 @@ Usage:
 
     # Command-line arguments:
     python wildl_id.py --download         # Download new camera images from email
+    python wildl_id.py --notify           # Push alerts for new target species
     python wildl_id.py --organize         # Organise images
     python wildl_id.py --label            # Label images
     python wildl_id.py --visualize        # Generate visualisations
@@ -30,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Import the main functions from each module
+from alerting.push_alerts import send_push_alerts as alerts_main
 from downloading.download_email_images import download_email_images as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import organize_images as organize_main
@@ -105,6 +107,22 @@ def download_images(organize=True):
     except KeyboardInterrupt:
         print("\n\n⚠️  Email download interrupted by user")
         return False
+
+
+def send_alerts():
+    """Push alerts for target species in newly organised images."""
+    try:
+        result = alerts_main()
+    except Exception as e:
+        print(f"\n✗ Push alerts failed: {e}")
+        return False
+    if not result.enabled:
+        print("Push alerts are not configured; skipping.")
+        return True
+    for failure in result.failures:
+        print(f"✗ Push alert: {failure}")
+    print(f"Sent {result.sent} push alerts")
+    return not result.failures
 
 
 def label_images(camera=None, reprocess_missing=False):
@@ -206,6 +224,7 @@ def parse_arguments():
 Examples:
     %(prog)s                    Run interactive menu
     %(prog)s --download         Download new images from email
+    %(prog)s --download --notify   Download, then push alerts for new sightings
     %(prog)s --organize         Organise new images
     %(prog)s --label            Label/classify images
     %(prog)s --visualize        Generate visualisations
@@ -229,6 +248,12 @@ Examples:
         "--download",
         action="store_true",
         help="Download new camera images from email",
+    )
+
+    parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Push ntfy alerts for target species in newly organised images",
     )
 
     parser.add_argument(
@@ -274,7 +299,12 @@ def main():
 
     # Check if any action flags were provided
     has_action = (
-        args.download or args.organize or args.label or args.visualize or args.all
+        args.download
+        or args.notify
+        or args.organize
+        or args.label
+        or args.visualize
+        or args.all
     )
 
     if has_action:
@@ -289,6 +319,8 @@ def main():
                 camera=args.camera, reprocess_missing=args.reprocess_missing
             )
             success = pipeline_success and download_success
+            if args.notify:
+                success = send_alerts() and success
         else:
             success = True
             # Run individual steps as specified
@@ -298,6 +330,9 @@ def main():
             if args.organize:
                 organization_success = organize_images()
                 success = organization_success and success
+
+            if args.notify:
+                success = send_alerts() and success
 
             if args.label:
                 success = (
