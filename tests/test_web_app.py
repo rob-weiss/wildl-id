@@ -255,6 +255,40 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find("Only foxes").click()
                 await user.should_see("1 images · only 🦊 fox")
 
+    async def test_gallery_filter_guide_and_dropdown_examples(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-01T00:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "boar.jpg",
+                    "timestamp": "2025-01-02T00:00:00",
+                    "class": "wild boar",
+                },
+            ],
+        )
+        with patch.dict(
+            os.environ,
+            {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+        ):
+            async with self.app_user("/gallery") as user:
+                user.find("Filter guide").click()
+                await user.should_see("Species and locations")
+                await user.should_see("Dates and seasons")
+                await user.should_see("Lighting and temperature")
+                await user.should_see("Review status")
+                await user.should_see("Order and result count")
+
+                user.find("Animals").click()
+                user.find("Wild boar only").click()
+                await user.should_see("1 images · only 🐗 wild boar")
+
     async def test_gallery_viewer_navigates_filtered_images_and_preserves_aspect(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class"],

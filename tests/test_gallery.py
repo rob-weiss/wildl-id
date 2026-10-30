@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 from web.gallery import (
+    FILTER_EXAMPLES,
     LOCAL_IMAGE_ROUTE,
     describe_filter,
     filter_rows,
@@ -46,6 +47,12 @@ def names(rows):
 
 
 class SmartFilterTests(unittest.TestCase):
+    def test_all_dropdown_examples_produce_supported_filters(self):
+        for category, examples in FILTER_EXAMPLES.items():
+            for prompt in examples:
+                with self.subTest(category=category, prompt=prompt):
+                    self.assertFalse(parse(prompt).is_empty())
+
     def test_wild_boar_of_last_two_weeks(self):
         rows = [
             make_row("old.jpg", "wild boar", "2026-10-01T22:00:00"),

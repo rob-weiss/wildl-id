@@ -23,6 +23,113 @@ from src.labelling.review_labels import SHORTCUTS
 LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
 EXAMPLE_PROMPT = "Show only wild boar of the last two weeks"
+FILTER_EXAMPLES = {
+    "Animals": {
+        "only wild boar": "Wild boar only",
+        "foxes": "Foxes",
+        "deer": "Deer (roe or red)",
+    },
+    "Locations": {
+        "badgers at Sauloch": "Badgers at Sauloch",
+        "foxes not at Douglasien": "Foxes, excluding Douglasien",
+    },
+    "Dates": {
+        "wild boar of the last two weeks": "Last 2 weeks",
+        "foxes in March 2025": "March 2025",
+        "badgers this year": "This year",
+        "between 2025-01-01 and 2025-01-31": "Date range",
+    },
+    "Conditions": {
+        "foxes at night": "Nighttime",
+        "foxes during the day": "Daytime",
+        "temperature below 0 °C": "Below 0 °C",
+        "temperature above 10 C": "Above 10 C",
+    },
+    "Review and order": {
+        "unlabelled": "Not yet labelled",
+        "manually labelled": "Manually labelled",
+        "misclassified latest 20": "Latest 20 misclassified",
+        "oldest first": "Oldest first",
+    },
+}
+FILTER_GUIDE = """### Species and locations
+
+The effective species label is `manual_label` when set; otherwise it is `class`.
+Matching ignores case and accepts simple English plurals. `deer` matches roe and
+red deer; `bird` or `vogel` matches pigeon, jay, crow, song bird, and owl. Other
+aliases include `boar`, `pig`, and `wildschwein` for wild boar; `reh`/`rehe` for
+roe deer; `fuchs`/`füchse`, `dachs`, `hase`/`hasen`, and `eichhörnchen`;
+`songbird`; `person`/`persons`, `people`, and `mensch`/`menschen` for human;
+`car`/`cars` for vehicle; and `empty` or `nothing` for none. Standard labels
+include roe deer, red deer, wild boar, pigeon, badger, marten, dog, fox, hare,
+squirrel, jay, raccoon, crow, human, none, unknown, owl, cat, vehicle, and song
+bird. Labels present in the CSV can also be used directly.
+
+Location names come from `location_id`. Matching ignores case and accents.
+Using the first word selects every location that starts with it (for example,
+`Sauloch` matches both Sauloch locations).
+
+### Include and exclude
+
+Use `not`, `no`, `except`, `excluding`, `exclude`, `without`, `other than`,
+`apart from`, or `but not` before a species or location to exclude it. Multiple
+species are alternatives; multiple locations are alternatives. Species,
+location, date, lighting, temperature, and review conditions combine together.
+
+### Dates and seasons
+
+Supported relative dates: `today`, `yesterday`, `this week`, `this month`,
+`this year`, and `last`, `past`, `previous`, or `recent` followed by an optional
+count and `day`, `week`, `month`, or `year`. Counts accept digits, `a`/`an`,
+`one` through `twelve`, `couple of`, `few`, and `several`.
+
+Absolute dates accept `YYYY-MM-DD`, `D.M.YYYY`, `D Month YYYY`, `Month D YYYY`,
+`Month YYYY`, or a year from 1900 to 2099. Day numbers may have `st`, `nd`,
+`rd`, or `th`; English month names or abbreviations are accepted. `since`,
+`from`, and `starting` include the given date; `after` starts the next day.
+`before` ends the previous day; `until`, `till`, and `up to` include the given
+date. `between DATE and DATE` and `from DATE to DATE` include both endpoints.
+`in March` selects that month in any year; `in winter`, `spring`, `summer`,
+`autumn`, or `fall` selects those calendar months in any year. Relative weeks
+start on Monday. Date filters skip rows without a valid timestamp; undated rows
+also sort after dated rows.
+
+### Lighting and temperature
+
+Night terms: `at night`, `night`, `nighttime`, `nocturnal`, `in the dark`, and
+`dark`. Day terms: `during the day`, `by day`, `daylight`, `daytime`, and
+`bright`. `not at night` selects bright rows; `not during the day` selects dark
+rows.
+
+Temperature comparisons support `below`, `under`, `less than`, `lower than`,
+`colder than`, `<`, `above`, `over`, `more than`, `higher than`, `warmer than`,
+and `>`. Add a number and optional `C`, `°C`, `°`, `Celsius`, or `degrees` unit;
+or say `temperature below 5`. Comparisons are strict. `freezing`, `frost`,
+`frosty`, `below zero`, and `below freezing` mean below 0 °C. Temperature
+filters skip rows without a valid temperature.
+
+### Review status
+
+Unreviewed terms include `unreviewed`, `unlabelled`/`unlabeled`, `unchecked`,
+`not [yet] [been] reviewed/labelled/checked`, and `without [a] manual label(s)`.
+Reviewed terms include `reviewed`, `labelled`/`labeled`, `manually labelled`,
+`verified`, `checked`, and `with [a] manual label(s)`.
+
+`misclassified`, `corrected`, or a `wrong`/`incorrect` prediction, classification,
+or label selects rows with a manual label different from the model's `class`.
+Forms such as `wrongly predicted` and `incorrectly classified` are also accepted.
+
+### Order and result count
+
+Results default to newest first. `oldest first`, `earliest first`,
+`chronological`, or `sorted by oldest` reverses the order. `latest N`,
+`last N` (when N is not followed by a time unit), `newest N`, `recent N`, or
+`most recent N` keeps the newest N results. `first N`, `oldest N`, or
+`earliest N` keeps the oldest N and sorts oldest first.
+
+Unrecognized words are ignored. If no supported filter is found, the gallery
+shows all images and reports that it could not understand the prompt. Prompts
+are parsed locally with these rules; generated code is never executed."""
 
 LABEL_ALIASES = {
     "boar": ("wild boar",),
@@ -666,18 +773,33 @@ def build_gallery_page(
             .classes("flex-grow")
         )
         ui.button("Filter", icon="search", on_click=lambda: apply()).props("no-caps")
-    examples = (
-        "Show only wild boar of the last two weeks",
-        "Only foxes",
-        "Foxes at night in winter",
-        "Badgers at Sauloch in March 2025",
-        "Unlabelled images below 0 °C",
-        "Latest 20 misclassified",
-    )
+    with ui.expansion("Filter guide", icon="info").classes("w-full"):
+        ui.markdown(FILTER_GUIDE).classes("w-full")
     with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
         ui.label("Example filters").classes("font-medium")
+        ui.label(
+            "Choose a category to apply a prompt; quick examples remain below."
+        ).classes("text-sm text-gray-600")
+        with ui.grid(columns="repeat(auto-fit, minmax(190px, 1fr))").classes(
+            "w-full gap-2"
+        ):
+            for category, examples in FILTER_EXAMPLES.items():
+                ui.select(
+                    examples,
+                    label=category,
+                    on_change=lambda event: (
+                        select_example(event.value) if event.value else None
+                    ),
+                ).classes("w-full")
         with ui.row().classes("w-full flex-wrap gap-2"):
-            for example in examples:
+            for example in (
+                "Show only wild boar of the last two weeks",
+                "Only foxes",
+                "Foxes at night in winter",
+                "Badgers at Sauloch in March 2025",
+                "Unlabelled images below 0 °C",
+                "Latest 20 misclassified",
+            ):
                 ui.button(
                     example,
                     on_click=lambda example=example: select_example(example),
