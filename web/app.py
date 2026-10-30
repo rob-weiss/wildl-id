@@ -5,11 +5,15 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from nicegui import ui
+from nicegui import run, ui
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page
-from web.visualisations import VisualisationRunStore
+from web.visualisations import (
+    FILTERED_PLOT_TYPES,
+    VisualisationRunStore,
+    generate_filtered_plot_svg,
+)
 
 app = FastAPI()
 visualisation_runs = VisualisationRunStore()
@@ -168,6 +172,62 @@ def visualisations_page() -> None:
     add_navigation("/visualisations")
     add_brand_logo()
     ui.label("Visualisations").classes("text-xl font-semibold")
+    ui.label("Filter-based plots").classes("text-lg font-semibold mt-4")
+    ui.label(
+        "Uses the gallery filter syntax. Sort order and result limits do not "
+        "affect aggregate plots. Unfiltered species plots show the top six; "
+        "filter by species to narrow them."
+    ).classes("text-sm text-gray-600")
+    with ui.row().classes("w-full items-center gap-2"):
+        plot_filter = (
+            ui.input("Plot filter", placeholder='e.g. "foxes in 2024"')
+            .props("clearable")
+            .classes("flex-grow")
+        )
+        plot_type = ui.select(
+            FILTERED_PLOT_TYPES,
+            value="yearly-seasonal",
+            label="Plot type",
+        ).classes("min-w-64")
+        dynamic_button = ui.button("Generate filtered plot", icon="show_chart").props(
+            "no-caps"
+        )
+    dynamic_status = ui.label().classes("text-sm text-gray-600")
+    dynamic_spinner = ui.spinner(size="sm")
+    dynamic_spinner.set_visibility(False)
+    dynamic_image = ui.image().classes("w-full max-w-6xl")
+    dynamic_image.set_visibility(False)
+
+    async def generate_filtered_plot() -> None:
+        dynamic_button.disable()
+        dynamic_spinner.set_visibility(True)
+        dynamic_status.set_text("Generating filtered plot...")
+        try:
+            svg_data_uri = await run.io_bound(
+                generate_filtered_plot_svg,
+                DEFAULT_CSV,
+                plot_filter.value or "",
+                plot_type.value,
+            )
+            dynamic_image.set_source(svg_data_uri)
+            dynamic_image.set_visibility(True)
+            dynamic_status.set_text("Filtered plot ready")
+        except ValueError as error:
+            dynamic_status.set_text(str(error))
+        except Exception:
+            logger.exception("Filtered plot generation failed")
+            dynamic_status.set_text(
+                "Filtered plot generation failed; see container logs for details."
+            )
+        finally:
+            dynamic_spinner.set_visibility(False)
+            dynamic_button.enable()
+
+    dynamic_button.on_click(generate_filtered_plot)
+    plot_filter.on("keydown.enter", generate_filtered_plot)
+
+    ui.separator()
+    ui.label("Existing plots").classes("text-lg font-semibold")
     status = ui.label()
     spinner = ui.spinner(size="lg")
     spinner.set_visibility(False)

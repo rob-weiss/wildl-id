@@ -509,6 +509,44 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.patch_run_store(run_store)
 
         async with self.app_user("/visualisations") as user:
+            await user.should_see("Filter-based plots")
+            await user.should_see("Generate filtered plot")
+            await user.should_see("Generate visualisations")
+
+        self.assertEqual(run_store.generate_calls, 0)
+
+    async def test_dynamic_plot_uses_filter_and_keeps_static_plot_action(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox-2024.jpg",
+                    "timestamp": "2024-01-15T08:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox-2025.jpg",
+                    "timestamp": "2025-01-15T08:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera2",
+                    "image_file": "boar-2024.jpg",
+                    "timestamp": "2024-01-15T08:00:00",
+                    "class": "wild boar",
+                },
+            ],
+        )
+        run_store = FakeVisualisationRunStore()
+        self.patch_run_store(run_store)
+
+        async with self.app_user("/visualisations") as user:
+            user.find("Plot filter").type("foxes in 2024")
+            user.find("Generate filtered plot").click()
+            await user.should_see("Filtered plot ready")
+            await user.should_see(kind=ui.image, content="data:image/svg+xml;base64,")
             await user.should_see("Generate visualisations")
 
         self.assertEqual(run_store.generate_calls, 0)
