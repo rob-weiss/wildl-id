@@ -1,11 +1,9 @@
 import plistlib
-import sys
 import tempfile
 import unittest
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 installer = import_module("macos.launchd.install")
 
