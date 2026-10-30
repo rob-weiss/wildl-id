@@ -414,9 +414,7 @@ class LabelReviewTests(unittest.TestCase):
                     app.review.rows[0], (4000, 3000)
                 )
                 root = ET.fromstring(f"<svg>{overlay}</svg>")
-                self.assertEqual(
-                    "".join(root.find("g/text").itertext()), "🏷️ 🦊 fox"
-                )
+                self.assertEqual("".join(root.find("g/text").itertext()), "🏷️ 🦊 fox")
 
                 app.change_mode("Seen")
                 self.assertEqual(app.prediction.text, "🏷️ Predicted: 🦊 fox")
@@ -814,7 +812,8 @@ class LabelReviewTests(unittest.TestCase):
         tooltips = [
             element.text
             for element in app.subject_zoom_button._client().elements.values()
-            if element.tag == "q-tooltip" and element.text.startswith("🎯 Focus subject")
+            if element.tag == "q-tooltip"
+            and element.text.startswith("🎯 Focus subject")
         ]
 
         self.assertEqual(tooltips, ["🎯 Focus subject [Z]"])

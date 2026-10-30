@@ -346,7 +346,9 @@ class ReviewApp:
                                 on_click=lambda label=label: self.choose_label(label),
                             ).props("outline no-caps dense")
                             self.label_buttons.append(button)
-                    self.custom_label = ui.input(label="✏️ Other label").classes("w-full")
+                    self.custom_label = ui.input(label="✏️ Other label").classes(
+                        "w-full"
+                    )
                     self.custom_label.on(
                         "keydown.enter", lambda event: self.save_custom_label()
                     )

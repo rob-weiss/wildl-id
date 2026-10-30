@@ -11,7 +11,6 @@ from pathlib import Path
 from urllib.parse import quote
 
 from nicegui import ui
-
 from src.labelling.organize_images import image_paths, nfc
 from src.labelling.review_app import (
     IMAGES_DIR,
