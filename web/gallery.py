@@ -11,7 +11,13 @@ from pathlib import Path
 from urllib.parse import quote
 
 from nicegui import ui
-from src.labelling.organize_images import image_paths, nfc
+from PIL import Image
+from src.labelling.organize_images import (
+    capture_time_from_exif,
+    image_paths,
+    nfc,
+    parse_camera_filename_time,
+)
 from src.labelling.review_app import (
     IMAGES_DIR,
     LABEL_EMOJIS,
@@ -341,7 +347,9 @@ def row_datetime(row):
 
 
 def recent_rows(rows, now=None):
-    return filter_rows(rows, GalleryFilter(labels=RECENT_SPECIES, hours=24), now=now)
+    return filter_rows(
+        rows, GalleryFilter(labels=RECENT_SPECIES | {"", "unknown"}, hours=24), now=now
+    )
 
 
 def shift_months(day, months):
@@ -707,6 +715,42 @@ def load_rows(csv_path):
         return list(reader)
 
 
+def rows_with_originals(rows, local_images):
+    merged = [dict(row) for row in rows]
+    known = {(nfc(row["location_id"]), row["image_file"]) for row in rows}
+    for location, image_file in local_images:
+        if (location, image_file) not in known:
+            merged.append(
+                {"location_id": location, "image_file": image_file, "class": ""}
+            )
+    for row in merged:
+        if row_datetime(row) is not None:
+            continue
+        path = local_images.get((nfc(row["location_id"]), row["image_file"]))
+        if path is None:
+            continue
+        try:
+            with Image.open(path) as image:
+                taken = capture_time_from_exif(image.getexif())
+        except (ValueError, SyntaxError):
+            taken = None
+        except OSError:
+            continue
+        taken = taken or parse_camera_filename_time(path)
+        if taken is not None:
+            row["timestamp_exif"] = taken.isoformat()
+    return merged
+
+
+def annotation_labels(row):
+    labels = []
+    for title, column in (("Manual", "manual_label"), ("Automatic", "class")):
+        label = (row.get(column) or "").strip()
+        if label and label.casefold() != "unknown":
+            labels.append(f"{title}: {display_label(label)}")
+    return " · ".join(labels) or "Unlabelled"
+
+
 def boxed_image(row, source, classes, display_size=(320, 180)):
     image = ui.interactive_image(source).classes(classes)
     image.on(
@@ -716,6 +760,7 @@ def boxed_image(row, source, classes, display_size=(320, 180)):
                 row,
                 (event.args["width"], event.args["height"]),
                 display_size=display_size,
+                show_label=annotation_labels(row) != "Unlabelled",
             )
         ),
     )
@@ -734,11 +779,14 @@ def gallery_card(row, source, on_click, show_boxes=False):
         )
         image.on("click", on_click)
         with ui.card_section().classes("p-2"):
-            ui.label(display_label(row_label(row))).classes("font-medium")
+            ui.label(
+                annotation_labels(row) if show_boxes else display_label(row_label(row))
+            ).classes("font-medium")
             ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
 
 
-def build_recent_gallery(csv_path, images_dir=IMAGES_DIR, image_base_url=None):
+def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
+    images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
     with ui.column().classes("w-full gap-3"):
         ui.label("Last 24 hours").classes("text-xl font-semibold")
         status = ui.label().classes("text-sm text-gray-600")
@@ -761,7 +809,7 @@ def build_recent_gallery(csv_path, images_dir=IMAGES_DIR, image_base_url=None):
             boxed_image(row, source, "w-[85vw] max-w-full max-h-[75vh]", (960, 540))
             taken = row_datetime(row)
             ui.label(
-                f"{display_label(row_label(row))} · {row['location_id']} · "
+                f"{annotation_labels(row)} · {row['location_id']} · "
                 f"{taken:%Y-%m-%d %H:%M}"
             )
         dialog.open()
@@ -780,8 +828,14 @@ def build_recent_gallery(csv_path, images_dir=IMAGES_DIR, image_base_url=None):
 
     def refresh():
         try:
-            rows = recent_rows(load_rows(csv_path))
-            local_images = image_paths(Path(images_dir)) if rows else {}
+            local_images = image_paths(images_dir)
+            try:
+                rows = load_rows(csv_path)
+            except FileNotFoundError:
+                if not local_images:
+                    raise
+                rows = []
+            rows = recent_rows(rows_with_originals(rows, local_images))
             items[:] = [
                 (row, source)
                 for row in rows

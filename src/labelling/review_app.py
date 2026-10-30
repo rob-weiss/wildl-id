@@ -94,7 +94,9 @@ def parse_box(value):
     return box
 
 
-def box_overlay_svg(row, image_size, prediction=None, display_size=None, zoom_scale=1):
+def box_overlay_svg(
+    row, image_size, prediction=None, display_size=None, zoom_scale=1, show_label=True
+):
     image_width, image_height = image_size
     display_width, display_height = display_size or image_size
     scale_x = image_width / display_width
@@ -117,6 +119,13 @@ def box_overlay_svg(row, image_size, prediction=None, display_size=None, zoom_sc
         predicted_label = row["class"]
         is_correct = bool(manual_label) and manual_label == row["class"]
     color = "#2e7d32" if is_correct else "#c62828"
+    outline = (
+        f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
+        f'height="{box_height:.1f}" fill="none" stroke="{color}" '
+        f'stroke-width="{4 / zoom_scale:g}" vector-effect="non-scaling-stroke" />'
+    )
+    if not show_label:
+        return outline
     label = format_annotation(true_label, predicted_label)
     font_size = 16
     padding_x = round(font_size * 0.45)
@@ -137,10 +146,7 @@ def box_overlay_svg(row, image_size, prediction=None, display_size=None, zoom_sc
         f"{html.escape(line, quote=False)}</tspan>"
         for index, line in enumerate(lines)
     )
-    return (
-        f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
-        f'height="{box_height:.1f}" fill="none" stroke="{color}" '
-        f'stroke-width="{4 / zoom_scale:g}" vector-effect="non-scaling-stroke" />'
+    return outline + (
         f'<g transform="translate({label_left * scale_x:.1f} '
         f'{label_top * scale_y:.1f}) scale({scale_x} {scale_y})">'
         '<rect x="0" y="0" '

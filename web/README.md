@@ -7,11 +7,17 @@ the rail to show the full logo and navigation labels.
 
 The home page also shows a mini gallery of sightings captured in the last
 24 hours, newest first. It includes roe deer, wild boar, badger, marten, fox,
-hare, and raccoon, using manual labels when available. Bounding boxes and
-labels appear over images when box data is available. Click an image to
+hare, and raccoon, using manual labels when available to select species.
+Unclassified photos are included until their species is known, including
+originals not yet present in the labels CSV. Capture times come from the CSV
+or the original image's EXIF metadata; supported camera filenames are a
+fallback. File modification times are not used. Available manual and automatic
+labels are both shown, even without a bounding box. Boxes appear when present,
+and photos with no annotations are marked **Unlabelled**. Click an image to
 enlarge it. The gallery reloads the CSV and image availability every minute
 without reloading the page; older sightings drop out automatically. Results
-are paginated when there are more than 48 images.
+are paginated when there are more than 48 images. Discovery is read-only and
+never creates or changes labels.
 
 The app binds only to localhost; it is not available from the
 LAN or internet. There is no login, so other local processes may access it.

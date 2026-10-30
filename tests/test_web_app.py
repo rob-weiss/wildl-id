@@ -74,6 +74,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         )
         self.csv_patch.start()
         self.addCleanup(self.csv_patch.stop)
+        self.source_images = self.root / "source-images"
+        images_patch = patch.object(gallery, "IMAGES_DIR", self.source_images)
+        images_patch.start()
+        self.addCleanup(images_patch.stop)
 
     @asynccontextmanager
     async def http_client(self):
@@ -124,6 +128,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         annotated_images = self.root / "images"
         annotated_images.mkdir()
         Image.new("RGB", (16, 16), "green").save(annotated_images / "camera1_photo.png")
+
+    def write_original_image(self, name, taken):
+        path = self.source_images / str(taken.year) / "camera1" / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        exif = Image.Exif()
+        exif[0x0132] = taken.strftime("%Y:%m:%d %H:%M:%S")
+        Image.new("RGB", (16, 16), "green").save(path, exif=exif)
+        return path
 
     def test_cloud_image_url_encodes_nested_path_segments(self):
         images_root = self.root / "images"
@@ -364,6 +376,129 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 ]
                 self.assertTrue(any(source.endswith("/boar.jpg") for source in sources))
                 self.assertFalse(any(source.endswith("/fox.jpg") for source in sources))
+
+    async def test_home_discovers_unlabelled_photos_and_refreshes_annotations(self):
+        now = datetime.now() - timedelta(minutes=1)
+        fields = [
+            "location_id",
+            "image_file",
+            "timestamp",
+            "class",
+            "manual_label",
+            "box",
+        ]
+        excluded = {
+            "location_id": "camera1",
+            "image_file": "excluded.jpg",
+            "class": "human",
+        }
+        self.write_csv(fields, [excluded])
+        self.write_original_image("recent.jpg", now)
+        self.write_original_image("excluded.jpg", now)
+        self.write_original_image("old.jpg", now - timedelta(hours=25))
+        self.write_original_image("future.jpg", now + timedelta(hours=1))
+        with patch.object(gallery.ui, "timer") as timer:
+            async with self.app_user("/") as user:
+                await user.should_see("1 images")
+                await user.should_see("Unlabelled")
+                image = next(iter(user.find(kind=ui.interactive_image).elements))
+                self.assertTrue(image.source.endswith("/camera1/recent.jpg"))
+                user.find(kind=ui.interactive_image).trigger(
+                    "loaded", {"width": 16, "height": 16}
+                )
+                self.assertEqual(image.content, "")
+                self.write_csv(
+                    fields,
+                    [
+                        excluded,
+                        {
+                            "location_id": "camera1",
+                            "image_file": "recent.jpg",
+                            "class": "fox",
+                            "manual_label": "badger",
+                            "box": "[0.5, 0.5, 0.4, 0.2]",
+                        },
+                    ],
+                )
+                timer.call_args.args[1]()
+                await user.should_see("1 images")
+                await user.should_see("Manual:")
+                await user.should_see("Automatic:")
+                await user.should_not_see("Unlabelled")
+                image = next(iter(user.find(kind=ui.interactive_image).elements))
+                user.find(kind=ui.interactive_image).trigger(
+                    "loaded", {"width": 16, "height": 16}
+                )
+                self.assertIn("badger", image.content)
+                self.assertIn("fox", image.content)
+                self.write_original_image("new-arrival.jpg", now)
+                timer.call_args.args[1]()
+                await user.should_see("2 images")
+
+    def test_original_capture_time_falls_back_to_filename_after_invalid_exif(self):
+        taken = datetime(2026, 10, 30, 12, 45)
+        path = self.write_original_image("Aufnahme_261030_1245_test.jpg", taken)
+        with Image.open(path) as original:
+            original.load()
+            exif = original.getexif()
+            exif[0x0132] = "invalid capture time"
+            original.save(path, exif=exif)
+        rows = gallery.rows_with_originals([], gallery.image_paths(self.source_images))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(gallery.row_datetime(rows[0]), taken)
+
+    async def test_home_shows_photos_without_csv_and_does_not_create_labels(self):
+        self.write_original_image("recent.jpg", datetime.now() - timedelta(minutes=1))
+        async with self.app_user("/") as user:
+            await user.should_see("1 images")
+            await user.should_see("Unlabelled")
+        self.assertFalse(self.csv_path.exists())
+
+    async def test_home_shows_both_labels_even_without_box(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "recent.jpg",
+                    "timestamp": (datetime.now() - timedelta(minutes=1)).isoformat(),
+                    "class": "fox",
+                    "manual_label": "badger",
+                }
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("1 images")
+                await user.should_see("Manual:")
+                await user.should_see("Automatic:")
+
+    async def test_home_shows_box_without_inventing_labels(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class", "box"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "recent.jpg",
+                    "timestamp": (datetime.now() - timedelta(minutes=1)).isoformat(),
+                    "class": "",
+                    "box": "[0.5, 0.5, 0.4, 0.2]",
+                }
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("Unlabelled")
+                image = next(iter(user.find(kind=ui.interactive_image).elements))
+                user.find(kind=ui.interactive_image).trigger(
+                    "loaded", {"width": 1600, "height": 900}
+                )
+                self.assertIn("<rect", image.content)
+                self.assertNotIn("<text", image.content)
 
     async def test_home_recent_gallery_recovers_from_missing_csv(self):
         with patch.object(gallery.ui, "timer") as timer:
