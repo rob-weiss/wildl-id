@@ -35,6 +35,7 @@ import gc
 import logging
 import os
 import re
+import shutil
 import sys
 import time
 import warnings
@@ -90,10 +91,6 @@ enable_ocr = True
 # Enable OCR fallback: if macOS Vision fails, try EasyOCR
 # Requires: pip install easyocr
 enable_ocr_fallback = True
-
-# Reprocess incomplete entries (entries without class or temperature)
-# Set to False to skip incomplete entries and only process new images
-reprocess_incomplete = False
 
 # OCR Framework availability checks
 # macOS Vision is only available on macOS — skip the import entirely on other platforms
@@ -830,6 +827,60 @@ def show_image_with_detection(
     plt.close(fig)
 
 
+def latest_classifier_weights(models_dir=None):
+    models_dir = Path(models_dir) if models_dir is not None else repo_dir / "models"
+    candidates = []
+    for weights in models_dir.glob("deepfaune_finetuned_*/weights.pt"):
+        match = re.fullmatch(
+            r"deepfaune_finetuned_(\d{8}-\d{6})_.+", weights.parent.name
+        )
+        if match and weights.is_file():
+            candidates.append((match.group(1), weights.parent.name, weights))
+    return max(candidates)[2] if candidates else None
+
+
+class SpeciesClassifier:
+    def __init__(self, weights_path, device):
+        self.device = device
+        self.weights_path = weights_path
+        self.pretrained = weights_path is None
+        if self.pretrained:
+            print("No fine-tuned checkpoint found; using pretrained DeepFaune")
+            self.model = pw_classification.DeepfauneClassifier(
+                device=device, class_name_lang="en"
+            )
+        else:
+            try:
+                from .finetune_classifier import load_finetuned_classifier
+            except ImportError:
+                from finetune_classifier import load_finetuned_classifier
+            print(f"Loading latest species classifier: {weights_path}")
+            self.model, self.class_names, self.transform = load_finetuned_classifier(
+                weights_path, device=device
+            )
+
+    def single_image_classification(self, image, img_id):
+        if self.pretrained:
+            result = self.model.single_image_classification(image, img_id=img_id)
+            return {
+                **result,
+                "prediction": map_classifier_to_wildlife(result["prediction"]),
+            }
+        with Image.fromarray(image).convert("RGB") as crop:
+            tensor = self.transform(crop).unsqueeze(0).to(self.device)
+        with torch.inference_mode():
+            probabilities = self.model(tensor).softmax(dim=1)[0]
+            confidence, index = probabilities.max(dim=0)
+        return {
+            "prediction": self.class_names[index.item()],
+            "confidence": confidence.item(),
+        }
+
+
+def load_species_classifier(device):
+    return SpeciesClassifier(latest_classifier_weights(), device)
+
+
 def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
@@ -838,10 +889,6 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     None
         Saves results to CSV and parquet files.
     """
-    # Determine whether to reprocess incomplete rows for this run.
-    # Keep backward compatibility with the module-level default when flag is not set.
-    reprocess_current_run = reprocess_incomplete or reprocess_missing
-
     # Determine device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     if torch.backends.mps.is_available():
@@ -874,19 +921,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     # Load classification model if enabled
     classification_model = None
     if use_classification:
-        print("Loading DeepFaune classifier for species identification...")
-        try:
-            classification_model = pw_classification.DeepfauneClassifier(
-                device=device, class_name_lang="en"
-            )
-            print("✓ Classification model loaded successfully")
-        except Exception as e:
-            print(f"✗ ERROR: Could not load classification model: {e}")
-            import traceback
-
-            traceback.print_exc()
-            print("Continuing with detection only...")
-            classification_model = None
+        classification_model = load_species_classifier(device)
 
     if classification_model is None:
         print("WARNING: Classification is disabled or failed to load!")
@@ -894,8 +929,16 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
 
     # Create output directories
     classifier_suffix = "_classified" if use_classification else ""
+    classifier_run = (
+        classification_model.weights_path.parent.name
+        if classification_model is not None
+        and classification_model.weights_path is not None
+        else "deepfaune_pretrained" if use_classification else ""
+    )
+    run_suffix = f"_{classifier_run}" if classifier_run else ""
     labels_dir = (
-        repo_dir / "labels" / f"labels_{model_version}_{model_name}{classifier_suffix}"
+        repo_dir / "labels"
+        / f"labels_{model_version}_{model_name}{classifier_suffix}{run_suffix}"
     )
     labels_dir.mkdir(parents=True, exist_ok=True)
     images_output_dir = labels_dir / "images"
@@ -917,9 +960,6 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
     ]
     locations = {info["location_id"] for info in image_info_list}
 
-    def path_of(loc, name):
-        return indexed_paths.get((nfc(loc), name), repo_dir / "images" / loc / name)
-
     image_info_list.sort(key=lambda x: (x["location_id"], x["name"]))
 
     # Load existing results to avoid reprocessing
@@ -927,6 +967,13 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         labels_dir
         / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
     )
+    if not csv_path.exists():
+        source_csvs = list((repo_dir / "labels").glob(f"*/{csv_path.name}"))
+        if source_csvs:
+            source_csv = max(source_csvs, key=lambda path: path.stat().st_mtime_ns)
+            shutil.copy2(source_csv, csv_path)
+            print(f"Copied existing labels (including manual labels): {source_csv}")
+    print(f"Writing labels to: {csv_path}")
 
     # Define explicit dtypes to avoid FutureWarning about NA entries
     COLUMN_DTYPES = {
@@ -943,123 +990,22 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         "manual_label": str,
     }
 
-    processed_images = set()
     existing_df = None
     if csv_path.exists():
-        # Read CSV without forcing float dtypes initially to handle empty strings
-        existing_df = pd.read_csv(csv_path, keep_default_na=False)
-
-        # Define expected columns with default values
-        expected_columns = {
-            "location_id": "",
-            "timestamp": "",
-            "timestamp_exif": "",
-            "image_file": "",
-            "class": "none",
-            "box": "",
-            "lighting": "unknown",
-            "confidence": 0.0,
-            "classification_confidence": 0.0,
-            "temperature_celsius": np.nan,
-            "manual_label": "",
-        }
-
-        # Add missing columns with default values
-        for col, default_value in expected_columns.items():
-            if col not in existing_df.columns:
-                print(
-                    f"Adding missing column '{col}' with default value: {default_value}"
-                )
-                existing_df[col] = default_value
-
-        # Replace empty strings in numeric columns with default values before type conversion
-        for col in ["confidence", "classification_confidence"]:
-            existing_df[col] = existing_df[col].replace("", 0.0)
-        existing_df["temperature_celsius"] = existing_df["temperature_celsius"].replace(
-            "", np.nan
+        existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
+        if "manual_label" not in existing_df:
+            existing_df["manual_label"] = ""
+        backup = csv_path.with_name(
+            f"{csv_path.name}.before-relabel-{datetime.now():%Y%m%d-%H%M%S-%f}.bak"
         )
+        shutil.copy2(csv_path, backup)
+        print(f"Full CSV backup (including manual labels): {backup}")
 
-        # Now convert to proper dtypes
-        # Now convert to proper dtypes
-        existing_df = existing_df.astype(COLUMN_DTYPES)[list(COLUMN_DTYPES)]
-
-        # Backfill EXIF timestamps for existing rows without rerunning detection/OCR
-        # Values with a UTC offset come from an earlier version and are recomputed
-        missing_exif = (existing_df["timestamp_exif"] == "") | existing_df[
-            "timestamp_exif"
-        ].str.contains(r"[+-]\d{2}:\d{2}$")
-        if missing_exif.any():
-            print(f"Backfilling EXIF timestamps for {missing_exif.sum()} entries...")
-            existing_df.loc[missing_exif, "timestamp_exif"] = [
-                resolve_exif_timestamp(
-                    extract_exif_timestamp(path_of(loc, name)),
-                    ocr_ts,
-                    path_of(loc, name),
-                    ocr_failures_log,
-                )
-                for loc, name, ocr_ts in zip(
-                    existing_df.loc[missing_exif, "location_id"],
-                    existing_df.loc[missing_exif, "image_file"],
-                    existing_df.loc[missing_exif, "timestamp"],
-                )
-            ]
-        # Rewrite so the header matches the column order used when appending new rows
-        existing_df.to_csv(csv_path, index=False)
-
-        # Only mark as processed if the entry is complete (has class, timestamp, AND temperature)
-        # Check for complete entries: all required fields are present
-        # Note: "none" is a valid class when no animal/human/vehicle is detected
-        complete_mask = (
-            (existing_df["class"].notna())
-            & (existing_df["class"] != "")
-            & (existing_df["timestamp"] != "")
-            & (existing_df["temperature_celsius"].notna())
-        )
-        complete_mask |= existing_df["manual_label"] != ""
-        complete_df = existing_df[complete_mask]
-
-        if reprocess_current_run:
-            # Mark only complete entries as processed; incomplete ones will be reprocessed
-            processed_images = set(
-                zip(complete_df["location_id"].map(nfc), complete_df["image_file"])
-            )
-
-            incomplete_count = len(existing_df) - len(complete_df)
-            if incomplete_count > 0:
-                print(
-                    f"Found {incomplete_count} incomplete entries that will be reprocessed\n"
-                )
-
-            # Remove incomplete entries from existing_df to avoid duplicates
-            # Keep only the complete entries; incomplete ones will be replaced
-            if len(complete_df) > 0:
-                existing_df = complete_df.copy()
-            else:
-                existing_df = None  # No complete entries, start fresh
-        else:
-            # Mark all entries (complete and incomplete) as processed
-            processed_images = set(
-                zip(existing_df["location_id"].map(nfc), existing_df["image_file"])
-            )
-
-            incomplete_count = len(existing_df) - len(complete_df)
-            if incomplete_count > 0:
-                print(
-                    f"Found {incomplete_count} incomplete entries that will be kept as-is\n"
-                )
-
-            # Keep all entries including incomplete ones
-            # No need to filter, existing_df already contains everything
-
-    images_to_process = [
-        img_info
-        for img_info in image_info_list
-        if (img_info["location_id"], img_info["name"]) not in processed_images
-    ]
+    images_to_process = image_info_list
 
     print(
         f"Found {len(image_info_list)} total images in {len(locations)} locations, "
-        f"{len(processed_images)} already processed, {len(images_to_process)} to process\n"
+        f"rerunning detection and classification for all {len(images_to_process)} images\n"
     )
 
     results = []
@@ -1171,9 +1117,7 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
                                         )
 
                                         # Map the classifier output to our categories
-                                        classified_species = map_classifier_to_wildlife(
-                                            classifier_class
-                                        )
+                                        classified_species = classifier_class
 
                                         # Always use the classified species, even if confidence is low
                                         # This way users can see what the model thinks it is
@@ -1181,10 +1125,9 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
                                     else:
                                         img_class = "animal"
                                 except Exception as e:
-                                    print(f"    Classification error: {e}")
-                                    import traceback
-
-                                    img_class = "animal"
+                                    raise RuntimeError(
+                                        f"Classification failed for {image_path}"
+                                    ) from e
                                 finally:
                                     # Close the cropped image to free memory
                                     cropped_img.close()
@@ -1215,12 +1158,9 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
                 else:
                     metadata = {"timestamp": None, "temperature_celsius": None}
         except Exception as e:
-            try:
-                image_path.unlink()
-                print(f"    🗑️  Deleted corrupt image: {image_path} ({e})")
-            except Exception as del_err:
-                print(f"    ⚠️  Could not delete {image_path}: {del_err}")
-            continue
+            raise RuntimeError(
+                f"Labelling failed; original image retained: {image_path}"
+            ) from e
 
         result_dict = {
             "location_id": location_id,
@@ -1253,14 +1193,29 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
             new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
 
             if existing_df is not None and len(existing_df) > 0:
-                # Append to CSV file without keeping everything in memory
-                new_rows_df.to_csv(csv_path, mode="a", header=False, index=False)
-                # Don't keep existing_df in memory - it will grow too large
-                # existing_df is only used to check what's already processed
+                keys = ["location_id", "image_file"]
+                existing_df = existing_df.set_index(keys)
+                existing_df.index = pd.MultiIndex.from_tuples(
+                    [(nfc(location), name) for location, name in existing_df.index],
+                    names=keys,
+                )
+                new_rows_df = new_rows_df.set_index(keys)
+                retained = existing_df.loc[~existing_df.index.isin(new_rows_df.index)]
+                refreshed = existing_df.loc[
+                    existing_df.index.isin(new_rows_df.index)
+                ].copy()
+                for column in new_rows_df.columns:
+                    if column != "manual_label":
+                        refreshed[column] = (
+                            new_rows_df[column].reindex(refreshed.index).to_numpy()
+                        )
+                added = new_rows_df.loc[~new_rows_df.index.isin(existing_df.index)]
+                existing_df = pd.concat([retained, refreshed, added]).reset_index()
             else:
-                # First batch - write with header
                 existing_df = new_rows_df
-                existing_df.to_csv(csv_path, index=False)
+            temporary_csv = csv_path.with_suffix(".csv.tmp")
+            existing_df.to_csv(temporary_csv, index=False)
+            temporary_csv.replace(csv_path)
 
             # Clear results to free memory
             results = []

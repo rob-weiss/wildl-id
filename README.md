@@ -201,6 +201,29 @@ copies, a CSV backup, and the keeper mapping are saved under
 uv run src/labelling/label_images.py
 ```
 
+Each run repeats MegaDetector detection and species classification for every image,
+including new and manually reviewed images. Species classification automatically
+uses `weights.pt` from the newest timestamped `models/deepfaune_finetuned_*` run;
+incomplete runs without weights are ignored. If no fine-tuned model exists, it uses
+pretrained DeepFaune. A checkpoint loading error stops the run instead of silently
+falling back to a different model.
+
+Outputs live under
+`labels/labels_<detector>_classified_<classifier-run>/`, so the folder identifies
+both models. Pretrained DeepFaune uses the `deepfaune_pretrained` suffix.
+A new model folder starts with a full copy of the most recently modified matching
+labels CSV, including manual labels; the source CSV is left unchanged. Subsequent
+runs for the same model use that model's CSV.
+
+Before rewriting an existing CSV, the script duplicates it as
+`*.csv.before-relabel-<timestamp>.bak`, including all manual labels. It refreshes
+`class`, confidence, boxes, and metadata while preserving `manual_label` by location
+and filename. CSV updates are saved atomically in batches. Existing rows whose
+original image is missing are retained unchanged. Inference failures stop the run
+without deleting the original image. Existing duplicate rows retain their individual
+manual labels, even if those labels conflict; all matching rows get the refreshed
+prediction. Do not run the reviewer during labelling.
+
 ### Review Machine Labels
 
 Run the browser-based reviewer locally:
@@ -239,8 +262,8 @@ the reviewer shows unchecked rows. Use the in-window mode dropdown to select **L
 model incorrect**, **Unseen + errors**, **Seen**, or **All**. The incorrect-prediction
 mode uses validation images from the newest timestamped fine-tuning run under `models/`.
 A `.csv.before-review.bak` backup is created before the first save. Labelling runs
-preserve the manual column and skip reviewed images, even if their metadata is
-incomplete. Do not run the reviewer and labelling process simultaneously.
+preserve the manual column but refresh predictions and boxes for reviewed images
+too. Do not run the reviewer and labelling process simultaneously.
 
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
 By default, the reviewer uses the MegaDetector V6 yolov10-e and DeepFaune labels under
