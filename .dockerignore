@@ -4,6 +4,7 @@
 !web/pyproject.toml
 !web/uv.lock
 !web/app.py
+!web/gallery.py
 !web/visualisations.py
 !src/
 !src/labelling/

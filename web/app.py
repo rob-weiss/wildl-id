@@ -6,8 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
-from src.labelling.review_app import ReviewApp
+from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
+from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page
 from web.visualisations import VisualisationRunStore
 
 app = FastAPI()
@@ -15,6 +16,11 @@ visualisation_runs = VisualisationRunStore()
 logger = logging.getLogger(__name__)
 ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
 app.mount("/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets")
+app.mount(
+    LOCAL_IMAGE_ROUTE,
+    StaticFiles(directory=IMAGES_DIR, check_dir=False),
+    name="local-images",
+)
 
 
 def add_brand_logo() -> None:
@@ -54,12 +60,21 @@ def home_page() -> None:
         add_brand_logo()
         ui.label("Wildlife analysis").classes("text-2xl font-semibold")
         ui.link("Manual review", "/review").classes("text-lg")
+        ui.link("Gallery", "/gallery").classes("text-lg")
         ui.link("Visualisations", "/visualisations").classes("text-lg")
 
 
 @ui.page("/review")
 def review_page() -> None:
     build_default_review_page()
+
+
+@ui.page("/gallery")
+def gallery_page() -> None:
+    add_brand_logo()
+    build_gallery_page(
+        DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
+    )
 
 
 @ui.page("/visualisations")

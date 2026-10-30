@@ -10,7 +10,7 @@ WORKDIR /app
 COPY web/pyproject.toml web/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project --no-cache
 
-COPY web/app.py web/visualisations.py ./web/
+COPY web/app.py web/gallery.py web/visualisations.py ./web/
 COPY src/labelling/review_app.py src/labelling/review_labels.py src/labelling/remove_empty_images.py src/labelling/organize_images.py src/labelling/pixel_hash.py ./src/labelling/
 COPY src/labelling/review_zoom.js ./src/labelling/
 COPY src/labelling/vendor/panzoom.es.js src/labelling/vendor/PANZOOM-LICENSE.txt ./src/labelling/vendor/
