@@ -263,6 +263,59 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_auto_label_button_runs_background_job_and_reloads_review(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            app.build()
+        self.addCleanup(container.delete)
+        app.review.mode = "All"
+
+        with (
+            patch.object(
+                review_app_module.run, "io_bound", new_callable=AsyncMock
+            ) as io_bound,
+            patch.object(review_app_module.ui, "notify"),
+        ):
+            asyncio.run(app.auto_label_unseen())
+
+        io_bound.assert_awaited_once_with(
+            review_app_module.run_automatic_labelling, self.csv_path
+        )
+        self.assertEqual(app.review.mode, "All")
+        self.assertEqual(app.review.original_bytes, self.csv_path.read_bytes())
+        self.assertFalse(app.auto_label_running)
+        self.assertTrue(app.auto_label_button.enabled)
+
+    def test_downloads_without_predictions_are_unseen_and_can_be_reviewed(self):
+        original = Path(self.temp_dir.name) / "download.jpg"
+        Image.new("RGB", (40, 30)).save(original)
+        indexed_paths = {
+            ("camera1", "correct.jpg"): original,
+            ("camera1", "download.jpg"): original,
+        }
+        before = self.csv_path.read_bytes()
+        with patch.object(review_module, "image_paths", return_value=indexed_paths):
+            review = LabelReview(self.csv_path)
+
+            self.assertEqual(review.pending, [0, 3])
+            self.assertEqual(len(review.rows), 4)
+            self.assertEqual(review.rows[1]["manual_label"], "fox")
+            row = review.rows[3]
+            self.assertEqual(row["image_file"], "download.jpg")
+            self.assertEqual(row["manual_label"], "")
+            self.assertEqual(row["class"], "unknown")
+            self.assertEqual(review.original_path(row), original)
+            self.assertEqual(self.csv_path.read_bytes(), before)
+
+            review.position = 1
+            review.choose("hare")
+            reopened = LabelReview(self.csv_path)
+            self.assertEqual(len(reopened.rows), 4)
+            self.assertEqual(reopened.rows[3]["manual_label"], "hare")
+            self.assertEqual(reopened.pending, [0])
+            review.undo()
+            self.assertEqual(review.pending, [0, 3])
+
     def test_subject_focus_persists_between_images_and_handles_missing_boxes(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:

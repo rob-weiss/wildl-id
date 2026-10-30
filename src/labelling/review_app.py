@@ -71,6 +71,15 @@ def cloud_image_url(
     return f"{base_url.rstrip('/')}/{quote(relative_path.as_posix(), safe='/')}"
 
 
+def run_automatic_labelling(csv_path):
+    from .label_images import process_images_with_pytorch_wildlife
+
+    process_images_with_pytorch_wildlife(
+        unlabelled_only=True,
+        output_csv_path=csv_path,
+    )
+
+
 def parse_box(value):
     try:
         box = ast.literal_eval(value or "")
@@ -164,6 +173,7 @@ class ReviewApp:
         self.box_history = []
         self.label_buttons = []
         self.cleanup_dialog_open = False
+        self.auto_label_running = False
         self.focus_subject = False
         self.image_mode = "box"
 
@@ -292,6 +302,17 @@ class ReviewApp:
                             )
                             .props("outline no-caps")
                             .classes("text-red-700")
+                        )
+                    with ui.row().classes("w-full items-center gap-2"):
+                        self.auto_label_button = ui.button(
+                            "Auto-label unseen",
+                            icon="auto_awesome",
+                            on_click=self.auto_label_unseen,
+                        ).props("outline no-caps")
+                        self.auto_label_spinner = ui.spinner(size="sm")
+                        self.auto_label_spinner.set_visibility(False)
+                        self.auto_label_status = ui.label().classes(
+                            "text-sm text-gray-600"
                         )
                     ui.label("🏷️ Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
@@ -480,7 +501,11 @@ class ReviewApp:
         self.viewer.update()
 
     def on_image_mouse(self, event: events.MouseEventArguments):
-        if self.image_mode != "box" or self.cleanup_dialog_open:
+        if (
+            self.image_mode != "box"
+            or self.cleanup_dialog_open
+            or self.auto_label_running
+        ):
             return
         if self.current_index is None or self.image_size is None:
             return
@@ -514,7 +539,7 @@ class ReviewApp:
         self.refresh()
 
     def on_key(self, event: events.KeyEventArguments):
-        if self.cleanup_dialog_open:
+        if self.cleanup_dialog_open or self.auto_label_running:
             return
         if not event.action.keydown or event.action.repeat:
             return
@@ -534,6 +559,8 @@ class ReviewApp:
                 self.choose_label(label)
 
     def choose_label(self, label):
+        if self.auto_label_running:
+            return
         try:
             self.review.choose(label)
         except (OSError, RuntimeError) as error:
@@ -552,14 +579,59 @@ class ReviewApp:
         self.custom_label.value = ""
 
     def undo_label(self):
+        if self.auto_label_running:
+            return
         try:
             self.review.undo()
         except (OSError, RuntimeError) as error:
             ui.notify(f"Label undo failed: {error}", type="negative")
         self.refresh()
 
+    def set_labelling_state(self, running):
+        self.auto_label_running = running
+        self.auto_label_button.set_enabled(not running)
+        self.accept_button.set_enabled(not running)
+        self.undo_button.set_enabled(not running and bool(self.review.history))
+        self.undo_box_button.set_enabled(not running and bool(self.box_history))
+        self.remove_empty_button.set_enabled(not running)
+        self.save_label_button.set_enabled(not running)
+        self.custom_label.set_enabled(not running)
+        for button in self.label_buttons:
+            button.set_enabled(not running)
+        self.auto_label_spinner.set_visibility(running)
+        self.auto_label_status.set_text(
+            "Labelling unlabelled images..." if running else ""
+        )
+
+    async def auto_label_unseen(self):
+        if self.auto_label_running:
+            return
+        count = sum(
+            not str(row.get("manual_label") or "").strip() for row in self.review.rows
+        )
+        if not count:
+            ui.notify("No unlabelled images to process")
+            return
+        self.set_labelling_state(True)
+        try:
+            await run.io_bound(run_automatic_labelling, self.review.csv_path)
+            updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
+            updated_review.set_mode(self.review.mode)
+        except Exception as error:  # noqa: BLE001
+            ui.notify(f"Automatic labelling failed: {error}", type="negative")
+            return
+        finally:
+            self.set_labelling_state(False)
+        self.review = updated_review
+        self.box_history.clear()
+        self.drag_start = None
+        self.image_size = None
+        self.undo_box_button.disable()
+        self.refresh()
+        ui.notify("Automatic labelling complete", type="positive")
+
     async def confirm_remove_empty(self):
-        if self.cleanup_dialog_open:
+        if self.cleanup_dialog_open or self.auto_label_running:
             return
         count = sum(is_confirmed_empty(row) for row in self.review.rows)
         if not count:
@@ -618,7 +690,7 @@ class ReviewApp:
         ui.notify(f"Removed {count} confirmed empty images", type="positive")
 
     def undo_box(self):
-        if not self.box_history:
+        if not self.box_history or self.auto_label_running:
             return
         index, previous_box = self.box_history[-1]
         row = self.review.rows[index]

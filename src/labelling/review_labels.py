@@ -142,6 +142,20 @@ class LabelReview:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
+        self._image_paths = image_paths(self.csv_path.resolve().parents[2] / "images")
+        existing_images = {
+            (nfc(row["location_id"]), row["image_file"]) for row in self.rows
+        }
+        for location_id, image_file in sorted(self._image_paths):
+            if (nfc(location_id), image_file) in existing_images:
+                continue
+            row = dict.fromkeys(self.columns, "")
+            row.update(
+                location_id=location_id,
+                image_file=image_file,
+                **{"class": "unknown"},
+            )
+            self.rows.append(row)
         self.latest_model_name, self.latest_incorrect_filenames = (
             latest_incorrect_predictions()
         )
@@ -151,7 +165,6 @@ class LabelReview:
         self.position = 0
         self.history = []
         self.original_bytes = self.csv_path.read_bytes()
-        self._image_paths = None
 
     def original_path(self, row):
         """Return the original photo under images/<year>/<location>/, if present."""

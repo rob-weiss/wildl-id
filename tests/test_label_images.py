@@ -13,6 +13,37 @@ from src.labelling import label_images
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_unlabelled_selection_includes_new_images_and_skips_manual_labels(self):
+        image_info = [
+            {"location_id": "camera", "name": name}
+            for name in ("reviewed.jpg", "unreviewed.jpg", "new.jpg")
+        ]
+        existing = pd.DataFrame(
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "reviewed.jpg",
+                    "manual_label": "fox",
+                },
+                {
+                    "location_id": "camera",
+                    "image_file": "unreviewed.jpg",
+                    "manual_label": " ",
+                },
+                {
+                    "location_id": "camera",
+                    "image_file": "removed.jpg",
+                    "manual_label": "hare",
+                },
+            ]
+        )
+
+        selected = label_images.images_without_manual_labels(image_info, existing)
+
+        self.assertEqual(
+            [image["name"] for image in selected], ["unreviewed.jpg", "new.jpg"]
+        )
+
     def test_finetuned_classifier_keeps_native_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
@@ -148,6 +179,72 @@ class AutomaticLabelTests(unittest.TestCase):
             backups = list(output_dir.glob("*.before-relabel-*.bak"))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), original)
+
+    def test_unlabelled_run_updates_active_csv_and_skips_reviewed_images(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            labels_dir = root / "labels/active"
+            labels_dir.mkdir(parents=True)
+            csv_path = labels_dir / "labels.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "location_id": "camera",
+                        "image_file": "reviewed.jpg",
+                        "class": "fox",
+                        "manual_label": "fox",
+                    },
+                    {
+                        "location_id": "camera",
+                        "image_file": "unreviewed.jpg",
+                        "class": "fox",
+                        "manual_label": "",
+                    },
+                ]
+            ).to_csv(csv_path, index=False)
+            paths = {}
+            for name in ("reviewed.jpg", "unreviewed.jpg", "new.jpg"):
+                path = root / name
+                Image.new("RGB", (40, 40)).save(path)
+                paths[("camera", name)] = path
+            detector = Mock()
+            detector.single_image_detection.return_value = {}
+            classifier = Mock()
+            classifier.weights_path = (
+                root / "models/deepfaune_finetuned_test/weights.pt"
+            )
+            with (
+                patch.object(label_images, "repo_dir", root),
+                patch.object(label_images, "image_paths", return_value=paths),
+                patch.object(label_images, "enable_ocr", False),
+                patch.object(label_images, "save_annotated_images", False),
+                patch.object(
+                    label_images.pw_detection, "MegaDetectorV6", return_value=detector
+                ),
+                patch.object(
+                    label_images,
+                    "load_species_classifier",
+                    return_value=classifier,
+                ),
+                patch.object(label_images, "resolve_exif_timestamp", return_value=""),
+                patch.object(label_images, "extract_exif_timestamp", return_value=None),
+                patch.dict(
+                    sys.modules,
+                    {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
+                ),
+            ):
+                label_images.process_images_with_pytorch_wildlife(
+                    unlabelled_only=True,
+                    output_csv_path=csv_path,
+                )
+
+            self.assertEqual(detector.single_image_detection.call_count, 2)
+            updated = pd.read_csv(csv_path, keep_default_na=False).set_index(
+                "image_file"
+            )
+            self.assertEqual(updated.loc["reviewed.jpg", "manual_label"], "fox")
+            self.assertEqual(updated.loc["unreviewed.jpg", "manual_label"], "")
+            self.assertIn("new.jpg", updated.index)
 
 
 if __name__ == "__main__":

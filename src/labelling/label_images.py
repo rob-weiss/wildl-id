@@ -881,7 +881,24 @@ def load_species_classifier(device):
     return SpeciesClassifier(latest_classifier_weights(), device)
 
 
-def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
+def images_without_manual_labels(image_info_list, existing_df):
+    manually_labelled = set()
+    if existing_df is not None and "manual_label" in existing_df.columns:
+        manually_labelled = {
+            (nfc(row["location_id"]), row["image_file"])
+            for row in existing_df.to_dict("records")
+            if str(row.get("manual_label") or "").strip()
+        }
+    return [
+        image
+        for image in image_info_list
+        if (nfc(image["location_id"]), image["name"]) not in manually_labelled
+    ]
+
+
+def process_images_with_pytorch_wildlife(
+    camera=None, reprocess_missing=False, unlabelled_only=False, output_csv_path=None
+):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
     Returns
@@ -964,10 +981,14 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
 
     # Load existing results to avoid reprocessing
     csv_path = (
-        labels_dir
-        / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
+        Path(output_csv_path)
+        if output_csv_path
+        else (
+            labels_dir
+            / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
+        )
     )
-    if not csv_path.exists():
+    if not csv_path.exists() and output_csv_path is None:
         source_csvs = list((repo_dir / "labels").glob(f"*/{csv_path.name}"))
         if source_csvs:
             source_csv = max(source_csvs, key=lambda path: path.stat().st_mtime_ns)
@@ -1001,11 +1022,15 @@ def process_images_with_pytorch_wildlife(camera=None, reprocess_missing=False):
         shutil.copy2(csv_path, backup)
         print(f"Full CSV backup (including manual labels): {backup}")
 
-    images_to_process = image_info_list
+    images_to_process = (
+        images_without_manual_labels(image_info_list, existing_df)
+        if unlabelled_only
+        else image_info_list
+    )
 
     print(
         f"Found {len(image_info_list)} total images in {len(locations)} locations, "
-        f"rerunning detection and classification for all {len(images_to_process)} images\n"
+        f"processing {len(images_to_process)} images\n"
     )
 
     results = []
