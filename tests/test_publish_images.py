@@ -12,6 +12,7 @@ publisher = import_module("src.labelling.publish_images")
 build_force_upload_command = publisher.build_force_upload_command
 build_sync_command = publisher.build_sync_command
 publish_images = publisher.publish_images
+run_aws = publisher.run_aws
 
 
 class PublishImagesTests(unittest.TestCase):
@@ -61,6 +62,39 @@ class PublishImagesTests(unittest.TestCase):
 
         self.assertIn("--dryrun", command)
         self.assertIn("--delete", command)
+
+    def test_sync_command_adds_multiline_progress_when_requested(self):
+        command = build_sync_command(
+            Path("/tmp/images"), "image-bucket", False, progress=True
+        )
+
+        self.assertIn("--progress-multiline", command)
+
+    @patch("src.labelling.publish_images.subprocess.run")
+    def test_run_aws_streams_progress_instead_of_capturing_it(self, run):
+        run.return_value = subprocess.CompletedProcess([], 0)
+
+        run_aws(
+            ["aws", "s3", "sync"],
+            "wildl-id",
+            "eu-central-1",
+            stream_output=True,
+        )
+
+        run.assert_called_once_with(
+            [
+                "aws",
+                "s3",
+                "sync",
+                "--profile",
+                "wildl-id",
+                "--region",
+                "eu-central-1",
+                "--no-cli-pager",
+            ],
+            check=True,
+            text=True,
+        )
 
     def test_force_upload_command_targets_only_the_requested_image(self):
         image = self.images_directory / "2026" / "Camera A" / "fox 1.jpg"

@@ -10,7 +10,9 @@ DEFAULT_STACK_NAME = "wildl-id-images"
 IMAGES_DIRECTORY = Path(__file__).resolve().parents[2] / "images"
 
 
-def build_sync_command(source: Path, bucket: str, dry_run: bool) -> list[str]:
+def build_sync_command(
+    source: Path, bucket: str, dry_run: bool, progress: bool = False
+) -> list[str]:
     command = [
         "aws",
         "s3",
@@ -23,6 +25,8 @@ def build_sync_command(source: Path, bucket: str, dry_run: bool) -> list[str]:
     ]
     if dry_run:
         command.append("--dryrun")
+    if progress:
+        command.append("--progress-multiline")
     return command
 
 
@@ -52,7 +56,12 @@ def build_force_upload_command(
 
 
 def run_aws(
-    command: list[str], profile: str, region: str, *, echo_output: bool = True
+    command: list[str],
+    profile: str,
+    region: str,
+    *,
+    echo_output: bool = True,
+    stream_output: bool = False,
 ) -> subprocess.CompletedProcess:
     command = [
         *command,
@@ -63,6 +72,8 @@ def run_aws(
         "--no-cli-pager",
     ]
     try:
+        if stream_output:
+            return subprocess.run(command, check=True, text=True)
         result = subprocess.run(command, check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as error:
         if error.stdout:
@@ -109,6 +120,7 @@ def publish_images(
     source: Path,
     dry_run: bool,
     force_upload: str | None,
+    progress: bool = False,
 ) -> None:
     if dry_run and force_upload is not None:
         raise ValueError("--dry-run and --force-upload cannot be used together")
@@ -125,8 +137,8 @@ def publish_images(
     if force_upload is not None:
         transfer_command = build_force_upload_command(source, bucket, force_upload)
     else:
-        transfer_command = build_sync_command(source, bucket, dry_run)
-    run_aws(transfer_command, profile, region)
+        transfer_command = build_sync_command(source, bucket, dry_run, progress)
+    run_aws(transfer_command, profile, region, stream_output=progress)
 
     if not dry_run:
         run_aws(
@@ -149,6 +161,11 @@ def main() -> int:
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--force-upload", metavar="RELATIVE_PATH")
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help="show multiline transfer progress in the terminal",
+    )
     parser.add_argument("--stack-name", default=DEFAULT_STACK_NAME)
     parser.add_argument("--profile", default=DEFAULT_PROFILE)
     parser.add_argument("--region", default=DEFAULT_REGION)
@@ -161,6 +178,7 @@ def main() -> int:
             IMAGES_DIRECTORY,
             arguments.dry_run,
             arguments.force_upload,
+            arguments.progress,
         )
     except (
         FileNotFoundError,

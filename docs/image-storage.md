@@ -66,6 +66,12 @@ Review every planned deletion. The real command mirrors all files below `images/
 uv run --locked python src/labelling/publish_images.py
 ```
 
+Add `--progress` to show the AWS CLI transfer progress in the terminal:
+
+```bash
+uv run --locked python src/labelling/publish_images.py --progress
+```
+
 Before the first upload, check the transfer size and file count, then review the dry-run:
 
 ```bash
