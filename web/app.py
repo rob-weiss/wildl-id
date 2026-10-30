@@ -123,9 +123,6 @@ def home_page() -> None:
             "Explore camera-trap images, review wildlife labels, "
             "and visualise animal activity."
         ).classes("text-base text-gray-700 max-w-xl")
-        build_recent_gallery(
-            DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
-        )
         with ui.column().classes("w-full gap-0"):
             for title, target, icon, description in (
                 (
@@ -154,6 +151,9 @@ def home_page() -> None:
                     with ui.column().classes("min-w-0 gap-1"):
                         ui.link(title, target).classes("text-lg font-medium")
                         ui.label(description).classes("text-gray-600")
+        build_recent_gallery(
+            DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
+        )
 
 
 @ui.page("/review")

@@ -279,6 +279,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "Visualisations": "/visualisations",
                 },
             )
+            recent_heading = next(
+                iter(user.find(kind=ui.label, content="Last 24 hours").elements)
+            )
+            self.assertTrue(
+                all(
+                    link.id < recent_heading.id
+                    for link in user.find(kind=ui.link).elements
+                    if link.text
+                )
+            )
 
     async def test_home_recent_gallery_shows_boxes_and_refreshes_csv(self):
         now = datetime.now()
