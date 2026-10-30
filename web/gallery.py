@@ -339,6 +339,8 @@ def row_datetime(row):
     for key in ("timestamp", "timestamp_exif"):
         value = (row.get(key) or "").strip()
         if value:
+            if value.endswith("Z"):
+                value = value[:-1] + "+00:00"
             try:
                 return datetime.fromisoformat(value)
             except ValueError:
