@@ -24,31 +24,34 @@ LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
 EXAMPLE_PROMPT = "Show only wild boar of the last two weeks"
 FILTER_EXAMPLES = {
-    "Animals": {
-        "only wild boar": "Wild boar only",
-        "foxes": "Foxes",
-        "deer": "Deer (roe or red)",
-    },
-    "Locations": {
-        "badgers at Sauloch": "Badgers at Sauloch",
-        "foxes not at Douglasien": "Foxes, excluding Douglasien",
-    },
     "Dates": {
-        "wild boar of the last two weeks": "Last 2 weeks",
-        "foxes in March 2025": "March 2025",
-        "badgers this year": "This year",
-        "between 2025-01-01 and 2025-01-31": "Date range",
+        "last 7 days": "Last 7 days",
+        "last 30 days": "Last 30 days",
+        "last 90 days": "Last 90 days",
+        "yesterday": "Yesterday",
+        "this month": "This month",
+        "this year": "This year",
+        "in winter": "Winter",
+        "in spring": "Spring",
+        "in summer": "Summer",
+        "in autumn": "Autumn",
     },
-    "Conditions": {
-        "foxes at night": "Nighttime",
-        "foxes during the day": "Daytime",
+    "Lighting": {
+        "at night": "Night",
+        "during the day": "Day",
+    },
+    "Temperature": {
         "temperature below 0 °C": "Below 0 °C",
-        "temperature above 10 C": "Above 10 C",
+        "temperature above 10 C": "Above 10 °C",
     },
-    "Review and order": {
+    "Review status": {
         "unlabelled": "Not yet labelled",
         "manually labelled": "Manually labelled",
-        "misclassified latest 20": "Latest 20 misclassified",
+        "misclassified": "Misclassified",
+    },
+    "Order": {
+        "latest 20": "Newest 20",
+        "oldest 20": "Oldest 20",
         "oldest first": "Oldest first",
     },
 }
@@ -692,8 +695,30 @@ def build_gallery_page(
 
     images_dir = Path(images_dir)
     local_images = image_paths(images_dir)
-    labels = {row_label(row) for row in rows}
+    labels = {
+        str(value).strip()
+        for row in rows
+        for value in (row.get("class"), row.get("manual_label"))
+        if str(value or "").strip()
+    }
     locations = {nfc(row["location_id"]) for row in rows}
+    species_options = {
+        f"only {species}": display_label(species)
+        for species in sorted(labels, key=normalize_text)
+    }
+    location_options = {
+        f"at {location}": location for location in sorted(locations, key=normalize_text)
+    }
+    date_options = dict(FILTER_EXAMPLES["Dates"])
+    years = {taken.year for row in rows if (taken := row_datetime(row)) is not None}
+    date_options.update({f"in {year}": str(year) for year in sorted(years)})
+    date_options.update(
+        {
+            f"in {calendar.month_name[month]}": f"{calendar.month_name[month]} "
+            "(any year)"
+            for month in range(1, 13)
+        }
+    )
     items = []
     viewer_index = {"value": None}
 
@@ -778,17 +803,56 @@ def build_gallery_page(
     with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
         ui.label("Example filters").classes("font-medium")
         ui.label(
-            "Choose a category to apply a prompt; quick examples remain below."
+            "Selections combine across categories. Species and Locations allow "
+            "multiple choices; clear a category to remove it. Quick examples "
+            "remain below."
         ).classes("text-sm text-gray-600")
+        selections = {}
+        selectors = {}
+        selection_order = (
+            "Species",
+            "Locations",
+            "Dates",
+            "Lighting",
+            "Temperature",
+            "Review status",
+            "Order",
+        )
+
+        def update_selection(category, value):
+            if value:
+                selections[category] = value if isinstance(value, list) else [value]
+            else:
+                selections.pop(category, None)
+            prompt.value = " ".join(
+                fragment
+                for selected_category in selection_order
+                for fragment in selections.get(selected_category, [])
+            )
+            prompt.update()
+            apply()
+
         with ui.grid(columns="repeat(auto-fit, minmax(190px, 1fr))").classes(
             "w-full gap-2"
         ):
-            for category, examples in FILTER_EXAMPLES.items():
-                ui.select(
-                    examples,
+            dropdowns = (
+                ("Species", species_options, True),
+                ("Locations", location_options, True),
+                ("Dates", date_options, False),
+                *(
+                    (category, examples, False)
+                    for category, examples in FILTER_EXAMPLES.items()
+                    if category != "Dates"
+                ),
+            )
+            for category, options, multiple in dropdowns:
+                selectors[category] = ui.select(
+                    options,
                     label=category,
-                    on_change=lambda event: (
-                        select_example(event.value) if event.value else None
+                    multiple=multiple,
+                    clearable=True,
+                    on_change=lambda event, category=category: update_selection(
+                        category, event.value
                     ),
                 ).classes("w-full")
         with ui.row().classes("w-full flex-wrap gap-2"):
@@ -861,6 +925,10 @@ def build_gallery_page(
             show_page()
 
     def select_example(example):
+        selections.clear()
+        for category, selector in selectors.items():
+            selector.value = [] if category in {"Species", "Locations"} else None
+            selector.update()
         prompt.value = example
         prompt.update()
         apply()

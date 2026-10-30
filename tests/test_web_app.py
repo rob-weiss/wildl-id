@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
+from datetime import date
 from importlib import import_module
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -330,10 +331,73 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Lighting and temperature")
                 await user.should_see("Review status")
                 await user.should_see("Order and result count")
+                await user.should_see("Lighting")
+                await user.should_see("Temperature")
+                await user.should_see("Order")
 
-                user.find("Animals").click()
-                user.find("Wild boar only").click()
-                await user.should_see("1 images · only 🐗 wild boar")
+    async def test_gallery_dropdowns_compose_dynamic_filters(self):
+        today = date.today().isoformat()
+        self.write_csv(
+            [
+                "location_id",
+                "image_file",
+                "timestamp",
+                "class",
+                "manual_label",
+            ],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": f"{today}T10:00:00",
+                    "class": "fox",
+                },
+                {
+                    "location_id": "camera2",
+                    "image_file": "boar.jpg",
+                    "timestamp": f"{today}T11:00:00",
+                    "class": "wild boar",
+                },
+                {
+                    "location_id": "camera2",
+                    "image_file": "reviewed-fox.jpg",
+                    "timestamp": f"{today}T12:00:00",
+                    "class": "fox",
+                    "manual_label": "badger",
+                },
+            ],
+        )
+        with patch.dict(
+            os.environ,
+            {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+        ):
+            async with self.app_user("/gallery") as user:
+                user.find(kind=ui.select, content="Species").click()
+                await user.should_see("🦡 badger")
+                user.find("🦊 fox").click()
+                user.find("🐗 wild boar").click()
+
+                user.find(kind=ui.select, content="Locations").click()
+                await user.should_see("camera2")
+                user.find("camera1").click()
+
+                user.find(kind=ui.select, content="Dates").click()
+                user.find("Last 7 days").click()
+                user.find(kind=ui.select, content="Review status").click()
+                user.find("Not yet labelled").click()
+                user.find(kind=ui.select, content="Order").click()
+                user.find("Newest 20").click()
+
+                expected_prompt = (
+                    "only fox only wild boar at camera1 last 7 days "
+                    "unlabelled latest 20"
+                )
+                self.assertEqual(
+                    user.find("Smart filter").elements.pop().value, expected_prompt
+                )
+                await user.should_see(
+                    "1 images · only 🦊 fox, 🐗 wild boar · at camera1"
+                )
 
     async def test_gallery_viewer_navigates_filtered_images_and_preserves_aspect(self):
         self.write_csv(
