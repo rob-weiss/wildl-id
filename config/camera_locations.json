@@ -1,49 +1,67 @@
 {
     "cameras": [
         {
+            "latitude": 48.654479,
             "location_id": "Douglasien",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.987757,
+            "view_angle": 60,
+            "view_direction": 195
         },
         {
+            "latitude": 48.658451,
             "location_id": "Eichelesgarten",
-            "latitude": null,
-            "longitude": null
+            "longitude": 9.011667,
+            "view_angle": 45,
+            "view_direction": 240
         },
         {
+            "latitude": 48.660187,
             "location_id": "Grenzweg",
-            "latitude": null,
-            "longitude": null
+            "longitude": 9.013911,
+            "view_angle": 45,
+            "view_direction": 325
         },
         {
+            "latitude": 48.654099,
             "location_id": "Grenzwiese",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.985808,
+            "view_angle": 60,
+            "view_direction": 130
         },
         {
+            "latitude": 48.65536,
             "location_id": "Madenhäule",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.990417,
+            "view_angle": 60,
+            "view_direction": 300
         },
         {
+            "latitude": 48.65531,
             "location_id": "Sauloch hinten",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.996769,
+            "view_angle": 45,
+            "view_direction": 100
         },
         {
+            "latitude": 48.651722,
             "location_id": "Sauloch vorne",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.993599,
+            "view_angle": 75,
+            "view_direction": 20
         },
         {
+            "latitude": 48.656261,
             "location_id": "Schelmentor",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.999148,
+            "view_angle": 45,
+            "view_direction": 145
         },
         {
+            "latitude": 48.653756,
             "location_id": "Wendeplatte",
-            "latitude": null,
-            "longitude": null
+            "longitude": 8.990552,
+            "view_angle": 110,
+            "view_direction": 145
         }
     ]
 }
