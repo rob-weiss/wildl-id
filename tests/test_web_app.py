@@ -662,10 +662,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("1 images")
                 await user.should_see("Manual:")
                 await user.should_see("Automatic:")
-                self.assertFalse(any(
-                    label.text == "Unlabelled"
-                    for label in user.find(kind=ui.label).elements
-                ))
+                self.assertFalse(
+                    any(
+                        label.text == "Unlabelled"
+                        for label in user.find(kind=ui.label).elements
+                    )
+                )
                 image = next(iter(user.find(kind=ui.interactive_image).elements))
                 user.find(kind=ui.interactive_image).trigger(
                     "loaded", {"width": 16, "height": 16}

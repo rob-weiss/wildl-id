@@ -28,9 +28,7 @@ class PushAlertTests(unittest.TestCase):
         self.published = []
         self.factory_calls = 0
 
-    def image(
-        self, name, captured, location="Wendeplatte", result=("wild boar",)
-    ):
+    def image(self, name, captured, location="Wendeplatte", result=("wild boar",)):
         path = self.images / "2026" / location / name
         path.parent.mkdir(parents=True, exist_ok=True)
         exif = Image.Exif()

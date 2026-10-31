@@ -35,8 +35,8 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 from alerting.push_alerts import send_push_alerts as alerts_main
 from downloading.download_email_images import download_email_images as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
-from labelling.organize_images import organize_images as organize_main
 from labelling.organize_images import image_paths, nfc
+from labelling.organize_images import organize_images as organize_main
 from labelling.review_labels import DEFAULT_CSV
 from visualisation.evaluate_labels import main as visualisation_main
 
