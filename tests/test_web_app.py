@@ -697,6 +697,47 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("(3)", fox.text)
                 self.assertEqual(fox.props.get("aria-pressed"), "true")
 
+    async def test_home_distinguishes_human_unknown_from_unlabelled(self):
+        now = (datetime.now() - timedelta(minutes=1)).isoformat()
+        fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": "human-unknown.jpg",
+                "timestamp": now,
+                "class": "unknown",
+                "manual_label": "unknown",
+            },
+            {
+                "location_id": "camera1",
+                "image_file": "unlabelled.jpg",
+                "timestamp": now,
+                "class": "",
+                "manual_label": "",
+            },
+        ]
+        self.write_csv(fields, rows)
+
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer"),
+        ):
+            async with self.app_user("/") as user:
+                unknown = next(
+                    iter(user.find(marker="recent-species-unknown").elements)
+                )
+                unlabelled = next(
+                    iter(user.find(marker="recent-species-unlabelled").elements)
+                )
+                self.assertIn("(1)", unknown.text)
+                self.assertIn("(1)", unlabelled.text)
+                user.find(marker="recent-species-unknown").click()
+                await user.should_see("1 images")
+                await user.should_see("Manual: ❓ unknown")
+
     async def test_home_preserves_portrait_image_ratio_in_thumbnail_and_viewer(self):
         taken = datetime.now() - timedelta(minutes=1)
         path = self.write_original_image("portrait.jpg", taken)

@@ -751,7 +751,7 @@ def annotation_labels(row):
     labels = []
     for title, column in (("Manual", "manual_label"), ("Automatic", "class")):
         label = (row.get(column) or "").strip()
-        if label and label.casefold() != "unknown":
+        if label and (title == "Manual" or label.casefold() != "unknown"):
             labels.append(f"{title}: {display_label(label)}")
     return " · ".join(labels) or "Unlabelled"
 
@@ -978,6 +978,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     species_names = {
         species: display_label(species) for species in sorted(RECENT_SPECIES)
     }
+    species_names["unknown"] = display_label("unknown")
     species_names["unlabelled"] = "Unlabelled"
     species_buttons = {}
     boxes = BoxToggle(True)
@@ -1009,7 +1010,8 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
 
     def species_key(row):
         label = normalize_text(row_label(row))
-        return "unlabelled" if label in {"", "unknown"} else label
+        manual_label = (row.get("manual_label") or "").strip()
+        return "unlabelled" if not manual_label and label in {"", "unknown"} else label
 
     def update_counts():
         photos = {species: set() for species in species_names}

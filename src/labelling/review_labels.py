@@ -245,7 +245,7 @@ class LabelReview:
         for index, row in enumerate(self.rows):
             manual_label = str(row.get("manual_label") or "").strip()
             image_name = f"{row['location_id']}_{row['image_file']}"
-            is_unseen = not manual_label or manual_label.casefold() == "unknown"
+            is_unseen = not manual_label
             is_latest_error = image_name in self.latest_incorrect_filenames
             if (
                 self.mode == "Unseen"

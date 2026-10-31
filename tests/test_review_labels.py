@@ -309,7 +309,7 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
-    def test_unknown_manual_label_is_unseen(self):
+    def test_unknown_manual_label_is_seen(self):
         with self.csv_path.open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
             fieldnames = reader.fieldnames
@@ -330,9 +330,9 @@ class LabelReviewTests(unittest.TestCase):
 
         review = LabelReview(self.csv_path)
 
-        self.assertEqual(review.pending, [0, 3])
+        self.assertEqual(review.pending, [0])
         review.set_mode("Seen")
-        self.assertEqual(review.pending, [1, 2])
+        self.assertEqual(review.pending, [1, 2, 3])
 
     def test_auto_label_button_runs_background_job_and_reloads_review(self):
         app = review_app_module.ReviewApp(self.csv_path)
