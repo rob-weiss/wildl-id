@@ -57,6 +57,8 @@ def bounding_box_color(predicted_label, manual_label=""):
     predicted = str(predicted_label or "").strip().casefold().replace("_", " ")
     if not manual:
         return "#f9a825"
+    if not predicted:
+        return "#1565c0"
     return "#2e7d32" if manual == predicted else "#c62828"
 
 

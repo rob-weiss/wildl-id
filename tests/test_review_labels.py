@@ -1028,15 +1028,19 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(axes.patches[0].get_edgecolor(), to_rgba("#2e7d32"))
         self.assertEqual(axes.texts[0].get_text(), "True: fox | Predicted: fox")
 
-    def test_bounding_box_color_reflects_review_status(self):
-        for manual_label, expected in (
-            ("", "#f9a825"),
-            ("fox", "#2e7d32"),
-            ("hare", "#c62828"),
+    def test_bounding_box_color_reflects_prediction_and_human_label(self):
+        for predicted_label, manual_label, expected in (
+            ("fox", "", "#f9a825"),
+            ("", "fox", "#1565c0"),
+            ("fox", "fox", "#2e7d32"),
+            ("fox", "hare", "#c62828"),
         ):
-            with self.subTest(manual_label=manual_label):
+            with self.subTest(
+                predicted_label=predicted_label, manual_label=manual_label
+            ):
                 self.assertEqual(
-                    review_module.bounding_box_color("fox", manual_label), expected
+                    review_module.bounding_box_color(predicted_label, manual_label),
+                    expected,
                 )
 
     def test_unchecked_boxes_are_yellow_in_static_and_browser_viewers(self):
@@ -1059,6 +1063,10 @@ class LabelReviewTests(unittest.TestCase):
                     {**row, "manual_label": manual}, (100, 100)
                 )
                 self.assertIn(f'stroke="{color}"', overlay)
+        human_only_overlay = review_app_module.box_overlay_svg(
+            {**row, "class": "", "manual_label": "fox"}, (100, 100)
+        )
+        self.assertIn('stroke="#1565c0"', human_only_overlay)
         overlay = review_app_module.box_overlay_svg(
             {**row, "manual_label": "corrected species"},
             (100, 100),

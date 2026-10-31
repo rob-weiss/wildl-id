@@ -768,7 +768,7 @@ def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=Fals
                 row,
                 (width, height),
                 display_size=display_size,
-                show_label=annotation_labels(row) != "Unlabelled",
+                show_label=False,
             )
         )
 
@@ -996,6 +996,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
         species_summary = (
             ui.label().classes("text-sm text-gray-700").mark("recent-species-summary")
         )
+        ui.link("View full gallery", "/gallery").mark("recent-full-gallery")
         status = ui.label().classes("text-sm text-gray-600")
         grid = ui.grid(
             columns="repeat(auto-fit, minmax(min(100%, 220px), 1fr))"
@@ -1019,6 +1020,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
         for species, button in species_buttons.items():
             title = "All" if species == "all" else species_names[species]
             button.set_text(f"{title} ({counts[species]})")
+            button.set_visibility(counts[species] > 0)
             active = (
                 not selected_species
                 if species == "all"

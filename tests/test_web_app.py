@@ -605,6 +605,25 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 badger = next(iter(user.find(marker="recent-species-badger").elements))
                 self.assertIn("(2)", fox.text)
                 self.assertIn("(1)", badger.text)
+                self.assertTrue(fox.visible)
+                self.assertTrue(badger.visible)
+                await user.should_not_see("roe deer (0)")
+                self.assertTrue(
+                    next(iter(user.find(marker="recent-species-unlabelled").elements))
+                    .visible
+                )
+                summary = next(
+                    iter(user.find(marker="recent-species-summary").elements)
+                )
+                full_gallery_link = next(
+                    iter(user.find(marker="recent-full-gallery").elements)
+                )
+                status = next(
+                    iter(user.find(kind=ui.label, content="5 images").elements)
+                )
+                self.assertEqual(full_gallery_link.props.get("href"), "/gallery")
+                self.assertLess(summary.id, full_gallery_link.id)
+                self.assertLess(full_gallery_link.id, status.id)
                 user.find(marker="recent-species-fox").click()
                 await user.should_see("3 images")
                 user.find(marker="recent-species-badger").click()
@@ -702,8 +721,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "loaded", {"width": 1600, "height": 900}
                 )
                 self.assertIn('x="480.0" y="360.0" width="640.0"', image.content)
-                self.assertIn("fox", image.content)
-                self.assertIn("True:", image.content)
+                self.assertNotIn("<text", image.content)
+                self.assertNotIn("True:", image.content)
+                user.find(kind=ui.interactive_image).click()
+                viewer_image = next(
+                    iter(user.find(marker="recent-viewer-image").elements)
+                )
+                user.find(marker="recent-viewer-image").trigger(
+                    "loaded", {"width": 1600, "height": 900}
+                )
+                self.assertIn("<text", viewer_image.content)
+                self.assertIn("True:", viewer_image.content)
+                user.find(marker="recent-image-close").click()
                 self.assertTrue(timer.call_args_list)
                 self.assertTrue(
                     all(call.args[0] == 60 for call in timer.call_args_list)
@@ -724,6 +753,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 sources = [
                     image.source
                     for image in user.find(kind=ui.interactive_image).elements
+                    if image is not viewer_image
                 ]
                 self.assertTrue(any(source.endswith("/boar.jpg") for source in sources))
                 self.assertFalse(any(source.endswith("/fox.jpg") for source in sources))
@@ -785,8 +815,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find(kind=ui.interactive_image).trigger(
                     "loaded", {"width": 16, "height": 16}
                 )
-                self.assertIn("badger", image.content)
-                self.assertIn("fox", image.content)
+                self.assertNotIn("<text", image.content)
                 self.write_original_image("new-arrival.jpg", now)
                 timer.call_args.args[1]()
                 await user.should_see("2 images")
@@ -1313,14 +1342,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "location_id": "camera1",
                     "image_file": f"{status}.jpg",
                     "timestamp": "2025-01-02T00:00:00",
-                    "class": "fox",
+                    "class": predicted_label,
                     "manual_label": manual_label,
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                 }
-                for status, manual_label in (
-                    ("unchecked", ""),
-                    ("correct", "fox"),
-                    ("incorrect", "hare"),
+                for status, predicted_label, manual_label in (
+                    ("unchecked", "fox", ""),
+                    ("correct", "fox", "fox"),
+                    ("incorrect", "fox", "hare"),
+                    ("human-only", "", "fox"),
                 )
             ],
         )
@@ -1331,7 +1361,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/gallery") as user:
                 user.find(marker="gallery-boxes").click()
                 images = list(user.find(kind=ui.interactive_image).elements)
-                self.assertEqual(len(images), 3)
+                self.assertEqual(len(images), 4)
                 user.find(kind=ui.interactive_image).trigger(
                     "loaded", {"width": 100, "height": 100}
                 )
@@ -1340,7 +1370,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     image.content.split('stroke="')[1].split('"', maxsplit=1)[0]
                     for image in images
                 }
-                self.assertEqual(colors, {"#f9a825", "#2e7d32", "#c62828"})
+                self.assertEqual(
+                    colors, {"#f9a825", "#1565c0", "#2e7d32", "#c62828"}
+                )
+                self.assertTrue(all("<text" not in image.content for image in images))
+                user.find(kind=ui.interactive_image).click()
+                viewer_image = next(
+                    iter(user.find(marker="gallery-viewer-image").elements)
+                )
+                user.find(marker="gallery-viewer-image").trigger(
+                    "loaded", {"width": 100, "height": 100}
+                )
+                self.assertIn("<text", viewer_image.content)
 
     async def test_gallery_limits_page_navigation_for_large_datasets(self):
         rows = [
