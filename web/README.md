@@ -14,7 +14,11 @@ or the original image's EXIF metadata; supported camera filenames are a
 fallback. File modification times are not used. Available manual and automatic
 labels are both shown, even without a bounding box. Boxes appear when present,
 and photos with no annotations are marked **Unlabelled**. Click an image to
-enlarge it. The gallery reloads the CSV and image availability every minute
+enlarge it. The viewer has previous/next controls and an image counter;
+left/right arrow keys navigate and Escape closes it. Navigation covers all
+matching images, including other thumbnail pages. An open viewer keeps its
+image list stable during refresh; reopen it to browse the latest results.
+The gallery reloads the CSV and image availability every minute
 without reloading the page; older sightings drop out automatically. Results
 are paginated when there are more than 48 images. Discovery is read-only and
 never creates or changes labels.

@@ -534,8 +534,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 for index in range(gallery.PAGE_SIZE + 1)
             ],
         )
-        with patch.dict(
-            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer") as timer,
         ):
             async with self.app_user("/") as user:
                 await user.should_see("49 images")
@@ -547,9 +551,61 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(len(images.elements), 1)
                 images.click()
                 await user.should_see("Close image")
+                await user.should_see("49 / 49")
                 dialog = next(iter(user.find(kind=ui.dialog).elements))
                 self.assertTrue(dialog.value)
+                next_button = next(iter(user.find(marker="recent-image-next").elements))
+                self.assertTrue(next_button.props.get("disable"))
+                user.find(marker="recent-image-previous").click()
+                await user.should_see("48 / 49")
+                self.assertTrue(
+                    any(
+                        image.source.endswith("/fox-47.jpg")
+                        for image in user.find(kind=ui.interactive_image).elements
+                    )
+                )
+                keyboard = user.find(kind=ui.keyboard)
+
+                def press(key):
+                    keyboard.trigger(
+                        "key",
+                        {
+                            "action": "keydown",
+                            "repeat": False,
+                            "altKey": False,
+                            "ctrlKey": False,
+                            "metaKey": False,
+                            "shiftKey": False,
+                            "key": key,
+                            "code": key,
+                            "location": 0,
+                        },
+                    )
+
+                press("ArrowLeft")
+                await user.should_see("47 / 49")
+                press("ArrowRight")
+                await user.should_see("48 / 49")
                 user.find(marker="recent-image-close").click()
+                self.assertFalse(dialog.value)
+                press("ArrowLeft")
+                self.assertFalse(dialog.value)
+                user.find(
+                    kind=ui.interactive_image,
+                    content=f"https://cdn.example.test/images/{datetime.fromisoformat(now).year}/camera1/fox-48.jpg",
+                ).click()
+                await user.should_see("49 / 49")
+                self.write_csv(["location_id", "image_file", "timestamp", "class"], [])
+                timer.call_args.args[1]()
+                user.find(marker="recent-image-previous").click()
+                await user.should_see("48 / 49")
+                user.find(marker="recent-image-next").click()
+                await user.should_see("49 / 49")
+                press("ArrowRight")
+                await user.should_see("49 / 49")
+                press("Escape")
+                self.assertFalse(dialog.value)
+                press("ArrowLeft")
                 self.assertFalse(dialog.value)
 
     async def test_gallery_page_applies_smart_filter(self):

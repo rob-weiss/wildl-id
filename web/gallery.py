@@ -787,6 +787,109 @@ def gallery_card(row, source, on_click, show_boxes=False):
             ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
 
 
+def build_image_viewer(items, show_boxes=False):
+    visible_items = []
+    current_index = None
+    marker = "recent-image" if show_boxes else "gallery-image"
+
+    def close_image_viewer():
+        nonlocal current_index
+        current_index = None
+        dialog.close()
+
+    def move_image(offset):
+        if current_index is not None:
+            show_image(current_index + offset)
+
+    with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
+        viewer = ui.column().classes("w-full")
+        caption = ui.label()
+        with ui.row().classes("w-full items-center justify-between gap-2"):
+            previous_button = (
+                ui.button(
+                    "" if show_boxes else "Previous image",
+                    icon="chevron_left",
+                    on_click=lambda: move_image(-1),
+                )
+                .props("flat round" if show_boxes else "outline no-caps")
+                .props('aria-label="Previous image"')
+                .mark(f"{marker}-previous")
+            )
+            previous_button.tooltip("Previous image")
+            next_button = (
+                ui.button(
+                    "" if show_boxes else "Next image",
+                    icon="chevron_right",
+                    on_click=lambda: move_image(1),
+                )
+                .props("flat round" if show_boxes else "outline no-caps")
+                .props('aria-label="Next image"')
+                .mark(f"{marker}-next")
+            )
+            next_button.tooltip("Next image")
+            ui.button(
+                "" if show_boxes else "Close",
+                icon="close",
+                on_click=close_image_viewer,
+            ).props("flat round" if show_boxes else "flat no-caps").props(
+                'aria-label="Close image"' if show_boxes else 'aria-label="Close"'
+            ).mark(f"{marker}-close").tooltip("Close image" if show_boxes else "Close")
+
+    def show_image(index):
+        nonlocal current_index
+        if index < 0 or index >= len(visible_items):
+            return
+        current_index = index
+        row, source = visible_items[index]
+        viewer.clear()
+        with viewer:
+            if show_boxes:
+                boxed_image(row, source, "w-[85vw] max-w-full max-h-[75vh]", (960, 540))
+            else:
+                ui.image(source).props("fit=contain").classes(
+                    "w-[85vw] h-[75vh] max-w-full"
+                )
+        taken = row_datetime(row)
+        when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
+        labels = annotation_labels(row) if show_boxes else display_label(row_label(row))
+        caption.set_text(
+            f"{index + 1} / {len(visible_items)} · {labels} · {row['location_id']} · {when}"
+        )
+        previous_button.set_enabled(index > 0)
+        next_button.set_enabled(index < len(visible_items) - 1)
+        dialog.open()
+
+    def open_image(index):
+        visible_items[:] = items
+        show_image(index)
+
+    def on_dialog_hide(_):
+        nonlocal current_index
+        if not dialog.value:
+            current_index = None
+
+    def on_key(event):
+        if current_index is None or not event.action.keydown:
+            return
+        if (
+            event.action.repeat
+            or event.modifiers.alt
+            or event.modifiers.ctrl
+            or event.modifiers.meta
+        ):
+            return
+        if event.key.arrow_left:
+            move_image(-1)
+        elif event.key.arrow_right:
+            move_image(1)
+        elif event.key.escape:
+            close_image_viewer()
+
+    dialog.on("hide", on_dialog_hide)
+    ui.keyboard(on_key=on_key, repeating=False, ignore=["input", "select", "textarea"])
+    return open_image, close_image_viewer
+
+
 def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
     with ui.column().classes("w-full gap-3"):
@@ -799,32 +902,19 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
             "direction-links max-pages=5"
         )
     items = []
-    with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
-        viewer = ui.column().classes("w-full")
-        ui.button(icon="close", on_click=dialog.close).props(
-            'flat round aria-label="Close image"'
-        ).mark("recent-image-close").tooltip("Close image")
-
-    def show_image(row, source):
-        viewer.clear()
-        with viewer:
-            boxed_image(row, source, "w-[85vw] max-w-full max-h-[75vh]", (960, 540))
-            taken = row_datetime(row)
-            ui.label(
-                f"{annotation_labels(row)} · {row['location_id']} · "
-                f"{taken:%Y-%m-%d %H:%M}"
-            )
-        dialog.open()
+    show_image, _ = build_image_viewer(items, show_boxes=True)
 
     def show_page():
         grid.clear()
         first = (pagination.value - 1) * PAGE_SIZE
         with grid:
-            for row, source in items[first : first + PAGE_SIZE]:
+            for index, (row, source) in enumerate(
+                items[first : first + PAGE_SIZE], start=first
+            ):
                 gallery_card(
                     row,
                     source,
-                    lambda row=row, source=source: show_image(row, source),
+                    lambda index=index: show_image(index),
                     show_boxes=True,
                 )
 
@@ -908,76 +998,7 @@ def build_gallery_page(
         }
     )
     items = []
-    viewer_index = {"value": None}
-
-    with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
-        large_image = (
-            ui.image().props("fit=contain").classes("w-[85vw] h-[75vh] max-w-full")
-        )
-        large_caption = ui.label()
-        with ui.row().classes("w-full items-center justify-between"):
-            previous_button = ui.button(
-                "Previous image",
-                icon="chevron_left",
-                on_click=lambda: show_image(viewer_index["value"] - 1),
-            ).props("outline no-caps")
-            next_button = ui.button(
-                "Next image",
-                icon="chevron_right",
-                on_click=lambda: show_image(viewer_index["value"] + 1),
-            ).props("outline no-caps")
-            ui.button(
-                "Close", icon="close", on_click=lambda: close_image_viewer()
-            ).props("flat no-caps")
-
-    def show_image(index):
-        if index < 0 or index >= len(items):
-            return
-        viewer_index["value"] = index
-        row, source = items[index]
-        taken = row_datetime(row)
-        when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
-        large_image.set_source(source)
-        large_caption.set_text(
-            f"{index + 1} / {len(items)} · {display_label(row_label(row))} · "
-            f"{row['location_id']} · {when}"
-        )
-        previous_button.set_enabled(index > 0)
-        next_button.set_enabled(index < len(items) - 1)
-        dialog.open()
-
-    def close_image_viewer():
-        viewer_index["value"] = None
-        dialog.close()
-
-    def on_dialog_hide(_):
-        if not dialog.value:
-            viewer_index["value"] = None
-
-    dialog.on("hide", on_dialog_hide)
-
-    def on_key(event):
-        if viewer_index["value"] is None or not event.action.keydown:
-            return
-        if (
-            event.action.repeat
-            or event.modifiers.alt
-            or event.modifiers.ctrl
-            or event.modifiers.meta
-        ):
-            return
-        if event.key.arrow_left:
-            show_image(viewer_index["value"] - 1)
-        elif event.key.arrow_right:
-            show_image(viewer_index["value"] + 1)
-        elif event.key.escape:
-            close_image_viewer()
-
-    ui.keyboard(
-        on_key=on_key,
-        repeating=False,
-        ignore=["input", "select", "textarea"],
-    )
+    show_image, close_image_viewer = build_image_viewer(items)
 
     with ui.row().classes("w-full items-center gap-2"):
         prompt = (
@@ -1074,8 +1095,7 @@ def build_gallery_page(
                 gallery_card(row, source, lambda index=index: show_image(index))
 
     def apply():
-        if viewer_index["value"] is not None:
-            close_image_viewer()
+        close_image_viewer()
         text = prompt.value or ""
         gallery_filter = parse_filter_prompt(text, labels, locations, today)
         if text.strip() and gallery_filter.is_empty():
