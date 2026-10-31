@@ -15,7 +15,12 @@ from src.labelling import label_images
 class AutomaticLabelTests(unittest.TestCase):
     def test_resume_selection_skips_completed_and_manual_labels(self):
         names = [
-            "reviewed.jpg", "complete.jpg", "unknown.jpg", "animal.jpg", "empty.jpg", "new.jpg"
+            "reviewed.jpg",
+            "complete.jpg",
+            "unknown.jpg",
+            "animal.jpg",
+            "empty.jpg",
+            "new.jpg",
         ]
         image_info = [{"location_id": "camera", "name": name} for name in names]
         existing = pd.DataFrame(
@@ -42,7 +47,11 @@ class AutomaticLabelTests(unittest.TestCase):
 
     def test_reprocess_missing_retries_metadata_but_preserves_manual_labels(self):
         names = [
-            "complete.jpg", "timestamp.jpg", "temperature.jpg", "manual.jpg", "new.jpg"
+            "complete.jpg",
+            "timestamp.jpg",
+            "temperature.jpg",
+            "manual.jpg",
+            "new.jpg",
         ]
         image_info = [{"location_id": "camera", "name": name} for name in names]
         existing = pd.DataFrame(
