@@ -266,6 +266,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     self.assertTrue(drawer.value)
                     self.assertTrue(drawer.props.get("mini"))
                     self.assertEqual(drawer.props.get("behavior"), "desktop")
+                    theme = next(iter(user.find(kind=ui.colors).elements))
+                    self.assertEqual(theme.props.get("primary"), "#214a3a")
+                    self.assertIn("color: #53675d", user.client.head_html)
                     links = {
                         item.props["href"]
                         for item in drawer.descendants()
@@ -308,7 +311,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_home_centres_summary_and_moves_page_descriptions_to_navigation(self):
         async with self.app_user("/") as user:
             await user.should_see(
-                "Explore wildlife sightings, review detections, browse camera images, and view activity across your cameras."
+                "Recent sightings, image review, and activity across your cameras."
             )
             logo = next(
                 image
@@ -1653,6 +1656,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("image/svg+xml", icon.headers["content-type"])
         self.assertIn("<svg", logo.text)
         self.assertIn("<svg", icon.text)
+        self.assertNotIn("Wildlife identification", logo.text)
         for animal in ("\U0001f98c", "\U0001f9a1", "\U0001f986"):
             self.assertIn(animal, logo.text)
             self.assertIn(animal, icon.text)

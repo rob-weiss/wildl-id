@@ -37,6 +37,13 @@ def add_brand_logo() -> None:
 
 
 def add_navigation(current_path: str) -> None:
+    ui.colors(primary="#214a3a")
+    ui.add_head_html(
+        """<style>
+        a:not(.q-item):not(.q-btn) { color: #53675d; }
+        a:not(.q-item):not(.q-btn):hover { color: #214a3a; }
+        </style>"""
+    )
     with (
         ui.left_drawer(value=True, bordered=True)
         .props("mini mini-width=64 width=240 behavior=desktop")
@@ -148,7 +155,7 @@ def home_page() -> None:
             add_brand_logo()
             ui.label("Wildlife analysis").classes("text-2xl font-semibold")
             ui.label(
-                "Explore wildlife sightings, review detections, browse camera images, and view activity across your cameras."
+                "Recent sightings, image review, and activity across your cameras."
             ).classes("text-base text-gray-700 max-w-xl")
         build_recent_gallery(
             DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")

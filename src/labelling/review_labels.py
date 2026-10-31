@@ -33,6 +33,7 @@ MODE_OPTIONS = (
 SHORTCUTS = {
     "r": "roe deer",
     "w": "wild boar",
+    "g": "other bird",
     "p": "pigeon",
     "b": "badger",
     "m": "marten",
@@ -50,6 +51,38 @@ SHORTCUTS = {
     "t": "cat",
     "v": "vehicle",
 }
+LEGACY_REVIEW_LABELS = frozenset({"woodpecker", "buzzard", "falcon", "song bird"})
+
+
+def shortcuts_for_labels(labels):
+    shortcuts = dict(SHORTCUTS)
+    available_keys = [
+        key
+        for key in "abcdefghijklmnopqrstuvwxyz0123456789"
+        if key != "z" and key not in shortcuts
+    ]
+    assigned_labels = set(shortcuts.values())
+    for label in labels:
+        label = str(label or "").strip()
+        if (
+            not label
+            or label.casefold() in LEGACY_REVIEW_LABELS
+            or label in assigned_labels
+        ):
+            continue
+        preferred_key = label.casefold()[0]
+        if preferred_key in available_keys:
+            key = preferred_key
+            available_keys.remove(key)
+        elif available_keys:
+            key = available_keys.pop(0)
+        else:
+            raise ValueError(
+                f"No keyboard shortcut available for review label: {label}"
+            )
+        shortcuts[key] = label
+        assigned_labels.add(label)
+    return shortcuts
 
 
 def bounding_box_color(predicted_label, manual_label=""):
@@ -169,6 +202,13 @@ class LabelReview:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
+        self.shortcuts = shortcuts_for_labels(
+            [
+                *SHORTCUTS.values(),
+                *(row.get("class", "") for row in self.rows),
+                *(row.get("manual_label", "") for row in self.rows),
+            ]
+        )
         self._image_paths = image_paths(repo_dir / "images")
         existing_images = {
             (nfc(row["location_id"]), row["image_file"]) for row in self.rows
@@ -377,10 +417,8 @@ class LabelReview:
         self.mode_menu_axes = []
         self.mode_menu_buttons = []
         self.mode_menu_open = False
-        labels = list(
-            dict.fromkeys([*SHORTCUTS.values(), *(row["class"] for row in self.rows)])
-        )
-        keys = {label: key for key, label in SHORTCUTS.items()}
+        labels = list(self.shortcuts.values())
+        keys = {label: key for key, label in self.shortcuts.items()}
         height = min(0.055, 0.55 / ((len(labels) + 1) // 2))
         for index, label in enumerate(labels):
             caption = f"{label} [{keys[label]}]" if label in keys else label
@@ -555,8 +593,8 @@ class LabelReview:
             return
         if event.key == " ":
             self.accept()
-        elif event.key in SHORTCUTS:
-            self.record(SHORTCUTS[event.key])
+        elif event.key in self.shortcuts:
+            self.record(self.shortcuts[event.key])
         elif event.key == "enter":
             self.edit()
         elif event.key == "backspace":

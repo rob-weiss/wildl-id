@@ -15,7 +15,6 @@ from .remove_empty_images import is_confirmed_empty, remove_empty_images
 from .review_labels import (
     DEFAULT_CSV,
     MODE_OPTIONS,
-    SHORTCUTS,
     LabelReview,
     bounding_box_color,
     box_from_drag,
@@ -42,6 +41,8 @@ LABEL_EMOJIS = {
     "cat": "🐈",
     "vehicle": "🚗",
     "song bird": "🐦",
+    "other bird": "🐦",
+    "marten": "🦦",
 }
 
 
@@ -191,7 +192,6 @@ class ReviewApp:
         self.image_mode = "box"
 
     def build(self):
-        ui.colors(primary="#2e7d32", secondary="#c62828")
         self.keyboard = ui.keyboard(on_key=self.on_key, repeating=True)
         ui.add_head_html(
             """<script>
@@ -329,31 +329,14 @@ class ReviewApp:
                         )
                     ui.label("🏷️ Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
-                        manual_labels = (
-                            str(row.get("manual_label") or "").strip()
-                            for row in self.review.rows
-                        )
-                        labels = list(
-                            dict.fromkeys(
-                                [
-                                    *SHORTCUTS.values(),
-                                    *(row["class"] for row in self.review.rows),
-                                    *(label for label in manual_labels if label),
-                                ]
-                            )
-                        )
+                        labels = list(self.review.shortcuts.values())
+                        shortcuts = {
+                            label: key for key, label in self.review.shortcuts.items()
+                        }
                         for label in labels:
-                            key = next(
-                                (
-                                    key
-                                    for key, value in SHORTCUTS.items()
-                                    if value == label
-                                ),
-                                None,
+                            caption = (
+                                f"{display_label(label)} [{shortcuts[label]}]"
                             )
-                            caption = display_label(label)
-                            if key:
-                                caption = f"{caption} [{key}]"
                             button = ui.button(
                                 caption,
                                 on_click=lambda label=label: self.choose_label(label),
@@ -569,7 +552,7 @@ class ReviewApp:
         elif event.key.name.lower() == "z":
             self.toggle_subject_focus()
         else:
-            label = SHORTCUTS.get(event.key.name.lower())
+            label = self.review.shortcuts.get(event.key.name.lower())
             if label:
                 self.choose_label(label)
 

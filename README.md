@@ -380,13 +380,15 @@ This preference stays active across images; images without a valid box show in f
 Manual zoom resets for each new image. **Fit image** turns subject focus off.
 Press **Z** to toggle subject focus.
 
-Press **Space** to accept the current prediction. Press a displayed shortcut letter to
+Press **Space** to accept the current prediction. Press a displayed shortcut key to
 choose a label. Press **Enter** to focus the custom-label field, then press **Enter**
 again to save it. Press **Backspace** to undo the last label.
 
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
+`g` other bird,
 `d` dog, `f` fox, `h` hare, `s` squirrel, `j` jay, `o` raccoon, `c` crow,
 `a` human, `n` none, `u` unknown, `l` owl, `t` cat, `v` vehicle.
+Additional labels receive their own displayed shortcut.
 
 Each choice is saved immediately in a new `manual_label` column in the same CSV.
 The original `class` column remains unchanged: an empty manual label means unchecked,

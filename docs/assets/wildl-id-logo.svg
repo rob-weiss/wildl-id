@@ -1,9 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 250" role="img" aria-labelledby="title description">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 210" role="img" aria-labelledby="title description">
   <title id="title">wildl-id</title>
   <desc id="description">Roe deer, badger, and duck emoji above the wildl-id wordmark.</desc>
   <text x="145" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦌</text>
   <text x="230" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦡</text>
   <text x="315" y="100" text-anchor="middle" font-family="'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif" font-size="68">🦆</text>
   <text x="230" y="190" text-anchor="middle" fill="#214a3a" font-family="Georgia, 'Times New Roman', serif" font-size="68" font-weight="700">wildl-id</text>
-  <text x="230" y="226" text-anchor="middle" fill="#53675d" font-family="sans-serif" font-size="17">Wildlife identification</text>
 </svg>

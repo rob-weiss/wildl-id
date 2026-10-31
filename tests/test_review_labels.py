@@ -435,9 +435,9 @@ class LabelReviewTests(unittest.TestCase):
         self.addCleanup(container.delete)
         captions = [button.text for button in app.label_buttons]
 
-        self.assertEqual(captions.count("🦌 red deer"), 1)
+        self.assertEqual(captions.count("🦌 red deer [i]"), 1)
         self.assertEqual(captions.count("🦊 fox [f]"), 1)
-        self.assertIn("🐾 machine class", captions)
+        self.assertIn("🐾 machine class [e]", captions)
         self.assertTrue(all(caption.strip() for caption in captions))
         self.assertNotIn(" red deer ", captions)
         self.assertEqual(app.accept_button.text, "✅ Accept prediction")
@@ -445,6 +445,54 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(app.undo_box_button.text, "↩️ Undo box")
         self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
         self.assertEqual(app.save_label_button.text, "💾 Save label")
+
+    def test_browser_label_buttons_hide_legacy_birds_and_shortcut_all_choices(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerows(
+                [
+                    ["camera1", "woodpecker.jpg", "woodpecker", "", ""],
+                    ["camera1", "buzzard.jpg", "buzzard", "", ""],
+                    ["camera1", "falcon.jpg", "falcon", "", ""],
+                    ["camera1", "songbird.jpg", "song bird", "", ""],
+                    ["camera1", "marten.jpg", "marten", "", ""],
+                    ["camera1", "otherbird.jpg", "other bird", "", ""],
+                ]
+            )
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+
+        captions = [button.text for button in app.label_buttons]
+
+        self.assertTrue(
+            all(" [" in caption and caption.endswith("]") for caption in captions)
+        )
+        shortcuts = [caption.rsplit("[", 1)[1][:-1] for caption in captions]
+        self.assertIn("🐦 other bird [g]", captions)
+        self.assertIn("🦦 marten [m]", captions)
+        self.assertTrue(
+            all(
+                not any(
+                    legacy in caption
+                    for legacy in ("woodpecker", "buzzard", "falcon", "song bird")
+                )
+                for caption in captions
+            )
+        )
+        self.assertEqual(len(shortcuts), len(set(shortcuts)))
+
+        chosen = []
+        app.choose_label = chosen.append
+        event = SimpleNamespace(
+            action=SimpleNamespace(keydown=True, repeat=False),
+            key=SimpleNamespace(name="g", space=False, backspace=False, enter=False),
+            modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+        )
+        app.on_key(event)
+
+        self.assertEqual(chosen, ["other bird"])
 
     def test_unseen_image_omits_prediction_prefix_in_overlay_and_sidebar(self):
         app = review_app_module.ReviewApp(self.csv_path)
