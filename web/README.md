@@ -1,9 +1,11 @@
 # Local Web App
 
-The home page at <http://127.0.0.1:8080> links to manual review, the gallery,
-visualisations, predictions, and the camera map, with a brief description of each. Every page includes a
-navigation rail that starts collapsed to icons. Hover for page names, or expand
-the rail to show the full logo and navigation labels.
+The home page at <http://127.0.0.1:8080> centres the logo and the summary
+"Explore wildlife sightings, review detections, browse camera images, and view
+activity across your cameras." above recent sightings. The side navigation on
+the other pages links to Review, Gallery, Visualisations, Predictions, and
+Camera map. It starts collapsed to icons; hover for a page name and summary, or
+expand it to show the navigation labels.
 
 The home page also shows a mini gallery of sightings captured in the last
 24 hours, newest first. It includes roe deer, wild boar, badger, marten, fox,
@@ -13,6 +15,10 @@ and **Unlabelled** selects pending photos. Button counts and the short summary
 count each photo once per species, not each bounding box. Selections persist
 through minute refreshes. There is no search field, guide or examples on home.
 Thumbnails and enlarged photos retain their original aspect ratios.
+Toggling bounding boxes changes only the overlay, not the carousel frame. Boxes
+are yellow before review, green when a human label agrees with the prediction,
+and red when it disagrees. Gallery pagination uses bounded page links, ellipses,
+and first/last controls for large datasets.
 Unclassified photos are included until their species is known, including
 originals not yet present in the labels CSV. Capture times come from the CSV
 or the original image's EXIF metadata; supported camera filenames are a
@@ -53,10 +59,13 @@ The app uses the default dataset:
 The container can write human annotations and their `.before-review.bak` backup.
 Readers join human annotations with metadata and the latest completed model's
 predictions; missing automatic predictions never fall back to an older model.
-Annotated
-images, original images, and model files are read-only. The app does not mount
-`data/`, logs, credentials, or the Docker socket. It hides the destructive
-“Remove empty” action.
+Original and annotated images are writable so the Review page's **Remove empty**
+action can run after explicit confirmation. It removes only human-confirmed empty
+images, backs up the annotation CSV, logs deleted paths under the writable `logs/`
+mount, and records removals in `labels/deleted_images.csv` so old predictions
+do not reappear when inference refreshes image metadata.
+Model files remain read-only. The app does not mount `data/`, credentials, or the
+Docker socket. Browser review offers only **Unseen** and **Latest model incorrect**.
 
 ## Run Locally
 
@@ -95,9 +104,10 @@ HOST_UID="$(id -u)" HOST_GID="$(id -g)" docker compose up --build -d
 
 ## Visualisations
 
-Choose **Visualisations** from the home page, then select **Generate
-visualisations**. A spinner remains visible while the report runs. When it
-finishes, read the summary and select one chart at a time.
+Choose **Visualisations** in the side navigation. Each visit generates a fresh
+report automatically; a spinner remains visible while it runs. When it finishes,
+read the summary and select one chart at a time. Filter-based plots remain
+available for targeted comparisons.
 
 Charts and summaries live only in the container's 64 MiB `/tmp` filesystem.
 They disappear when the container stops or restarts. A failed rerun keeps the

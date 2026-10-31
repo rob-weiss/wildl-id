@@ -105,8 +105,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     @asynccontextmanager
     async def app_user(self, path):
         async with self.http_client() as client:
-            response = await client.get(path)
-            self.assertEqual(response.headers.get("X-NiceGUI-Content"), "page")
             user = User(client)
             await user.open(path)
             yield user
@@ -225,13 +223,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewer.current_image_path, local_image)
         self.assertEqual(reviewer.image_size, (16, 16))
 
-    async def test_review_page_shows_labels_and_hides_remove_empty(self):
+    async def test_review_page_shows_only_two_modes_and_remove_empty(self):
         self.write_valid_review_data()
 
         async with self.app_user("/review") as user:
             await user.should_see("Wildlife label review")
             await user.should_see("fox")
-            await user.should_not_see("Remove empty")
+            await user.should_see("Remove empty")
+            mode = next(iter(user.find(kind=ui.select, content="Review mode").elements))
+            self.assertEqual(mode.options, ["Unseen", "Latest model incorrect"])
 
     async def test_page_shows_missing_csv_error(self):
         async with self.app_user("/review") as user:
@@ -249,16 +249,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         async with self.app_user("/review") as user:
             await user.should_see("Review data unavailable")
 
-    async def test_home_links_to_review_and_visualisations(self):
+    async def test_home_has_no_navigation_links(self):
         async with self.app_user("/") as user:
-            await user.should_see("Manual review")
-            await user.should_see("Gallery")
-            await user.should_see("Visualisations")
-            await user.should_see("Predictions")
+            for kind in (ui.left_drawer, ui.item, ui.link):
+                with self.subTest(kind=kind), self.assertRaises(AssertionError):
+                    user.find(kind=kind)
 
     async def test_navigation_starts_as_icon_rail_on_every_page(self):
         for path in (
-            "/",
             "/review",
             "/gallery",
             "/visualisations",
@@ -294,40 +292,39 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     user.find(marker="navigation-toggle").click()
                     self.assertTrue(drawer.props.get("mini"))
 
-    async def test_home_shows_summary_and_descriptive_page_links(self):
+    async def test_side_navigation_uses_review_label_and_descriptive_tooltips(self):
+        async with self.app_user("/review") as user:
+            review_items = [
+                item
+                for item in user.find(kind=ui.item).elements
+                if item.props.get("href") == "/review"
+            ]
+            self.assertEqual(len(review_items), 1)
+            self.assertEqual(review_items[0].props.get("aria-label"), "Review")
+
+            tooltips = {tooltip.text for tooltip in user.find(kind=ui.tooltip).elements}
+            self.assertIn(
+                "Review: Check detections and correct species labels.", tooltips
+            )
+            self.assertIn(
+                "Gallery: Browse wildlife images and filter your sightings.", tooltips
+            )
+
+    async def test_home_centres_summary_and_moves_page_descriptions_to_navigation(self):
         async with self.app_user("/") as user:
             await user.should_see(
-                "Explore camera-trap images, review wildlife labels, "
-                "and visualise animal activity."
+                "Explore wildlife sightings, review detections, browse camera images, and view activity across your cameras."
             )
-            await user.should_see("Check detections and correct species labels.")
-            await user.should_see("Browse wildlife images and filter your sightings.")
-            await user.should_see("Generate charts and summary statistics.")
-            links = {
-                link.text: link.props["href"]
-                for link in user.find(kind=ui.link).elements
-                if link.text
-            }
-            self.assertEqual(
-                links,
-                {
-                    "Manual review": "/review",
-                    "Gallery": "/gallery",
-                    "Visualisations": "/visualisations",
-                    "Predictions": "/predictions",
-                    "Camera map": "/map",
-                },
+            logo = next(
+                image
+                for image in user.find(kind=ui.image).elements
+                if image.props.get("alt") == "wildl-id logo"
             )
+            self.assertIn("mx-auto", logo.classes)
             recent_heading = next(
                 iter(user.find(kind=ui.label, content="Last 24 hours").elements)
             )
-            self.assertTrue(
-                all(
-                    link.id < recent_heading.id
-                    for link in user.find(kind=ui.link).elements
-                    if link.text
-                )
-            )
+            self.assertGreater(recent_heading.id, logo.id)
 
     async def test_predictions_page_plots_all_landing_page_species(self):
         import pandas as pd
@@ -1221,14 +1218,49 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find(kind=ui.interactive_image).click()
                 await user.should_see("1 / 1")
                 self.assertTrue(user.find(marker="gallery-viewer-image").elements)
+                viewer_image = next(
+                    iter(user.find(marker="gallery-viewer-image").elements)
+                )
+                user.find(marker="gallery-viewer-image").trigger(
+                    "loaded", {"width": 1600, "height": 900}
+                )
+                viewer_style = dict(viewer_image.style)
                 viewer_toggle = next(
                     iter(user.find(marker="gallery-image-boxes").elements)
                 )
                 self.assertEqual(viewer_toggle.props.get("aria-pressed"), "true")
                 user.find(marker="gallery-image-boxes").click()
                 self.assertEqual(toggle.props.get("aria-pressed"), "false")
-                await user.should_not_see(kind=ui.interactive_image)
+                retained_image = next(
+                    iter(user.find(marker="gallery-viewer-image").elements)
+                )
+                self.assertEqual(retained_image.id, viewer_image.id)
+                self.assertEqual(dict(retained_image.style), viewer_style)
+                self.assertEqual(retained_image.content, "")
                 await user.should_see("1 / 1")
+
+    async def test_gallery_limits_page_navigation_for_large_datasets(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": f"fox-{index}.jpg",
+                    "timestamp": "2025-01-02T00:00:00",
+                    "class": "fox",
+                }
+                for index in range(gallery.PAGE_SIZE * 8)
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/gallery") as user:
+                pagination = next(iter(user.find(kind=ui.pagination).elements))
+                self.assertEqual(pagination.max, 8)
+                self.assertEqual(int(pagination.props.get("max-pages", 0)), 7)
+                self.assertTrue(pagination.props.get("ellipses"))
+                self.assertTrue(pagination.props.get("boundary-links"))
 
     async def test_home_and_viewer_toggle_bounding_boxes(self):
         self.write_original_image("fox.jpg", datetime.now() - timedelta(minutes=1))
@@ -1277,16 +1309,20 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             (web_app.ASSETS_DIRECTORY / "wildl-id-icon.svg").read_bytes(),
         )
 
-    async def test_visualisations_page_does_not_generate_on_open(self):
+    async def test_visualisations_page_generates_on_each_visit_without_button(self):
         run_store = FakeVisualisationRunStore()
         self.patch_run_store(run_store)
 
         async with self.app_user("/visualisations") as user:
             await user.should_see("Filter-based plots")
             await user.should_see("Generate filtered plot")
-            await user.should_see("Generate visualisations")
+            await user.should_not_see("Generate visualisations")
+            await user.should_see("Visualisations could not be generated.")
 
-        self.assertEqual(run_store.generate_calls, 0)
+        self.assertEqual(run_store.generate_calls, 1)
+        async with self.app_user("/visualisations") as user:
+            await user.should_see("Visualisations could not be generated.")
+        self.assertEqual(run_store.generate_calls, 2)
 
     async def test_dynamic_plot_uses_filter_and_keeps_static_plot_action(self):
         self.write_csv(
@@ -1363,7 +1399,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.patch_run_store(run_store)
 
         async with self.app_user("/visualisations") as user:
-            user.find("Generate visualisations").click()
             await user.should_see("Summary statistics")
             await user.should_see("01_species_distribution.svg")
             await user.should_see(kind=ui.image)
@@ -1388,7 +1423,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.patch_run_store(run_store)
 
         async with self.app_user("/visualisations") as user:
-            user.find("Generate visualisations").click()
             await user.should_see(
                 "Visualisations failed; see container logs for details."
             )
