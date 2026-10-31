@@ -193,7 +193,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call_args.args, (self.csv_path,))
             self.assertEqual(call_args.kwargs, {"image_base_url": base_url})
 
-    async def test_review_viewer_uses_cloud_url_and_keeps_local_image_path(self):
+    async def test_review_viewer_prefers_local_image_when_cloud_url_is_configured(self):
         self.write_valid_review_data()
         images_root = self.root / "source-images"
         local_image = images_root / "2026" / "camera1" / "photo.png"
@@ -220,10 +220,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Wildlife label review")
 
         reviewer = created_reviewers[-1]
-        self.assertIn(
-            "https://cdn.example.test/images/2026/camera1/photo.png",
-            str(reviewer.image._props),
-        )
+        self.assertNotIn(base_url, str(reviewer.image._props))
+        self.assertEqual(str(reviewer.image.source), str(local_image))
         self.assertEqual(reviewer.current_image_path, local_image)
         self.assertEqual(reviewer.image_size, (16, 16))
 

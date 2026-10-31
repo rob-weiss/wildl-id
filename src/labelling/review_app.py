@@ -442,10 +442,7 @@ class ReviewApp:
                 with Image.open(self.current_image_path) as source:
                     self.image_size = source.size
                 self.viewer._props["imageSize"] = list(self.image_size)
-                image_url = cloud_image_url(
-                    self.current_image_path, IMAGES_DIR, self.image_base_url
-                )
-                self.image.set_source(image_url or self.current_image_path)
+                self.image.set_source(self.current_image_path)
                 self.image.set_content(
                     box_overlay_svg(
                         row,
