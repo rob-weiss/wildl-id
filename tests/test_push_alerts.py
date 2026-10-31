@@ -250,9 +250,9 @@ class DailySummaryTests(unittest.TestCase):
 
         self.assertEqual((result.sent, result.failures, again.sent), (1, (), 0))
         request = self.published[0]
-        self.assertIn("Wendeplatte: roe deer 1", request.data.decode())
-        self.assertIn("Douglasien: fox 1", request.data.decode())
-        self.assertIn("2 wildlife photos", request.data.decode())
+        self.assertIn("Wendeplatte: 1 sighting", request.data.decode())
+        self.assertIn("Douglasien: 1 sighting", request.data.decode())
+        self.assertIn("Total: 2 sightings", request.data.decode())
         self.assertEqual(urlsplit(request.full_url).path, "/topic-x")
         self.assertEqual(parse_qs(urlsplit(request.full_url).query)["priority"], ["default"])
 
@@ -260,6 +260,32 @@ class DailySummaryTests(unittest.TestCase):
         result = self.run_summary(now=datetime(2026, 10, 31, 5, 59, tzinfo=timezone.utc))
         self.assertEqual(result.sent, 0)
         self.assertFalse(self.state.exists())
+
+    def test_only_landing_page_species_contribute_to_total_and_location_counts(self):
+        relevant = ["roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"]
+        rows = [
+            self.row(f"relevant-{index}.jpg", "2026-10-31 06:00:00", species=species)
+            for index, species in enumerate(relevant)
+        ]
+        rows.extend([
+            self.row("fox.jpg", "2026-10-31 06:00:00", location="Douglasien"),
+            self.row("manual.jpg", "2026-10-31 06:00:00", species="woodpecker", manual="hare", location="Douglasien"),
+            self.row("excluded.jpg", "2026-10-31 06:00:00", species="fox", manual="squirrel", location="Bird camera"),
+            self.row("bird.jpg", "2026-10-31 06:00:00", species="woodpecker", location="Bird camera"),
+            self.row("unknown.jpg", "2026-10-31 06:00:00", species="unknown"),
+        ])
+        self.write_rows(rows)
+
+        result = self.run_summary()
+
+        self.assertEqual((result.sent, result.failures), (1, ()))
+        body = self.published[0].data.decode()
+        self.assertIn("Total: 9 sightings", body)
+        self.assertIn("Wendeplatte: 7 sightings", body)
+        self.assertIn("Douglasien: 2 sightings", body)
+        self.assertNotIn("Bird camera", body)
+        self.assertNotIn("woodpecker", body)
+        self.assertNotIn("roe deer", body)
 
     def test_summer_seven_is_five_utc(self):
         result = self.run_summary(now=datetime(2026, 7, 1, 5, tzinfo=timezone.utc))
@@ -272,7 +298,7 @@ class DailySummaryTests(unittest.TestCase):
             self.row("included.jpg", "2026-10-24 07:00:00"),
         ])
         self.run_summary()
-        self.assertIn("1 wildlife photos", self.published[0].data.decode())
+        self.assertIn("Total: 1 sighting", self.published[0].data.decode())
 
     def test_wake_after_seven_uses_scheduled_window(self):
         self.write_rows([
@@ -280,7 +306,7 @@ class DailySummaryTests(unittest.TestCase):
             self.row("late.jpg", "2026-10-31 08:00:00"),
         ])
         self.run_summary(now=self.now + timedelta(hours=3))
-        self.assertIn("1 wildlife photos", self.published[0].data.decode())
+        self.assertIn("Total: 1 sighting", self.published[0].data.decode())
 
     def test_failed_publish_retries_without_marking_day_sent(self):
         def failing(request):
@@ -308,7 +334,8 @@ class DailySummaryTests(unittest.TestCase):
         self.run_summary()
         self.run_summary(now=self.now + timedelta(days=1))
         self.assertEqual(len(self.published), 2)
-        self.assertIn("No wildlife sightings", self.published[0].data.decode())
+        self.assertIn("Total: 0 sightings", self.published[0].data.decode())
+        self.assertIn("No relevant species sightings", self.published[0].data.decode())
 
     def test_existing_notification_entry_point_runs_digest(self):
         expected = alerts.AlertResult(True, 1, ())

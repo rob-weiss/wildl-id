@@ -26,10 +26,10 @@ from src.labelling.review_app import (
     display_label,
 )
 from src.labelling.review_labels import SHORTCUTS
+from src.labelling.species import RECENT_SPECIES
 
 LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
-RECENT_SPECIES = {"roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"}
 EXAMPLE_PROMPT = "Show only wild boar of the last two weeks"
 FILTER_EXAMPLES = {
     "Dates": {

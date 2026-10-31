@@ -4,7 +4,7 @@ import csv
 import json
 import os
 import subprocess
-from collections import Counter, defaultdict
+from collections import Counter
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
@@ -19,8 +19,10 @@ from PIL import Image
 
 try:
     from ..labelling.organize_images import IMAGES_DIR, image_paths
+    from ..labelling.species import RECENT_SPECIES
 except ImportError:
     from labelling.organize_images import IMAGES_DIR, image_paths
+    from labelling.species import RECENT_SPECIES
 
 CONFIG_PATH = Path.home() / ".config/wildl-id/push-alerts.json"
 STATE_PATH = Path.home() / "Library/Application Support/wildl-id/push-alerts/state.json"
@@ -361,9 +363,8 @@ def send_daily_summary(
                 from labelling.review_labels import DEFAULT_CSV
 
             csv_path = DEFAULT_CSV
-        counts = defaultdict(Counter)
+        counts = Counter()
         seen = set()
-        excluded = {"", "none", "empty", "unknown", "animal", "human", "person", "vehicle"}
         with Path(csv_path).open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
             if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or ()):
@@ -386,19 +387,18 @@ def send_daily_summary(
                 seen.add(key)
                 manual = (row.get("manual_label") or "").strip()
                 species = (manual or row["class"] or "").strip().casefold()
-                if species not in excluded:
-                    counts[row["location_id"]][species] += 1
-        total = sum(sum(species.values()) for species in counts.values())
+                if species in RECENT_SPECIES:
+                    counts[row["location_id"]] += 1
+        total = sum(counts.values())
         local_start = start.astimezone(LOCAL_TIME)
         lines = [
             f"{local_start:%d.%m.%Y %H:%M %Z} - {scheduled:%d.%m.%Y %H:%M %Z}",
-            f"{total} wildlife photos in the last 24 hours.",
+            f"Total: {total} {'sighting' if total == 1 else 'sightings'} in the last 24 hours.",
         ]
-        for location, species in sorted(counts.items()):
-            details = ", ".join(f"{name} {count}" for name, count in sorted(species.items()))
-            lines.append(f"{location}: {details}")
+        for location, count in sorted(counts.items()):
+            lines.append(f"{location}: {count} {'sighting' if count == 1 else 'sightings'}")
         if not total:
-            lines.append("No wildlife sightings in this period.")
+            lines.append("No relevant species sightings in this period.")
         topic = (keychain_reader or _read_keychain_secret)(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
         if not topic:
             raise RuntimeError("ntfy topic is missing from macOS Keychain")
