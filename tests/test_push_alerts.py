@@ -158,6 +158,16 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(len(result.failures), 1)
         self.assertIn("Keychain", result.failures[0])
 
+    def test_configured_species_control_immediate_alerts(self):
+        self.config.write_text('{"species": ["fox"]}', encoding="utf-8")
+        self.run_alerts()
+        self.image("fox.jpg", NOW, result=["fox", "wild boar"])
+
+        result = self.run_alerts()
+
+        self.assertEqual((result.sent, result.failures), (1, ()))
+        self.assertEqual(self.published[0][2].species, "fox")
+
     def test_config_rejects_plain_http_server(self):
         self.config.write_text(
             json.dumps({"server": "http://ntfy.example"}), encoding="utf-8"
@@ -277,6 +287,42 @@ class DailySummaryTests(unittest.TestCase):
         self.write_rows(rows)
 
         result = self.run_summary()
+
+    def test_configured_summary_species_are_independent_of_immediate_alerts(self):
+        self.config.write_text(
+            json.dumps(
+                {
+                    "daily_summary": True,
+                    "species": ["wild boar"],
+                    "summary_species": ["fox"],
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.write_rows(
+            [
+                self.row("fox.jpg", "2026-10-31 06:00:00"),
+                self.row("boar.jpg", "2026-10-31 06:00:00", species="wild boar"),
+            ]
+        )
+
+        result = self.run_summary()
+
+        self.assertEqual((result.sent, result.failures), (1, ()))
+        self.assertIn("Total: 1 sighting", self.published[0].data.decode())
+
+    def test_invalid_summary_species_fail_without_sending_or_recording_success(self):
+        for value in ([], "fox", [""], [123], None):
+            with self.subTest(value=value):
+                self.config.write_text(
+                    json.dumps({"daily_summary": True, "summary_species": value}),
+                    encoding="utf-8",
+                )
+                result = self.run_summary()
+                self.assertEqual(result.sent, 0)
+                self.assertIn("summary_species", result.failures[0])
+                self.assertFalse(self.state.exists())
+        self.assertEqual(self.published, [])
 
         self.assertEqual((result.sent, result.failures), (1, ()))
         body = self.published[0].data.decode()

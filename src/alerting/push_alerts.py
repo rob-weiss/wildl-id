@@ -32,6 +32,7 @@ KEYCHAIN_ACCOUNT = "topic"
 DEFAULTS = {
     "server": "https://ntfy.sh",
     "species": ["wild boar", "raccoon"],
+    "summary_species": sorted(RECENT_SPECIES),
     "min_confidence": 0.5,
     "cooldown_minutes": 30,
     "max_age_minutes": 180,
@@ -91,13 +92,15 @@ def _read_config(path):
     server = config["server"]
     if not isinstance(server, str) or urlsplit(server).scheme != "https":
         raise ValueError("push alert server must be an https URL")
-    species = config["species"]
-    if (
-        not isinstance(species, list)
-        or not species
-        or not all(isinstance(name, str) and name.strip() for name in species)
-    ):
-        raise ValueError("push alert species must be a non-empty list of names")
+    for key in ("species", "summary_species"):
+        species = config[key]
+        if (
+            not isinstance(species, list)
+            or not species
+            or not all(isinstance(name, str) and name.strip() for name in species)
+        ):
+            raise ValueError(f"push alert {key} must be a non-empty list of names")
+        config[key] = {name.strip() for name in species}
     for key in ("min_confidence", "cooldown_minutes", "max_age_minutes"):
         value = config[key]
         if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
@@ -111,7 +114,6 @@ def _read_config(path):
     return {
         **config,
         "server": server.rstrip("/"),
-        "species": {name.strip() for name in species},
     }
 
 
@@ -387,7 +389,7 @@ def send_daily_summary(
                 seen.add(key)
                 manual = (row.get("manual_label") or "").strip()
                 species = (manual or row["class"] or "").strip().casefold()
-                if species in RECENT_SPECIES:
+                if species in config["summary_species"]:
                     counts[row["location_id"]] += 1
         total = sum(counts.values())
         local_start = start.astimezone(LOCAL_TIME)

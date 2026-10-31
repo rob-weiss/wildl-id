@@ -201,14 +201,30 @@ no reinstall is needed if the job already passes `--notify`.
 
 The digest covers the 24 elapsed hours ending at the scheduled 07:00, even
 when the Mac wakes later. It reports the total sightings and a total per camera
-location for the landing page's relevant species: roe deer, wild boar, badger,
-marten, fox, hare, and raccoon. It uses the active review CSV and prefers manual
+location for `summary_species`, which defaults to the landing page's relevant
+species: roe deer, wild boar, badger, marten, fox, hare, and raccoon.
+It uses the active review CSV and prefers manual
 labels. Each unique photo counts as one sighting, not one unique animal.
 Empty days are reported too.
 Undated images and invalid timestamps are excluded. A missed morning is sent
 after waking that day; previous days are not backfilled. Failed sends retry
 on the next run. Successful-send state is stored separately in
 `~/Library/Application Support/wildl-id/push-alerts/daily-summary.json`.
+
+Both notification species lists live in `~/.config/wildl-id/push-alerts.json`:
+
+```json
+{
+  "daily_summary": true,
+  "species": ["wild boar", "raccoon"],
+  "summary_species": ["roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"]
+}
+```
+
+`species` controls immediate alerts; `summary_species` controls the daily digest.
+Each must be a non-empty list of species names. Use lower-case names matching
+the labels. Changes take effect on the next job run; no restart is needed.
+The ntfy topic stays in Keychain, not in this config file.
 
 ### Organise Images
 
