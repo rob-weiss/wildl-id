@@ -112,6 +112,12 @@ pointing downwind, its length and colour scaled by the Open-Meteo 10 m wind
 speed; the list below gives speed, source direction and gusts. Forecasts are
 cached for 15 minutes. The map needs internet access for tiles and wind.
 
+Optional `view_direction` (compass degrees) and `view_angle` (opening, degrees)
+draw each camera's view sector. Seats are ranked for the three hours starting
+at the slider time by how much of the wind source sector (forecast direction
+±45°) lies in the view, so scent drifts away from the viewed area. Sectors are
+green (≥67 %), yellow (≥33 %) or red.
+
 ## Predictions
 
 Open `/predictions` for the next 24 elapsed hours of hourly activity for the same

@@ -50,6 +50,9 @@ COMPASS = (
 
 _wind_cache: dict[tuple, tuple[float, dict]] = {}
 _wind_cache_lock = threading.Lock()
+RANKING_HOURS = 3
+WIND_SPREAD = 45.0
+VIEW_RADIUS = 120.0
 
 
 @dataclass(frozen=True)
@@ -57,10 +60,16 @@ class Camera:
     location_id: str
     latitude: float | None
     longitude: float | None
+    view_direction: float | None = None
+    view_angle: float | None = None
 
     @property
     def located(self) -> bool:
         return self.latitude is not None and self.longitude is not None
+
+    @property
+    def has_view(self) -> bool:
+        return self.view_direction is not None and self.view_angle is not None
 
 
 @dataclass(frozen=True)
@@ -95,7 +104,15 @@ def read_camera_locations(path: Path) -> list[Camera]:
         longitude = _coordinate(entry.get("longitude"), 180)
         if (latitude is None) != (longitude is None):
             raise ValueError(f"{location_id}: set both latitude and longitude")
-        cameras.append(Camera(location_id.strip(), latitude, longitude))
+        view_direction = _coordinate(entry.get("view_direction"), 360)
+        view_angle = _coordinate(entry.get("view_angle"), 360)
+        if (view_direction is None) != (view_angle is None):
+            raise ValueError(f"{location_id}: set both view_direction and view_angle")
+        if view_direction is not None and (view_direction < 0 or view_angle <= 0):
+            raise ValueError(f"{location_id}: view angles out of range")
+        cameras.append(
+            Camera(location_id.strip(), latitude, longitude, view_direction, view_angle)
+        )
     if len({camera.location_id for camera in cameras}) != len(cameras):
         raise ValueError("Duplicate camera location_id")
     return cameras
@@ -196,6 +213,99 @@ def compass(direction: float) -> str:
     return COMPASS[round(direction / 22.5) % 16]
 
 
+def initial_view(
+    cameras: list[Camera], size: tuple[int, int] = (560, 300)
+) -> tuple[tuple[float, float], int]:
+    """Centre and zoom showing every camera with its view radius in a small map."""
+    if not cameras:
+        return DEFAULT_CENTER, 13
+    latitudes = [camera.latitude for camera in cameras]
+    longitudes = [camera.longitude for camera in cameras]
+    center = (
+        (min(latitudes) + max(latitudes)) / 2,
+        (min(longitudes) + max(longitudes)) / 2,
+    )
+    margin = 2 * VIEW_RADIUS
+    height = (max(latitudes) - min(latitudes)) * 111_320 + margin
+    width = (max(longitudes) - min(longitudes)) * 111_320 * math.cos(
+        math.radians(center[0])
+    ) + margin
+    # Web Mercator metres per pixel at zoom 0, scaled to this latitude.
+    scale = 156_543.03 * math.cos(math.radians(center[0]))
+    zoom = min(
+        math.floor(math.log2(scale * size[0] / width)),
+        math.floor(math.log2(scale * size[1] / height)),
+    )
+    return center, max(3, min(18, zoom))
+
+
+def sector_overlap(
+    center_a: float, width_a: float, center_b: float, width_b: float
+) -> float:
+    """Degrees shared by two compass sectors, sampled at one-degree steps."""
+
+    def inside(bearing, center, width):
+        return abs((bearing - center + 180) % 360 - 180) <= width / 2
+
+    return float(
+        sum(
+            inside(bearing + 0.5, center_a, width_a)
+            and inside(bearing + 0.5, center_b, width_b)
+            for bearing in range(360)
+        )
+    )
+
+
+def wind_match(camera: Camera, hours: list[WindHour]) -> float:
+    # Wind blowing from the viewed area carries the hunter's scent away from game.
+    window = min(camera.view_angle, 2 * WIND_SPREAD)
+    return sum(
+        sector_overlap(
+            camera.view_direction, camera.view_angle, hour.direction, 2 * WIND_SPREAD
+        )
+        / window
+        for hour in hours
+    ) / len(hours)
+
+
+def rank_seats(
+    cameras: list[Camera], wind: dict[str, list[WindHour]], index: int
+) -> list[tuple[Camera, float]]:
+    ranked = [
+        (camera, wind_match(camera, hours[index : index + RANKING_HOURS]))
+        for camera in cameras
+        if camera.has_view and (hours := wind.get(camera.location_id))
+    ]
+    return sorted(ranked, key=lambda item: (-item[1], item[0].location_id))
+
+
+def view_polygon(camera: Camera) -> list[list[float]]:
+    start = [camera.latitude, camera.longitude]
+    steps = max(2, math.ceil(camera.view_angle / 10))
+    first = camera.view_direction - camera.view_angle / 2
+    return [
+        start,
+        *(
+            _offset(
+                start,
+                VIEW_RADIUS,
+                math.radians(first + camera.view_angle * step / steps),
+            )
+            for step in range(steps + 1)
+        ),
+    ]
+
+
+def match_colour(score: float | None) -> str:
+    if score is None:
+        return "#e5e7eb"
+    if score >= 0.67:
+        return "#22c55e"
+    if score >= 0.33:
+        return "#facc15"
+    return "#ef4444"
+
+
 async def build_camera_map_page() -> None:
     from nicegui import run, ui
 
@@ -209,16 +319,9 @@ async def build_camera_map_page() -> None:
             cameras = []
             status.set_text(f"Camera locations unavailable: {error}")
         located = [camera for camera in cameras if camera.located]
-        center = (
-            (
-                sum(camera.latitude for camera in located) / len(located),
-                sum(camera.longitude for camera in located) / len(located),
-            )
-            if located
-            else DEFAULT_CENTER
-        )
+        center, zoom = initial_view(located)
         leaflet = (
-            ui.leaflet(center=center, zoom=15 if located else 13)
+            ui.leaflet(center=center, zoom=zoom)
             .classes("w-full h-[60vh] min-h-80")
             .mark("camera-map")
         )
@@ -280,6 +383,26 @@ async def build_camera_map_page() -> None:
         wind_list.clear()
         index = int(slider.value)
         hour_label.set_text("")
+        ranking = rank_seats(located, state["wind"], index)
+        scores = {camera.location_id: score for camera, score in ranking}
+        for camera in located:
+            if camera.has_view:
+                colour = match_colour(scores.get(camera.location_id))
+                state["arrows"].append(
+                    leaflet.generic_layer(
+                        name="polygon",
+                        args=[
+                            view_polygon(camera),
+                            {
+                                "color": colour,
+                                "weight": 1,
+                                "fillColor": colour,
+                                "fillOpacity": 0.3,
+                                "interactive": False,
+                            },
+                        ],
+                    )
+                )
         for camera in located:
             hours = state["wind"].get(camera.location_id)
             if not hours:
@@ -306,12 +429,38 @@ async def build_camera_map_page() -> None:
                     ],
                 )
             )
-            with wind_list:
-                ui.label(
-                    f"{camera.location_id}: {hour.speed:.0f} km/h from "
-                    f"{compass(hour.direction)} ({hour.direction:.0f}°), "
-                    f"gusts {hour.gusts:.0f} km/h"
+
+        def wind_text(camera):
+            hour = state["wind"][camera.location_id][index]
+            return (
+                f"{camera.location_id}: {hour.speed:.0f} km/h from "
+                f"{compass(hour.direction)} ({hour.direction:.0f}°), "
+                f"gusts {hour.gusts:.0f} km/h"
+            )
+
+        with wind_list:
+            if ranking:
+                window = state["wind"][ranking[0][0].location_id][
+                    index : index + RANKING_HOURS
+                ]
+                first, last = (
+                    stamp.tz_convert(LOCAL_TIMEZONE)
+                    for stamp in (
+                        window[0].time,
+                        window[-1].time + pd.Timedelta(hours=1),
+                    )
                 )
+                ui.label(
+                    f"Best seats {first:%H:%M}-{last:%H:%M}: wind from the viewed area"
+                ).classes("font-medium")
+                for rank, (camera, score) in enumerate(ranking, 1):
+                    ui.label(
+                        f"{rank}. {score:.0%} · {wind_text(camera)} · view "
+                        f"{compass(camera.view_direction)} {camera.view_angle:.0f}°"
+                    ).mark("seat-rank")
+            for camera in located:
+                if not camera.has_view and camera.location_id in state["wind"]:
+                    ui.label(f"{wind_text(camera)} · no view angle")
 
     async def refresh() -> None:
         if not located:
@@ -322,7 +471,7 @@ async def build_camera_map_page() -> None:
         try:
             state["wind"] = await run.io_bound(fetch_wind, located)
             status.set_text("Wind at 10 m from Open-Meteo; arrows point downwind")
-        except (OSError, ValueError, KeyError, TypeError):
+        except OSError, ValueError, KeyError, TypeError:
             state["wind"] = {}
             status.set_text("Wind forecast unavailable")
         render()

@@ -418,6 +418,57 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("North: 15 km/h from W (270°), gusts 9 km/h")
                 self.assertEqual(len(leaflet.layers), 3)
 
+    async def test_camera_map_ranks_seats_and_draws_views(self):
+        import pandas as pd
+        from web import camera_map
+
+        locations = self.root / "camera_locations.json"
+        locations.write_text(
+            '{"cameras": ['
+            '{"location_id": "East", "latitude": 48.64, "longitude": 9.01,'
+            ' "view_direction": 90, "view_angle": 60},'
+            '{"location_id": "West", "latitude": 48.65, "longitude": 9.02,'
+            ' "view_direction": 270, "view_angle": 60}]}',
+            encoding="utf-8",
+        )
+        start = pd.Timestamp("2026-10-31T12:00", tz="UTC")
+        wind = {
+            name: [
+                camera_map.WindHour(
+                    start + pd.Timedelta(hours=hour),
+                    10.0,
+                    270.0 if hour < 5 else 90.0,
+                    15.0,
+                )
+                for hour in range(24)
+            ]
+            for name in ("East", "West")
+        }
+        with (
+            patch.dict(os.environ, {"WILDL_ID_CAMERA_LOCATIONS": str(locations)}),
+            patch.object(camera_map, "fetch_wind", return_value=wind),
+        ):
+            async with self.app_user("/map") as user:
+                await user.should_see("Best seats 13:00-16:00")
+                leaflet = next(iter(user.find(marker="camera-map").elements))
+                kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
+                self.assertEqual(kinds.count("polygon"), 2)
+
+                def ranking():
+                    return [
+                        label.text
+                        for label in sorted(
+                            user.find(marker="seat-rank").elements,
+                            key=lambda label: label.id,
+                        )
+                    ]
+
+                self.assertTrue(ranking()[0].startswith("1. 100% · West"))
+                slider = next(iter(user.find(marker="wind-hour").elements))
+                slider.set_value(5)
+                await user.should_see("Best seats 18:00-21:00")
+                self.assertTrue(ranking()[0].startswith("1. 100% · East"))
+
     async def test_camera_map_without_coordinates_is_safe(self):
         from web import camera_map
 
