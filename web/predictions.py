@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from astral import Observer
 from astral.sun import elevation, sun
+from src.labelling import label_data
 from web.gallery import RECENT_SPECIES, row_label
 
 MODEL_COLUMNS = (
@@ -147,7 +148,11 @@ def forecast_next24(
             "Recent observation coverage includes an unfinished hour"
         )
     try:
-        data = pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        data = (
+            pd.DataFrame(label_data.load_rows(csv_path))
+            if Path(csv_path).name == "human_labels.csv"
+            else pd.read_csv(csv_path, dtype=str, keep_default_na=False)
+        )
         if not {"location_id", "image_file", "class"}.issubset(data.columns):
             raise ValueError("Missing label columns")
         data["location_id"] = data.location_id.map(

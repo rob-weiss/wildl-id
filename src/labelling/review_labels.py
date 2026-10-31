@@ -16,15 +16,13 @@ from matplotlib.widgets import Button, TextBox
 from PIL import Image
 
 try:
+    from . import label_data
     from .organize_images import image_paths, nfc
 except ImportError:
+    import label_data
     from organize_images import image_paths, nfc
 
-DEFAULT_CSV = (
-    Path(__file__).resolve().parents[2]
-    / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
-    / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
-)
+DEFAULT_CSV = label_data.DEFAULT_HUMAN_CSV
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODE_OPTIONS = (
     "Unseen",
@@ -129,20 +127,37 @@ def box_from_drag(start, end, image_size):
 class LabelReview:
     def __init__(self, csv_path, images_dir=None):
         self.csv_path = Path(csv_path)
-        self.images_dir = (
-            Path(images_dir) if images_dir else self.csv_path.parent / "images"
+        self.human_only = self.csv_path.name == "human_labels.csv"
+        repo_dir = (
+            self.csv_path.parent.parent
+            if self.human_only
+            else self.csv_path.resolve().parents[2]
         )
-        with self.csv_path.open(newline="", encoding="utf-8") as source:
-            reader = csv.DictReader(source)
-            self.columns = list(reader.fieldnames or [])
-            if not {"location_id", "image_file", "class"}.issubset(self.columns):
-                raise ValueError("CSV needs location_id, image_file, and class columns")
-            self.rows = list(reader)
+        self.images_dir = (
+            Path(images_dir)
+            if images_dir
+            else (repo_dir / label_data.LEGACY_RELATIVE_PATH).parent / "images"
+            if self.human_only
+            else self.csv_path.parent / "images"
+        )
+        if self.human_only:
+            self._human_rows = label_data.read_records(self.csv_path)
+            self.rows = label_data.load_rows(self.csv_path)
+            self.columns = list((*label_data.PREDICTION_COLUMNS, "manual_label"))
+        else:
+            with self.csv_path.open(newline="", encoding="utf-8") as source:
+                reader = csv.DictReader(source)
+                self.columns = list(reader.fieldnames or [])
+                if not {"location_id", "image_file", "class"}.issubset(self.columns):
+                    raise ValueError(
+                        "CSV needs location_id, image_file, and class columns"
+                    )
+                self.rows = list(reader)
         if "manual_label" not in self.columns:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
-        self._image_paths = image_paths(self.csv_path.resolve().parents[2] / "images")
+        self._image_paths = image_paths(repo_dir / "images")
         existing_images = {
             (nfc(row["location_id"]), row["image_file"]) for row in self.rows
         }
@@ -164,6 +179,7 @@ class LabelReview:
         self.pending = self.filtered_indices()
         self.position = 0
         self.history = []
+        self._initial_boxes = [row.get("box", "") for row in self.rows]
         self.original_bytes = self.csv_path.read_bytes()
 
     def original_path(self, row):
@@ -223,6 +239,32 @@ class LabelReview:
         backup = self.csv_path.with_suffix(self.csv_path.suffix + ".before-review.bak")
         if not backup.exists():
             shutil.copy2(self.csv_path, backup)
+        if self.human_only:
+            annotations = []
+            for index, row in enumerate(self.rows):
+                previous = (
+                    self._human_rows[index] if index < len(self._human_rows) else None
+                )
+                changed_box = row.get("box", "") != self._initial_boxes[index]
+                if (
+                    previous is None
+                    and not row.get("manual_label", "").strip()
+                    and not changed_box
+                ):
+                    continue
+                annotation = dict(row)
+                if (
+                    previous is not None
+                    and not changed_box
+                    and row.get("manual_label", "") == previous.get("manual_label", "")
+                ):
+                    annotation["box"] = previous.get("box", "")
+                annotations.append(annotation)
+            label_data.write_records(
+                self.csv_path, annotations, label_data.HUMAN_COLUMNS
+            )
+            self.original_bytes = self.csv_path.read_bytes()
+            return
         temporary_path = None
         try:
             with tempfile.NamedTemporaryFile(

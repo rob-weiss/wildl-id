@@ -289,46 +289,63 @@ copies, a CSV backup, and the keeper mapping are saved under
 uv run src/labelling/label_images.py
 ```
 
-Labelling resumes by default: images with manual labels or a completed automatic
-class are skipped. New images and legacy entries with an empty, `unknown`, or
-`animal` class are processed. New predictions record their `classifier_model`,
-so even generic results are retained rather than repeated on every download.
-Use `uv run wildl_id.py --label --reprocess-missing` to also
-retry entries with missing timestamps or temperatures; manually labelled images
-are still skipped. Use `uv run wildl_id.py --label --force` to repeat detection
-and classification for every image while preserving manual labels. These options
-also apply to `--all`; `--force` takes precedence over `--reprocess-missing`.
-Species classification automatically
+Labelling resumes from the latest model's saved predictions. Human annotations
+do not prevent missing model predictions from being generated. Generic results
+are retained too, because new predictions record their `classifier_model`.
+Use `uv run wildl_id.py --label --reprocess-missing` to retry incomplete metadata,
+or `uv run wildl_id.py --label --force` to repeat detection and classification.
+Neither option rewrites human annotations. They also apply to `--all`;
+`--force` takes precedence over `--reprocess-missing`. Species classification
 uses `weights.pt` from the newest timestamped `models/deepfaune_finetuned_*` run;
 incomplete runs without weights are ignored. If no fine-tuned model exists, it uses
 pretrained DeepFaune. A checkpoint loading error stops the run instead of silently
 falling back to a different model.
 
-The app, email-download workflow, and standalone labelling all use the original
-`labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv`.
-Its manual labels are the source of truth and are never replaced by model output
-or copied from another model's CSV. Downloaded images are automatically labelled
-by `uv run wildl_id.py --download`, and their predictions are saved into this same
-CSV. The app's **Auto-label unseen** action reuses completed predictions too.
-Model-specific CSVs from earlier runs remain archives; they are not active datasets.
+The dataset is separated by ownership:
+
+- `labels/human_labels.csv`: only `location_id`, `image_file`, `box`, and
+  `manual_label`. These annotations are the source of truth. Duplicate human
+  annotations are preserved, including conflicting labels.
+- `labels/image_metadata.csv`: timestamps, lighting, and temperature. Training
+  uses the retained timestamps to keep image bursts in the same split; the human
+  CSV does not need timestamp columns.
+- `models/<classifier-run>/predictions.csv`: automatic classes, detected boxes,
+  confidence, model identity, and metadata for that model. This is separate from
+  its validation-only `validation_predictions/predictions.csv`.
+
+Readers join by location and filename, with human labels and reviewed boxes
+taking precedence. The app, training, reports, and email workflow automatically
+select the newest completed model with weights. If its predictions are missing,
+readers leave the automatic fields empty rather than borrowing an older model's
+output. Running labelling generates and saves the missing predictions, including
+for images already reviewed by a person. Downloaded images are automatically
+labelled by `uv run wildl_id.py --download`; the app's **Auto-label unseen**
+action reuses the same model-specific predictions.
+
+To migrate an older checkout, stop active labelling and review processes, then run:
+
+```bash
+uv run python -c 'from src.labelling.label_data import migrate_human_labels; migrate_human_labels()'
+```
+
+Migration projects the original manually labelled CSV into the four-column file
+and preserves its metadata separately. The original and older model-specific CSVs
+remain unchanged as rollback archives. Predictions with unknown model provenance
+are not attributed to the latest model. Migration is safe to repeat.
 The slim Docker web image does not include the inference libraries. Run automatic
-labelling on the host; the container reads and reviews the same mounted CSV.
+labelling on the host; the container joins the same mounted datasets.
 
-New predictions identify the classifier in `classifier_model`. Existing rows
-without that field have unknown model provenance. All species inference, including
-push alerts, selects the latest available fine-tuned weights. Saved predictions
-are not automatically recomputed when a new model appears; use `--force` to refresh
-them with the latest model while retaining manual labels.
+New predictions identify the classifier in `classifier_model`. All species
+inference, including push alerts, selects the latest available fine-tuned weights.
+A new model has its own resumable prediction file, never a copy of older predictions.
 
-Before rewriting an existing CSV, the script duplicates it as
-`*.csv.before-relabel-<timestamp>.bak`, including all manual labels. It refreshes
-`class`, confidence, boxes, and metadata while preserving `manual_label` by location
-and filename. CSV updates are saved atomically in batches; completed results in
+Before rewriting an existing prediction CSV, the script duplicates it as
+`*.csv.before-relabel-<timestamp>.bak`. Human annotations are never written by
+inference. CSV updates are saved atomically in batches; completed results in
 the pending batch are also saved if inference fails or is interrupted. Existing rows whose
 original image is missing are retained unchanged. Inference failures stop the run
-without deleting the original image. Existing duplicate rows retain their individual
-manual labels, even if those labels conflict; all matching rows get the refreshed
-prediction. Do not run the reviewer during labelling.
+without deleting the original image. Explicit legacy CSV paths remain supported
+for older tools, but are not the active dataset.
 
 ### Review Machine Labels
 

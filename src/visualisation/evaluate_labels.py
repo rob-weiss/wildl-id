@@ -32,6 +32,14 @@ from astral import LocationInfo
 from astral.moon import phase
 from astral.sun import sun
 
+try:
+    from ..labelling import label_data
+except ImportError:
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from labelling import label_data
+
 VISUALIZATION_CLASSES = frozenset(
     {
         "roe deer",
@@ -109,7 +117,7 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     csv_path = (
         Path(csv_path)
         if csv_path is not None
-        else labels_dir / f"detection_results_{model}.csv"
+        else repo_root / "labels/human_labels.csv"
     )
     output_dir = (
         Path(output_dir) if output_dir is not None else repo_root / "docs" / "diagrams"
@@ -130,7 +138,15 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
         return False
 
     try:
-        df = pd.read_csv(csv_path)
+        df = (
+            pd.DataFrame(label_data.load_rows(csv_path))
+            if csv_path.name == "human_labels.csv"
+            else pd.read_csv(csv_path)
+        )
+        if "temperature_celsius" in df:
+            df["temperature_celsius"] = pd.to_numeric(
+                df["temperature_celsius"], errors="coerce"
+            )
     except (OSError, UnicodeError, ValueError, pd.errors.ParserError) as error:
         print(f"Error: Could not read results file at {csv_path}: {error}")
         return False

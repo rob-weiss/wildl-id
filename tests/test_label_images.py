@@ -263,7 +263,9 @@ class AutomaticLabelTests(unittest.TestCase):
                     {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
                 ),
             ):
-                label_images.process_images_with_pytorch_wildlife(force=True)
+                label_images.process_images_with_pytorch_wildlife(
+                    force=True, output_csv_path=csv_path
+                )
             output_dir = labels_dir.with_name(
                 labels_dir.name + "_deepfaune_finetuned_20261029-221530_new"
             )
@@ -360,7 +362,9 @@ class AutomaticLabelTests(unittest.TestCase):
                 saved = csv_path.read_bytes()
                 detector.reset_mock()
                 self.assertEqual(wildl_id.main(), 0)
-                label_images.process_images_with_pytorch_wildlife()
+                label_images.process_images_with_pytorch_wildlife(
+                    output_csv_path=csv_path
+                )
                 detector.single_image_detection.assert_not_called()
                 self.assertEqual(csv_path.read_bytes(), saved)
                 label_images.process_images_with_pytorch_wildlife(
@@ -373,7 +377,9 @@ class AutomaticLabelTests(unittest.TestCase):
                     paths[("camera", name)] = path
                 detector.single_image_detection.side_effect = [{}, KeyboardInterrupt]
                 with self.assertRaises(KeyboardInterrupt):
-                    label_images.process_images_with_pytorch_wildlife()
+                    label_images.process_images_with_pytorch_wildlife(
+                        output_csv_path=csv_path
+                    )
                 interrupted = pd.read_csv(csv_path, keep_default_na=False).set_index(
                     "image_file"
                 )

@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import matplotlib.dates as mdates
 import pandas as pd
+from src.labelling import label_data
 from src.visualisation import evaluate_labels as evaluate_module
 from src.visualisation.evaluate_labels import (
     filter_baiting_classes,
@@ -175,6 +176,26 @@ class VisualizationCustomPathTests(unittest.TestCase):
         self.assertIn("fox", summary_text)
         self.assertNotIn("horse", summary_text)
         self.assertEqual(self.sentinel.read_text(encoding="utf-8"), "existing output")
+
+    def test_human_labels_use_timestamps_from_separate_metadata(self):
+        self.write_valid_csv()
+        rows = label_data.read_records(self.csv_path)
+        for row in rows:
+            row["manual_label"] = row["manual_label"] or row["class"]
+            row["box"] = ""
+        label_data.write_records(
+            self.repo_dir / label_data.LEGACY_RELATIVE_PATH,
+            rows,
+            tuple(rows[0]),
+        )
+        human_path = label_data.migrate_human_labels(self.repo_dir)
+
+        self.assertIs(self.run_visualisation(human_path, self.output_dir), True)
+        summary = (self.output_dir / "summary_statistics.txt").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("2024-04-01", summary)
+        self.assertIn("fox", summary)
 
     def test_missing_custom_csv_preserves_existing_output(self):
         self.output_dir.mkdir()

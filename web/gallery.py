@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from nicegui import ui
 from PIL import Image
+from src.labelling import label_data
 from src.labelling.organize_images import (
     capture_time_from_exif,
     image_paths,
@@ -710,6 +711,8 @@ def image_source(row, local_images, images_dir, base_url):
 
 
 def load_rows(csv_path):
+    if Path(csv_path).name == "human_labels.csv":
+        return label_data.load_rows(csv_path)
     with Path(csv_path).open(newline="", encoding="utf-8") as source:
         reader = csv.DictReader(source)
         if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or []):

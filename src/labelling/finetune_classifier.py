@@ -47,13 +47,15 @@ from torchvision.transforms import InterpolationMode
 from tqdm import tqdm
 
 try:
+    from . import label_data
     from .organize_images import image_paths, nfc
 except ImportError:
+    import label_data
     from organize_images import image_paths, nfc
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
-LABELS_DIR = REPO_DIR / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
-CSV_PATH = LABELS_DIR / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
+LABELS_DIR = REPO_DIR / "labels"
+CSV_PATH = LABELS_DIR / "human_labels.csv"
 MODELS_DIR = REPO_DIR / "models"
 
 # The classifier only sees MegaDetector "animal" crops, so these labels are not trained
@@ -158,7 +160,11 @@ def git_info():
 
 
 def load_labelled_rows():
-    df = pd.read_csv(CSV_PATH, keep_default_na=False)
+    df = (
+        pd.DataFrame(label_data.load_rows(CSV_PATH))
+        if Path(CSV_PATH).name == "human_labels.csv"
+        else pd.read_csv(CSV_PATH, keep_default_na=False)
+    )
     df["manual_label"] = df["manual_label"].str.strip()
     df = df[(df["box"] != "") & ~df["manual_label"].isin(EXCLUDED_LABELS)].copy()
 

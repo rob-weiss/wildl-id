@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 # Import the main functions from each module
 from alerting.push_alerts import send_push_alerts as alerts_main
 from downloading.download_email_images import download_email_images as download_main
+from labelling import label_data
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import image_paths, nfc
 from labelling.organize_images import organize_images as organize_main
@@ -131,8 +132,13 @@ def send_alerts():
 def label_new_images(camera=None):
     try:
         completed = set()
-        if DEFAULT_CSV.exists():
-            with DEFAULT_CSV.open(newline="", encoding="utf-8") as source:
+        active_csv = (
+            label_data.predictions_path(DEFAULT_CSV.parent.parent)
+            if DEFAULT_CSV.name == "human_labels.csv"
+            else DEFAULT_CSV
+        )
+        if active_csv.exists():
+            with active_csv.open(newline="", encoding="utf-8") as source:
                 for row in csv.DictReader(source):
                     manual = (row.get("manual_label") or "").strip()
                     automatic = (row.get("class") or "").strip().casefold()
@@ -150,7 +156,7 @@ def label_new_images(camera=None):
             print("No new images require automatic labelling.")
             return True
         print(
-            f"Automatically labelling {len(pending)} pending images into {DEFAULT_CSV}"
+            f"Automatically labelling {len(pending)} pending images into {active_csv}"
         )
         process_images_with_pytorch_wildlife(
             camera=camera, output_csv_path=DEFAULT_CSV, image_keys=pending

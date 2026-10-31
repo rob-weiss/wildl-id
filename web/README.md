@@ -43,12 +43,17 @@ for one architecture to another host.
 
 The app uses the default dataset:
 
-- CSV: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/`
-- Annotated images: that directory's `images/` child
+- Human annotations: `labels/human_labels.csv` (location, filename, box, manual label)
+- Image metadata: `labels/image_metadata.csv`
+- Automatic predictions: `models/<latest-completed-run>/predictions.csv`
+- Annotated images: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images/`
 - Original images: `images/`
 - Validation predictions: `models/`
 
-The container can write the CSV and its `.before-review.bak` backup. Annotated
+The container can write human annotations and their `.before-review.bak` backup.
+Readers join human annotations with metadata and the latest completed model's
+predictions; missing automatic predictions never fall back to an older model.
+Annotated
 images, original images, and model files are read-only. The app does not mount
 `data/`, logs, credentials, or the Docker socket. It hides the destructive
 “Remove empty” action.

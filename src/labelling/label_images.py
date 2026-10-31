@@ -67,8 +67,10 @@ from PytorchWildlife.models import detection as pw_detection
 from tqdm import tqdm
 
 try:
+    from . import label_data
     from .organize_images import image_paths, nfc
 except ImportError:
+    import label_data
     from organize_images import image_paths, nfc
 
 # Configuration (must be defined before OCR framework checks)
@@ -829,14 +831,7 @@ def show_image_with_detection(
 
 def latest_classifier_weights(models_dir=None):
     models_dir = Path(models_dir) if models_dir is not None else repo_dir / "models"
-    candidates = []
-    for weights in models_dir.glob("deepfaune_finetuned_*/weights.pt"):
-        match = re.fullmatch(
-            r"deepfaune_finetuned_(\d{8}-\d{6})_.+", weights.parent.name
-        )
-        if match and weights.is_file():
-            candidates.append((match.group(1), weights.parent.name, weights))
-    return max(candidates)[2] if candidates else None
+    return label_data.latest_weights(models_dir)
 
 
 class SpeciesClassifier:
@@ -1015,14 +1010,19 @@ def process_images_with_pytorch_wildlife(
     image_info_list.sort(key=lambda x: (x["location_id"], x["name"]))
 
     # Load existing results to avoid reprocessing
-    csv_path = (
-        Path(output_csv_path)
-        if output_csv_path
-        else (
-            labels_dir
-            / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
-        )
+    separated = (
+        output_csv_path is None or Path(output_csv_path).name == "human_labels.csv"
     )
+    if separated:
+        model_dir = (
+            classification_model.weights_path.parent
+            if classification_model is not None
+            and classification_model.weights_path is not None
+            else repo_dir / "models" / (classifier_run or "megadetector")
+        )
+        csv_path = model_dir / "predictions.csv"
+    else:
+        csv_path = Path(output_csv_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"Writing labels to: {csv_path}")
 
@@ -1045,7 +1045,7 @@ def process_images_with_pytorch_wildlife(
     existing_df = None
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
-        if "manual_label" not in existing_df:
+        if not separated and "manual_label" not in existing_df:
             existing_df["manual_label"] = ""
         backup = csv_path.with_name(
             f"{csv_path.name}.before-relabel-{datetime.now():%Y%m%d-%H%M%S-%f}.bak"
@@ -1083,9 +1083,11 @@ def process_images_with_pytorch_wildlife(
             return
         # Create DataFrame from accumulated results with explicit dtypes
         new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
+        if separated:
+            new_rows_df = new_rows_df.drop(columns="manual_label")
         if csv_path.exists():
             existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
-            if "manual_label" not in existing_df:
+            if not separated and "manual_label" not in existing_df:
                 existing_df["manual_label"] = ""
         if existing_df is not None and len(existing_df) > 0:
             keys = ["location_id", "image_file"]
@@ -1122,6 +1124,10 @@ def process_images_with_pytorch_wildlife(
         temporary_csv = csv_path.with_suffix(".csv.tmp")
         existing_df.to_csv(temporary_csv, index=False)
         temporary_csv.replace(csv_path)
+        if separated:
+            label_data.save_image_metadata(
+                repo_dir, pd.DataFrame(results).fillna("").to_dict("records")
+            )
         # Clear results to free memory
         results.clear()
 

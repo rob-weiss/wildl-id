@@ -33,8 +33,10 @@ from PIL import Image
 from tqdm import tqdm
 
 try:
+    from .label_data import DEFAULT_HUMAN_CSV
     from .pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 except ImportError:
+    from label_data import DEFAULT_HUMAN_CSV
     from pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 
 REPO_DIR = Path(__file__).resolve().parents[2]
@@ -42,7 +44,7 @@ DATA_DIR = REPO_DIR / "data"
 IMAGES_DIR = REPO_DIR / "images"
 LOG_DIR = REPO_DIR / "logs"
 LABEL_DIR = REPO_DIR / "labels" / "labels_MegaDetectorV6_MDV6-yolov10-e_classified"
-CSV_PATH = LABEL_DIR / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
+CSV_PATH = DEFAULT_HUMAN_CSV
 ANNOTATED_DIR = LABEL_DIR / "images"
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
