@@ -1202,6 +1202,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         async with self.app_user("/") as user:
             await user.should_see(kind=ui.image)
 
+    async def test_page_declares_brand_tab_title(self):
+        for path in ("/", "/gallery", "/map"):
+            with self.subTest(path=path):
+                async with self.http_client() as client:
+                    response = await client.get(path)
+                self.assertIn(
+                    "<title>wildl-id | Wildlife Identification</title>",
+                    response.text,
+                )
+
     async def test_page_declares_brand_tab_icon(self):
         async with self.http_client() as client:
             response = await client.get("/")

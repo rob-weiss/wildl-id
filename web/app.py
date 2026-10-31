@@ -370,4 +370,9 @@ def visualisations_page() -> None:
     button = ui.button("Generate visualisations", on_click=generate).props("no-caps")
 
 
-ui.run_with(app, favicon=ASSETS_DIRECTORY / "wildl-id-icon.svg", mount_path="/")
+ui.run_with(
+    app,
+    title="wildl-id | Wildlife Identification",
+    favicon=ASSETS_DIRECTORY / "wildl-id-icon.svg",
+    mount_path="/",
+)
