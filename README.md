@@ -200,11 +200,15 @@ summer-time changes. The existing minute-by-minute LaunchAgent sends it;
 no reinstall is needed if the job already passes `--notify`.
 
 The digest covers the 24 elapsed hours ending at the scheduled 07:00, even
-when the Mac wakes later. It reports the total sightings and a total per camera
-location for `summary_species`, which defaults to the landing page's relevant
-species: roe deer, wild boar, badger, marten, fox, hare, and raccoon.
+when the Mac wakes later. It reports total sightings, totals per species, and
+species counts at each camera location for `summary_species`, which defaults
+to the landing page's relevant species: roe deer, wild boar, badger, marten,
+fox, hare, and raccoon.
 It uses the active review CSV and prefers manual
 labels. Each unique photo counts as one sighting, not one unique animal.
+For example, `Total: 4 sightings`, `By species: 3 wild boar 1 roe deer`, and
+`Grenzweg: 3 wild boar 1 roe deer`. Breakdowns show species with sightings,
+ordered by decreasing count, then alphabetically for ties.
 Empty days are reported too.
 Undated images and invalid timestamps are excluded. A missed morning is sent
 after waking that day; previous days are not backfilled. Failed sends retry

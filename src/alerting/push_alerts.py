@@ -4,7 +4,7 @@ import csv
 import json
 import os
 import subprocess
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
@@ -365,7 +365,7 @@ def send_daily_summary(
                 from labelling.review_labels import DEFAULT_CSV
 
             csv_path = DEFAULT_CSV
-        counts = Counter()
+        counts = defaultdict(Counter)
         seen = set()
         with Path(csv_path).open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
@@ -390,15 +390,28 @@ def send_daily_summary(
                 manual = (row.get("manual_label") or "").strip()
                 species = (manual or row["class"] or "").strip().casefold()
                 if species in config["summary_species"]:
-                    counts[row["location_id"]] += 1
-        total = sum(counts.values())
+                    counts[row["location_id"]][species] += 1
+        species_totals = Counter()
+        for location_counts in counts.values():
+            species_totals.update(location_counts)
+        total = sum(species_totals.values())
         local_start = start.astimezone(LOCAL_TIME)
         lines = [
             f"{local_start:%d.%m.%Y %H:%M %Z} - {scheduled:%d.%m.%Y %H:%M %Z}",
             f"Total: {total} {'sighting' if total == 1 else 'sightings'} in the last 24 hours.",
         ]
-        for location, count in sorted(counts.items()):
-            lines.append(f"{location}: {count} {'sighting' if count == 1 else 'sightings'}")
+        for label, species_counts in [
+            ("By species", species_totals), *sorted(counts.items())
+        ]:
+            if not species_counts:
+                continue
+            details = " ".join(
+                f"{count} {species}"
+                for species, count in sorted(
+                    species_counts.items(), key=lambda item: (-item[1], item[0])
+                )
+            )
+            lines.append(f"{label}: {details}")
         if not total:
             lines.append("No relevant species sightings in this period.")
         topic = (keychain_reader or _read_keychain_secret)(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
