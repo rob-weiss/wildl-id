@@ -6,7 +6,7 @@ import subprocess
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 from pathlib import Path
 from urllib.parse import quote, urlencode, urlsplit
@@ -267,7 +267,7 @@ def send_push_alerts(
     except Exception as error:
         return AlertResult(True, 0, (f"{type(error).__name__}: {error}",))
 
-    now = now or datetime.now(UTC)
+    now = now or datetime.now(timezone.utc)
     oldest = now - timedelta(minutes=config["max_age_minutes"])
     cooldown = timedelta(minutes=config["cooldown_minutes"])
     publish = publisher or _publish
