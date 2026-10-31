@@ -1,8 +1,10 @@
 """Send ntfy push alerts for selected species in newly organised images."""
 
+import csv
 import json
 import os
 import subprocess
+from collections import Counter, defaultdict
 from collections.abc import Callable
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
@@ -22,6 +24,7 @@ except ImportError:
 
 CONFIG_PATH = Path.home() / ".config/wildl-id/push-alerts.json"
 STATE_PATH = Path.home() / "Library/Application Support/wildl-id/push-alerts/state.json"
+SUMMARY_STATE_PATH = STATE_PATH.with_name("daily-summary.json")
 KEYCHAIN_SERVICE = "wildl-id-ntfy"
 KEYCHAIN_ACCOUNT = "topic"
 DEFAULTS = {
@@ -31,6 +34,7 @@ DEFAULTS = {
     "cooldown_minutes": 30,
     "max_age_minutes": 180,
     "attach_image": True,
+    "daily_summary": False,
 }
 DETECTION_THRESHOLD = 0.6
 # Organised EXIF times are timezone-free fixed CET.
@@ -100,6 +104,8 @@ def _read_config(path):
         raise ValueError("push alert min_confidence must be between 0 and 1")
     if not isinstance(config["attach_image"], bool):
         raise ValueError("push alert attach_image must be true or false")
+    if not isinstance(config["daily_summary"], bool):
+        raise ValueError("push alert daily_summary must be true or false")
     return {
         **config,
         "server": server.rstrip("/"),
@@ -234,7 +240,7 @@ def _publish(server, topic, alert):
         pass
 
 
-def send_push_alerts(
+def _send_species_alerts(
     config_path: Path | None = None,
     state_path: Path | None = None,
     images_dir: Path | None = None,
@@ -318,3 +324,122 @@ def send_push_alerts(
     if skipped and not pending:
         _write_state(state_path, state)
     return AlertResult(True, sent, tuple(failures))
+
+
+def send_daily_summary(
+    config_path=None,
+    state_path=None,
+    csv_path=None,
+    *,
+    keychain_reader=None,
+    publisher=None,
+    now=None,
+):
+    config_path = Path(config_path or CONFIG_PATH).expanduser()
+    if not config_path.exists():
+        return AlertResult(False, 0, ())
+    try:
+        config = _read_config(config_path)
+        if not config["daily_summary"]:
+            return AlertResult(False, 0, ())
+        local_now = (now or datetime.now(UTC)).astimezone(LOCAL_TIME)
+        scheduled = local_now.replace(hour=7, minute=0, second=0, microsecond=0)
+        if local_now < scheduled:
+            return AlertResult(True, 0, ())
+        day = scheduled.date().isoformat()
+        state_path = Path(state_path or SUMMARY_STATE_PATH).expanduser()
+        if state_path.exists():
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            if state.get("last_sent", "") >= day:
+                return AlertResult(True, 0, ())
+        end = scheduled.astimezone(UTC)
+        start = end - timedelta(hours=24)
+        if csv_path is None:
+            try:
+                from ..labelling.review_labels import DEFAULT_CSV
+            except ImportError:
+                from labelling.review_labels import DEFAULT_CSV
+
+            csv_path = DEFAULT_CSV
+        counts = defaultdict(Counter)
+        seen = set()
+        excluded = {"", "none", "empty", "unknown", "animal", "human", "person", "vehicle"}
+        with Path(csv_path).open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or ()):
+                raise ValueError("summary CSV needs location_id, image_file, and class columns")
+            for row in reader:
+                stamp = (row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+                if not stamp:
+                    continue
+                try:
+                    captured = datetime.fromisoformat(stamp)
+                except ValueError:
+                    continue
+                if captured.tzinfo is None:
+                    captured = captured.replace(tzinfo=CAMERA_TIME)
+                if not start <= captured.astimezone(UTC) < end:
+                    continue
+                key = (row["location_id"], row["image_file"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                manual = (row.get("manual_label") or "").strip()
+                species = (manual or row["class"] or "").strip().casefold()
+                if species not in excluded:
+                    counts[row["location_id"]][species] += 1
+        total = sum(sum(species.values()) for species in counts.values())
+        local_start = start.astimezone(LOCAL_TIME)
+        lines = [
+            f"{local_start:%d.%m.%Y %H:%M %Z} - {scheduled:%d.%m.%Y %H:%M %Z}",
+            f"{total} wildlife photos in the last 24 hours.",
+        ]
+        for location, species in sorted(counts.items()):
+            details = ", ".join(f"{name} {count}" for name, count in sorted(species.items()))
+            lines.append(f"{location}: {details}")
+        if not total:
+            lines.append("No wildlife sightings in this period.")
+        topic = (keychain_reader or _read_keychain_secret)(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+        if not topic:
+            raise RuntimeError("ntfy topic is missing from macOS Keychain")
+        params = urlencode({"title": "Wildl-ID daily summary", "priority": "default"})
+        request = Request(
+            f"{config['server']}/{quote(topic, safe='')}?{params}",
+            data="\n".join(lines).encode("utf-8"),
+            method="PUT",
+        )
+        if publisher is not None:
+            publisher(request)
+        else:
+            with urlopen(request, timeout=PUBLISH_TIMEOUT_SECONDS):
+                pass
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = state_path.with_name(f".{state_path.name}.tmp")
+        temporary.write_text(json.dumps({"last_sent": day}) + "\n", encoding="utf-8")
+        os.replace(temporary, state_path)
+        return AlertResult(True, 1, ())
+    except Exception as error:
+        return AlertResult(True, 0, (f"Daily summary: {type(error).__name__}: {error}",))
+
+
+def send_push_alerts(
+    config_path: Path | None = None,
+    state_path: Path | None = None,
+    images_dir: Path | None = None,
+    *,
+    keychain_reader: Callable[[str, str], str] | None = None,
+    analyser_factory: Callable[[float], Callable] | None = None,
+    publisher: Callable[[str, str, Alert], None] | None = None,
+    now: datetime | None = None,
+) -> AlertResult:
+    summary = send_daily_summary(config_path, keychain_reader=keychain_reader, now=now)
+    alerts = _send_species_alerts(
+        config_path, state_path, images_dir,
+        keychain_reader=keychain_reader, analyser_factory=analyser_factory,
+        publisher=publisher, now=now,
+    )
+    return AlertResult(
+        summary.enabled or alerts.enabled,
+        summary.sent + alerts.sent,
+        summary.failures + alerts.failures,
+    )

@@ -192,6 +192,22 @@ Run once by hand with:
 uv run --locked python wildl_id.py --notify
 ```
 
+#### Daily Summary
+
+Set `"daily_summary": true` in `~/.config/wildl-id/push-alerts.json` to receive
+one daily digest on the same ntfy topic at 07:00 `Europe/Berlin`, including
+summer-time changes. The existing minute-by-minute LaunchAgent sends it;
+no reinstall is needed if the job already passes `--notify`.
+
+The digest covers the 24 elapsed hours ending at the scheduled 07:00, even
+when the Mac wakes later. It groups wildlife photo counts by camera location
+and species, using the active review CSV and preferring manual labels. These
+are photo counts, not counts of unique animals. Empty days are reported too.
+Undated images and invalid timestamps are excluded. A missed morning is sent
+after waking that day; previous days are not backfilled. Failed sends retry
+on the next run. Successful-send state is stored separately in
+`~/Library/Application Support/wildl-id/push-alerts/daily-summary.json`.
+
 ### Organise Images
 
 Place camera exports in `data/<location>/`, then run:

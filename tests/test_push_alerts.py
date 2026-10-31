@@ -1,3 +1,4 @@
+import csv
 import json
 import tempfile
 import unittest
@@ -5,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from importlib import import_module
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from PIL import Image
 
@@ -187,6 +190,135 @@ class PushAlertTests(unittest.TestCase):
 
         self.assertEqual(request.data, b"1 raccoon at 21:00 (30.10.)")
         self.assertNotIn("filename", parse_qs(urlsplit(request.full_url).query))
+
+
+class DailySummaryTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        root = Path(temporary.name)
+        self.config = root / "config.json"
+        self.config.write_text('{"daily_summary": true}', encoding="utf-8")
+        self.state = root / "summary-state.json"
+        self.labels = root / "labels.csv"
+        self.now = datetime(2026, 10, 31, 7, tzinfo=ZoneInfo("Europe/Berlin"))
+        self.published = []
+        self.write_rows([])
+
+    def write_rows(self, rows):
+        with self.labels.open("w", newline="", encoding="utf-8") as stream:
+            writer = csv.DictWriter(
+                stream,
+                fieldnames=[
+                    "location_id", "image_file", "timestamp_exif", "timestamp",
+                    "class", "manual_label",
+                ],
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def row(self, name, stamp, species="fox", manual="", location="Wendeplatte"):
+        return dict(
+            location_id=location, image_file=name, timestamp_exif=stamp,
+            timestamp="", **{"class": species}, manual_label=manual,
+        )
+
+    def run_summary(self, **kwargs):
+        return alerts.send_daily_summary(
+            self.config, self.state, self.labels,
+            now=kwargs.pop("now", self.now),
+            keychain_reader=lambda *args: "topic-x",
+            publisher=kwargs.pop("publisher", lambda request: self.published.append(request)),
+            **kwargs,
+        )
+
+    def test_digest_counts_unique_photos_with_manual_labels_and_exact_window(self):
+        row = self.row("one.jpg", "2026-10-30 07:00:00", manual="roe deer")
+        self.write_rows([
+            row, row,
+            self.row("two.jpg", "2026-10-31 06:59:59", location="Douglasien"),
+            self.row("old.jpg", "2026-10-30 06:59:59"),
+            self.row("future.jpg", "2026-10-31 07:00:00"),
+            self.row("empty.jpg", "2026-10-31 06:00:00", manual="none"),
+            self.row("human.jpg", "2026-10-31 06:00:00", species="human"),
+            self.row("invalid.jpg", "not a timestamp"),
+            self.row("undated.jpg", ""),
+        ])
+
+        result = self.run_summary()
+        again = self.run_summary()
+
+        self.assertEqual((result.sent, result.failures, again.sent), (1, (), 0))
+        request = self.published[0]
+        self.assertIn("Wendeplatte: roe deer 1", request.data.decode())
+        self.assertIn("Douglasien: fox 1", request.data.decode())
+        self.assertIn("2 wildlife photos", request.data.decode())
+        self.assertEqual(urlsplit(request.full_url).path, "/topic-x")
+        self.assertEqual(parse_qs(urlsplit(request.full_url).query)["priority"], ["default"])
+
+    def test_not_due_before_seven_berlin_even_on_utc_host(self):
+        result = self.run_summary(now=datetime(2026, 10, 31, 5, 59, tzinfo=timezone.utc))
+        self.assertEqual(result.sent, 0)
+        self.assertFalse(self.state.exists())
+
+    def test_summer_seven_is_five_utc(self):
+        result = self.run_summary(now=datetime(2026, 7, 1, 5, tzinfo=timezone.utc))
+        self.assertEqual(result.sent, 1)
+
+    def test_dst_transition_still_uses_twenty_four_elapsed_hours(self):
+        self.now = datetime(2026, 10, 25, 7, tzinfo=ZoneInfo("Europe/Berlin"))
+        self.write_rows([
+            self.row("old.jpg", "2026-10-24 06:59:59"),
+            self.row("included.jpg", "2026-10-24 07:00:00"),
+        ])
+        self.run_summary()
+        self.assertIn("1 wildlife photos", self.published[0].data.decode())
+
+    def test_wake_after_seven_uses_scheduled_window(self):
+        self.write_rows([
+            self.row("early.jpg", "2026-10-30 07:01:00"),
+            self.row("late.jpg", "2026-10-31 08:00:00"),
+        ])
+        self.run_summary(now=self.now + timedelta(hours=3))
+        self.assertIn("1 wildlife photos", self.published[0].data.decode())
+
+    def test_failed_publish_retries_without_marking_day_sent(self):
+        def failing(request):
+            raise OSError("offline")
+
+        failed = self.run_summary(publisher=failing)
+        self.assertIn("offline", failed.failures[0])
+        self.assertFalse(self.state.exists())
+        self.assertEqual(self.run_summary().sent, 1)
+
+    def test_missing_labels_reports_failure_instead_of_empty_summary(self):
+        self.labels.unlink()
+        result = self.run_summary()
+        self.assertTrue(result.failures)
+        self.assertFalse(self.state.exists())
+
+    def test_disabled_summary_does_not_read_labels_or_publish(self):
+        self.config.write_text("{}", encoding="utf-8")
+        self.labels.unlink()
+        result = self.run_summary()
+        self.assertFalse(result.enabled)
+        self.assertEqual(self.published, [])
+
+    def test_empty_day_is_reported_and_next_day_sends_again(self):
+        self.run_summary()
+        self.run_summary(now=self.now + timedelta(days=1))
+        self.assertEqual(len(self.published), 2)
+        self.assertIn("No wildlife sightings", self.published[0].data.decode())
+
+    def test_existing_notification_entry_point_runs_digest(self):
+        expected = alerts.AlertResult(True, 1, ())
+        with (
+            patch.object(alerts, "send_daily_summary", return_value=expected) as daily,
+            patch.object(alerts, "_send_species_alerts", return_value=alerts.AlertResult(True, 0, ())),
+        ):
+            result = alerts.send_push_alerts(config_path=self.config, now=self.now)
+        self.assertEqual(result.sent, 1)
+        daily.assert_called_once_with(self.config, keychain_reader=None, now=self.now)
 
 
 if __name__ == "__main__":
