@@ -256,9 +256,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Manual review")
             await user.should_see("Gallery")
             await user.should_see("Visualisations")
+            await user.should_see("Predictions")
 
     async def test_navigation_starts_as_icon_rail_on_every_page(self):
-        for path in ("/", "/review", "/gallery", "/visualisations"):
+        for path in ("/", "/review", "/gallery", "/visualisations", "/predictions"):
             with self.subTest(path=path):
                 async with self.app_user(path) as user:
                     drawers = user.find(kind=ui.left_drawer).elements
@@ -273,7 +274,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         if isinstance(item, ui.item) and "href" in item.props
                     }
                     self.assertEqual(
-                        links, {"/", "/review", "/gallery", "/visualisations"}
+                        links,
+                        {"/", "/review", "/gallery", "/visualisations", "/predictions"},
                     )
                     user.find(marker="navigation-toggle").click()
                     self.assertFalse(drawer.props.get("mini"))
@@ -300,6 +302,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "Manual review": "/review",
                     "Gallery": "/gallery",
                     "Visualisations": "/visualisations",
+                    "Predictions": "/predictions",
                 },
             )
             recent_heading = next(
@@ -312,6 +315,118 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     if link.text
                 )
             )
+
+    async def test_predictions_page_plots_all_landing_page_species(self):
+        import pandas as pd
+        from web import predictions
+
+        origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)
+        frame = pd.DataFrame(
+            [
+                {
+                    "species": species,
+                    "valid_time": stamp,
+                    "expected_count": 0.2,
+                    "activity_index": 0.1,
+                    "clipped": False,
+                    "method": "poisson",
+                }
+                for species in gallery.RECENT_SPECIES
+                for stamp in pd.date_range(origin, periods=24, freq="h")
+            ]
+        )
+        result = predictions.ForecastResult(
+            frame,
+            origin,
+            origin - pd.Timedelta(hours=2),
+            origin - pd.Timedelta(days=30),
+            "Europe/Berlin",
+            False,
+        )
+        with (
+            patch.object(
+                predictions,
+                "read_model",
+                return_value={"config": {"sites": [{"location_id": "camera1"}]}},
+            ),
+            patch.object(
+                predictions, "forecast_next24", return_value=result
+            ) as forecast,
+        ):
+            async with self.app_user("/predictions") as user:
+                await user.should_see("Next 24 hours")
+                await user.should_see("Exploratory Poisson model")
+                charts = user.find(kind=ui.echart).elements
+                self.assertEqual(len(charts), len(gallery.RECENT_SPECIES))
+                for chart in charts:
+                    self.assertEqual(len(chart.options["series"][0]["data"]), 24)
+                self.assertEqual(forecast.call_args.args[2], "camera1")
+                self.assertFalse(forecast.call_args.kwargs["assume_continuous"])
+
+    async def test_predictions_page_missing_model_is_safe(self):
+        from web import predictions
+
+        with patch.object(
+            predictions,
+            "read_model",
+            side_effect=predictions.ForecastUnavailable(
+                "Trained Poisson model unavailable"
+            ),
+        ):
+            async with self.app_user("/predictions") as user:
+                await user.should_see("Trained Poisson model unavailable")
+                self.assertEqual(
+                    len(user.find(kind=ui.echart).elements), len(gallery.RECENT_SPECIES)
+                )
+
+    async def test_predictions_queue_camera_change_while_loading(self):
+        import asyncio
+        from dataclasses import replace
+
+        import pandas as pd
+        from web import predictions
+
+        origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)
+        frame = pd.DataFrame([
+            {"species": species, "valid_time": stamp, "expected_count": 0.2,
+             "activity_index": 0.1, "clipped": False, "method": "poisson"}
+            for species in gallery.RECENT_SPECIES
+            for stamp in pd.date_range(origin, periods=24, freq="h")
+        ])
+        first = predictions.ForecastResult(frame, origin, origin - pd.Timedelta(hours=1),
+                                           origin - pd.Timedelta(days=30), "Europe/Berlin", False)
+        second = replace(first, frame=frame.assign(expected_count=0.6, activity_index=0.8))
+        started, release = asyncio.Event(), asyncio.Event()
+        calls = []
+        block_next = {"enabled": False}
+
+        async def predict_in_background(function, *args, **kwargs):
+            calls.append(args[2])
+            if block_next["enabled"] and not started.is_set():
+                started.set()
+                await release.wait()
+            return second if args[2] == "camera2" else first
+
+        with (
+            patch.object(predictions, "read_model", return_value={"config": {"sites": [{"location_id": "camera1"}, {"location_id": "camera2"}]}}),
+            patch("nicegui.run.io_bound", side_effect=predict_in_background),
+            patch("nicegui.ui.timer"),
+        ):
+            async with self.app_user("/predictions") as user:
+                block_next["enabled"] = True
+                user.find(marker="forecast-refresh").click()
+                await asyncio.wait_for(started.wait(), timeout=2)
+                camera = next(iter(user.find(marker="forecast-camera").elements))
+                try:
+                    self.assertFalse(camera.enabled)
+                    assumption = next(iter(user.find(marker="forecast-assumption").elements))
+                    self.assertFalse(assumption.enabled)
+                    camera.set_value("camera2")
+                    await asyncio.sleep(0.01)
+                finally:
+                    release.set()
+                await user.should_see("14.40 expected images")
+                self.assertEqual(calls[-1], "camera2")
 
     async def test_home_recent_gallery_shows_boxes_and_refreshes_csv(self):
         now = datetime.now()

@@ -1,7 +1,7 @@
 # Local Web App
 
 The home page at <http://127.0.0.1:8080> links to manual review, the gallery,
-and visualisations, with a brief description of each. Every page includes a
+visualisations, and predictions, with a brief description of each. Every page includes a
 navigation rail that starts collapsed to icons. Hover for page names, or expand
 the rail to show the full logo and navigation labels.
 
@@ -93,6 +93,36 @@ Charts and summaries live only in the container's 64 MiB `/tmp` filesystem.
 They disappear when the container stops or restarts. A failed rerun keeps the
 previous successful results. The visualiser never writes to host
 `docs/diagrams/`.
+
+## Predictions
+
+Open `/predictions` for the next 24 elapsed hours of hourly activity for the same
+seven species as the home gallery. The camera selector changes location; the
+segmented control switches between expected images/hour and the training-reference
+0-1 activity index. The page refreshes each minute without training a model or
+requesting weather. It uses the best-performing count-only Poisson model family
+from the exploratory comparison, not the neural/weather candidates.
+
+Install the saved numeric checkpoint as
+`models/activity_forecast/poisson/metadata.json`. The existing read-only `models/`
+mount makes it available inside the container; model artefacts are not committed
+or baked into the image. Direct Python launches may override the path with
+`WILDL_ID_FORECAST_MODEL`. Missing or incompatible models show an unavailable state.
+
+Forecasts are exploratory, not presence probabilities. The model's recorded
+camera-clock, location and ingestion-delay settings are honoured, and its
+training cutoff is checked. The display explicitly reports the last record and
+model cutoff. Future image timestamps are excluded, manual labels override
+automatic labels, and repeated boxes do not increase an image/species count.
+
+Seven days of context are required. If the latest capture predates the final
+completed context hour, the page leaves charts empty by default. **Assume continuous
+observation** explicitly permits filling that trailing gap with zero sightings
+under the exploratory assumption that the camera and ingestion remained active.
+It is off by default and resets for each page visit. Do not enable it for known
+camera downtime or incomplete uploads. Relative indices are missing rather than
+invented when a positive training reference is unavailable; clipped indices and
+baseline fallbacks are identified per species.
 
 ## Manual Review
 

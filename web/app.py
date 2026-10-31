@@ -9,6 +9,7 @@ from nicegui import ui
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
+from web.predictions import build_predictions_page
 from web.visualisations import (
     FILTERED_PLOT_TYPES,
     FilteredPlotRunStore,
@@ -73,6 +74,7 @@ def add_navigation(current_path: str) -> None:
                 ("Manual review", "/review", "fact_check"),
                 ("Gallery", "/gallery", "photo_library"),
                 ("Visualisations", "/visualisations", "bar_chart"),
+                ("Predictions", "/predictions", "show_chart"),
             ):
                 with (
                     ui.item()
@@ -143,6 +145,12 @@ def home_page() -> None:
                     "bar_chart",
                     "Generate charts and summary statistics.",
                 ),
+                (
+                    "Predictions",
+                    "/predictions",
+                    "show_chart",
+                    "Expected activity over the next 24 hours.",
+                ),
             ):
                 with ui.row().classes(
                     "w-full items-start flex-nowrap gap-4 py-5 border-t border-gray-200"
@@ -169,6 +177,13 @@ def gallery_page() -> None:
     build_gallery_page(
         DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
     )
+
+
+@ui.page("/predictions")
+async def predictions_page() -> None:
+    add_navigation("/predictions")
+    add_brand_logo()
+    await build_predictions_page(DEFAULT_CSV)
 
 
 @ui.page("/visualisations")
