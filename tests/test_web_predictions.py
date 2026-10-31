@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
 from web import predictions
 from web.gallery import RECENT_SPECIES
 

@@ -387,15 +387,31 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         from web import predictions
 
         origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)
-        frame = pd.DataFrame([
-            {"species": species, "valid_time": stamp, "expected_count": 0.2,
-             "activity_index": 0.1, "clipped": False, "method": "poisson"}
-            for species in gallery.RECENT_SPECIES
-            for stamp in pd.date_range(origin, periods=24, freq="h")
-        ])
-        first = predictions.ForecastResult(frame, origin, origin - pd.Timedelta(hours=1),
-                                           origin - pd.Timedelta(days=30), "Europe/Berlin", False)
-        second = replace(first, frame=frame.assign(expected_count=0.6, activity_index=0.8))
+        frame = pd.DataFrame(
+            [
+                {
+                    "species": species,
+                    "valid_time": stamp,
+                    "expected_count": 0.2,
+                    "activity_index": 0.1,
+                    "clipped": False,
+                    "method": "poisson",
+                }
+                for species in gallery.RECENT_SPECIES
+                for stamp in pd.date_range(origin, periods=24, freq="h")
+            ]
+        )
+        first = predictions.ForecastResult(
+            frame,
+            origin,
+            origin - pd.Timedelta(hours=1),
+            origin - pd.Timedelta(days=30),
+            "Europe/Berlin",
+            False,
+        )
+        second = replace(
+            first, frame=frame.assign(expected_count=0.6, activity_index=0.8)
+        )
         started, release = asyncio.Event(), asyncio.Event()
         calls = []
         block_next = {"enabled": False}
@@ -408,7 +424,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             return second if args[2] == "camera2" else first
 
         with (
-            patch.object(predictions, "read_model", return_value={"config": {"sites": [{"location_id": "camera1"}, {"location_id": "camera2"}]}}),
+            patch.object(
+                predictions,
+                "read_model",
+                return_value={
+                    "config": {
+                        "sites": [
+                            {"location_id": "camera1"},
+                            {"location_id": "camera2"},
+                        ]
+                    }
+                },
+            ),
             patch("nicegui.run.io_bound", side_effect=predict_in_background),
             patch("nicegui.ui.timer"),
         ):
@@ -419,7 +446,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 camera = next(iter(user.find(marker="forecast-camera").elements))
                 try:
                     self.assertFalse(camera.enabled)
-                    assumption = next(iter(user.find(marker="forecast-assumption").elements))
+                    assumption = next(
+                        iter(user.find(marker="forecast-assumption").elements)
+                    )
                     self.assertFalse(assumption.enabled)
                     camera.set_value("camera2")
                     await asyncio.sleep(0.01)

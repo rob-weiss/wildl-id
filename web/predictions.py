@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 from astral import Observer
 from astral.sun import elevation, sun
-
 from web.gallery import RECENT_SPECIES, row_label
 
 MODEL_COLUMNS = (
