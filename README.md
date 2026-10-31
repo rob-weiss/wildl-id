@@ -123,6 +123,14 @@ Run a one-time download with:
 uv run --locked python wildl_id.py --download
 ```
 
+After downloading and organising, this command automatically labels new or
+unclassified originals and saves the predictions and bounding boxes to the
+active web/review CSV. Completed and manually labelled photos are skipped.
+An empty scan does not load the models. The same step runs in the scheduled
+mail job before push alerts; labelling failures return a non-zero exit status
+and pending images are retried on the next run. Existing manual labels are
+preserved, including edits saved while inference is running.
+
 To check automatically at login and every minute, install the versioned
 LaunchAgent after configuring IMAP and Keychain:
 

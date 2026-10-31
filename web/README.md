@@ -8,6 +8,11 @@ the rail to show the full logo and navigation labels.
 The home page also shows a mini gallery of sightings captured in the last
 24 hours, newest first. It includes roe deer, wild boar, badger, marten, fox,
 hare, and raccoon, using manual labels when available to select species.
+Compact species buttons allow multiple selections; **All** resets the filter
+and **Unlabelled** selects pending photos. Button counts and the short summary
+count each photo once per species, not each bounding box. Selections persist
+through minute refreshes. There is no search field, guide or examples on home.
+Thumbnails and enlarged photos retain their original aspect ratios.
 Unclassified photos are included until their species is known, including
 originals not yet present in the labels CSV. Capture times come from the CSV
 or the original image's EXIF metadata; supported camera filenames are a

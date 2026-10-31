@@ -246,6 +246,82 @@ class AutomaticLabelTests(unittest.TestCase):
             self.assertEqual(updated.loc["unreviewed.jpg", "manual_label"], "")
             self.assertIn("new.jpg", updated.index)
 
+    def test_targeted_run_preserves_manual_edits_made_during_inference(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            csv_path = root / "active.csv"
+            pd.DataFrame(
+                [
+                    {
+                        "location_id": "camera",
+                        "image_file": "reviewed.jpg",
+                        "class": "fox",
+                        "manual_label": "fox",
+                    },
+                    {
+                        "location_id": "camera",
+                        "image_file": "unreviewed.jpg",
+                        "class": "fox",
+                        "manual_label": "",
+                    },
+                ]
+            ).to_csv(csv_path, index=False)
+            paths = {}
+            for name in ("reviewed.jpg", "unreviewed.jpg", "new.jpg"):
+                path = root / name
+                Image.new("RGB", (40, 40)).save(path)
+                paths[("camera", name)] = path
+
+            def detect(_path, **_kwargs):
+                latest = pd.read_csv(csv_path, keep_default_na=False)
+                latest.loc[latest.image_file == "reviewed.jpg", "manual_label"] = (
+                    "badger"
+                )
+                latest.loc[len(latest)] = ["camera", "new.jpg", "", "hare"]
+                latest["box"] = ""
+                latest.loc[latest.image_file == "new.jpg", "box"] = (
+                    "[0.5, 0.5, 0.2, 0.2]"
+                )
+                latest.to_csv(csv_path, index=False)
+                return {}
+
+            detector = Mock()
+            detector.single_image_detection.side_effect = detect
+            classifier = Mock()
+            classifier.weights_path = (
+                root / "models/deepfaune_finetuned_test/weights.pt"
+            )
+            with (
+                patch.object(label_images, "repo_dir", root),
+                patch.object(label_images, "image_paths", return_value=paths),
+                patch.object(label_images, "enable_ocr", False),
+                patch.object(label_images, "save_annotated_images", False),
+                patch.object(
+                    label_images.pw_detection, "MegaDetectorV6", return_value=detector
+                ),
+                patch.object(
+                    label_images, "load_species_classifier", return_value=classifier
+                ),
+                patch.object(label_images, "resolve_exif_timestamp", return_value=""),
+                patch.object(label_images, "extract_exif_timestamp", return_value=None),
+                patch.dict(
+                    sys.modules,
+                    {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
+                ),
+            ):
+                label_images.process_images_with_pytorch_wildlife(
+                    output_csv_path=csv_path, image_keys={("camera", "new.jpg")}
+                )
+            self.assertEqual(detector.single_image_detection.call_count, 1)
+            updated = pd.read_csv(csv_path, keep_default_na=False).set_index(
+                "image_file"
+            )
+            self.assertEqual(updated.loc["reviewed.jpg", "manual_label"], "badger")
+            self.assertEqual(updated.loc["unreviewed.jpg", "class"], "fox")
+            self.assertEqual(updated.loc["new.jpg", "manual_label"], "hare")
+            self.assertEqual(updated.loc["new.jpg", "class"], "none")
+            self.assertEqual(updated.loc["new.jpg", "box"], "[0.5, 0.5, 0.2, 0.2]")
+
 
 if __name__ == "__main__":
     unittest.main()

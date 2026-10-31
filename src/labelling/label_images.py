@@ -897,7 +897,11 @@ def images_without_manual_labels(image_info_list, existing_df):
 
 
 def process_images_with_pytorch_wildlife(
-    camera=None, reprocess_missing=False, unlabelled_only=False, output_csv_path=None
+    camera=None,
+    reprocess_missing=False,
+    unlabelled_only=False,
+    output_csv_path=None,
+    image_keys=None,
 ):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
@@ -973,6 +977,11 @@ def process_images_with_pytorch_wildlife(
 
     # Collect all images with location info from images/<year>/<location>/
     indexed_paths = image_paths()
+    if image_keys is not None:
+        requested = {(nfc(location), name) for location, name in image_keys}
+        indexed_paths = {
+            key: path for key, path in indexed_paths.items() if key in requested
+        }
     image_info_list = [
         {"path": path, "name": name, "location_id": location_id}
         for (location_id, name), path in indexed_paths.items()
@@ -991,6 +1000,7 @@ def process_images_with_pytorch_wildlife(
             / f"detection_results_{model_version}_{model_name}{classifier_suffix}.csv"
         )
     )
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
     if not csv_path.exists() and output_csv_path is None:
         source_csvs = list((repo_dir / "labels").glob(f"*/{csv_path.name}"))
         if source_csvs:
@@ -1025,9 +1035,17 @@ def process_images_with_pytorch_wildlife(
         shutil.copy2(csv_path, backup)
         print(f"Full CSV backup (including manual labels): {backup}")
 
+    original_boxes = (
+        {
+            (nfc(row["location_id"]), row["image_file"]): row.get("box", "")
+            for row in existing_df.to_dict("records")
+        }
+        if existing_df is not None
+        else {}
+    )
     images_to_process = (
         images_without_manual_labels(image_info_list, existing_df)
-        if unlabelled_only
+        if unlabelled_only or image_keys is not None
         else image_info_list
     )
 
@@ -1220,6 +1238,10 @@ def process_images_with_pytorch_wildlife(
             # Create DataFrame from accumulated results with explicit dtypes
             new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
 
+            if csv_path.exists():
+                existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
+                if "manual_label" not in existing_df:
+                    existing_df["manual_label"] = ""
             if existing_df is not None and len(existing_df) > 0:
                 keys = ["location_id", "image_file"]
                 existing_df = existing_df.set_index(keys)
@@ -1232,11 +1254,22 @@ def process_images_with_pytorch_wildlife(
                 refreshed = existing_df.loc[
                     existing_df.index.isin(new_rows_df.index)
                 ].copy()
+                saved_boxes = refreshed.get(
+                    "box", pd.Series("", index=refreshed.index)
+                ).copy()
                 for column in new_rows_df.columns:
                     if column != "manual_label":
-                        refreshed[column] = (
-                            new_rows_df[column].reindex(refreshed.index).to_numpy()
-                        )
+                        values = new_rows_df[column].reindex(refreshed.index).to_numpy()
+                        if column == "box":
+                            values = [
+                                saved
+                                if saved != original_boxes.get(key, "")
+                                else automatic
+                                for key, saved, automatic in zip(
+                                    refreshed.index, saved_boxes, values, strict=True
+                                )
+                            ]
+                        refreshed[column] = values
                 added = new_rows_df.loc[~new_rows_df.index.isin(existing_df.index)]
                 existing_df = pd.concat([retained, refreshed, added]).reset_index()
             else:

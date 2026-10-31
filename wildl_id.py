@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -35,6 +36,8 @@ from alerting.push_alerts import send_push_alerts as alerts_main
 from downloading.download_email_images import download_email_images as download_main
 from labelling.label_images import process_images_with_pytorch_wildlife
 from labelling.organize_images import organize_images as organize_main
+from labelling.organize_images import image_paths, nfc
+from labelling.review_labels import DEFAULT_CSV
 from visualisation.evaluate_labels import main as visualisation_main
 
 
@@ -123,6 +126,36 @@ def send_alerts():
         print(f"✗ Push alert: {failure}")
     print(f"Sent {result.sent} push alerts")
     return not result.failures
+
+
+def label_new_images(camera=None):
+    try:
+        completed = set()
+        if DEFAULT_CSV.exists():
+            with DEFAULT_CSV.open(newline="", encoding="utf-8") as source:
+                for row in csv.DictReader(source):
+                    manual = (row.get("manual_label") or "").strip()
+                    automatic = (row.get("class") or "").strip().casefold()
+                    if manual or automatic not in {"", "unknown", "animal"}:
+                        completed.add((nfc(row["location_id"]), row["image_file"]))
+        pending = {
+            key
+            for key, path in image_paths().items()
+            if path.suffix.casefold() in {".jpg", ".jpeg", ".png"}
+        } - completed
+        if not pending:
+            print("No new images require automatic labelling.")
+            return True
+        print(
+            f"Automatically labelling {len(pending)} pending images into {DEFAULT_CSV}"
+        )
+        process_images_with_pytorch_wildlife(
+            camera=camera, output_csv_path=DEFAULT_CSV, image_keys=pending
+        )
+        return True
+    except Exception as error:
+        print(f"Automatic labelling failed: {error}")
+        return False
 
 
 def label_images(camera=None, reprocess_missing=False):
@@ -331,9 +364,6 @@ def main():
                 organization_success = organize_images()
                 success = organization_success and success
 
-            if args.notify:
-                success = send_alerts() and success
-
             if args.label:
                 success = (
                     label_images(
@@ -341,6 +371,11 @@ def main():
                     )
                     and success
                 )
+            elif args.download:
+                success = label_new_images(camera=args.camera) and success
+
+            if args.notify:
+                success = send_alerts() and success
 
             if args.visualize:
                 success = generate_visualizations() and success

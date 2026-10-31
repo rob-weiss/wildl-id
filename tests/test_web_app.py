@@ -428,6 +428,89 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("14.40 expected images")
                 self.assertEqual(calls[-1], "camera2")
 
+    async def test_home_species_buttons_count_photos_and_survive_refresh(self):
+        now = (datetime.now() - timedelta(minutes=1)).isoformat()
+        fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": name,
+                "timestamp": now,
+                "class": automatic,
+                "manual_label": manual,
+            }
+            for name, automatic, manual in (
+                ("fox1.jpg", "fox", ""),
+                ("fox1.jpg", "fox", ""),
+                ("fox2.jpg", "human", "fox"),
+                ("badger.jpg", "fox", "badger"),
+                ("unlabelled.jpg", "", ""),
+            )
+        ]
+        self.write_csv(fields, rows)
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer") as timer,
+        ):
+            async with self.app_user("/") as user:
+                await user.should_not_see("Smart filter")
+                await user.should_not_see("Example filters")
+                await user.should_not_see("Filter guide")
+                fox = next(iter(user.find(marker="recent-species-fox").elements))
+                badger = next(iter(user.find(marker="recent-species-badger").elements))
+                self.assertIn("(2)", fox.text)
+                self.assertIn("(1)", badger.text)
+                user.find(marker="recent-species-fox").click()
+                await user.should_see("3 images")
+                user.find(marker="recent-species-badger").click()
+                await user.should_see("4 images")
+                user.find(marker="recent-species-fox").click()
+                await user.should_see("1 images")
+                user.find(marker="recent-species-unlabelled").click()
+                await user.should_see("2 images")
+                user.find(marker="recent-species-all").click()
+                await user.should_see("5 images")
+                user.find(marker="recent-species-fox").click()
+                rows.append(
+                    {
+                        "location_id": "camera1",
+                        "image_file": "fox3.jpg",
+                        "timestamp": now,
+                        "class": "fox",
+                    }
+                )
+                self.write_csv(fields, rows)
+                timer.call_args.args[1]()
+                await user.should_see("4 images")
+                self.assertIn("(3)", fox.text)
+                self.assertEqual(fox.props.get("aria-pressed"), "true")
+
+    async def test_home_preserves_portrait_image_ratio_in_thumbnail_and_viewer(self):
+        taken = datetime.now() - timedelta(minutes=1)
+        path = self.write_original_image("portrait.jpg", taken)
+        exif = Image.Exif()
+        exif[0x0132] = taken.strftime("%Y:%m:%d %H:%M:%S")
+        Image.new("RGB", (800, 1200), "green").save(path, exif=exif)
+        self.write_csv(["location_id", "image_file", "class"], [])
+        async with self.app_user("/") as user:
+            images = user.find(kind=ui.interactive_image)
+            thumbnail = next(iter(images.elements))
+            self.assertNotIn("h-40", thumbnail.classes)
+            images.click()
+            viewer = next(
+                image
+                for image in user.find(kind=ui.interactive_image).elements
+                if image is not thumbnail
+            )
+            self.assertNotIn("max-h-[75vh]", viewer.classes)
+            user.find(marker="recent-viewer-image").trigger(
+                "loaded", {"width": 800, "height": 1200}
+            )
+            self.assertEqual(viewer.style.get("width"), "min(85vw, 40vh)")
+
     async def test_home_recent_gallery_shows_boxes_and_refreshes_csv(self):
         now = datetime.now()
         fields = [
@@ -550,7 +633,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("1 images")
                 await user.should_see("Manual:")
                 await user.should_see("Automatic:")
-                await user.should_not_see("Unlabelled")
+                self.assertFalse(any(
+                    label.text == "Unlabelled"
+                    for label in user.find(kind=ui.label).elements
+                ))
                 image = next(iter(user.find(kind=ui.interactive_image).elements))
                 user.find(kind=ui.interactive_image).trigger(
                     "loaded", {"width": 16, "height": 16}

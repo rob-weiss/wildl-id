@@ -1,8 +1,11 @@
+import csv
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from importlib import import_module
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -10,6 +13,13 @@ wildl_id = import_module("wildl_id")
 
 
 class WildlifeCommandLineTests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(
+            wildl_id, "label_new_images", return_value=True, create=True
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_download_option_is_accepted(self):
         with patch.object(sys, "argv", ["wildl_id.py", "--download"]):
             args = wildl_id.parse_arguments()
@@ -140,13 +150,18 @@ class WildlifeCommandLineTests(unittest.TestCase):
             ),
             patch.object(
                 wildl_id,
+                "label_new_images",
+                side_effect=lambda **kwargs: calls.append("label") or True,
+            ),
+            patch.object(
+                wildl_id,
                 "send_alerts",
                 side_effect=lambda: calls.append("notify") or True,
             ),
         ):
             self.assertEqual(wildl_id.main(), 0)
 
-        self.assertEqual(calls, ["download", "notify"])
+        self.assertEqual(calls, ["download", "label", "notify"])
 
     def test_send_alerts_skips_when_not_configured(self):
         result = SimpleNamespace(enabled=False, sent=0, failures=())
@@ -266,6 +281,92 @@ class WildlifeCommandLineTests(unittest.TestCase):
             result = wildl_id.main()
 
         self.assertEqual(result, 1)
+
+
+class IncrementalMailLabellingTests(unittest.TestCase):
+    def test_only_new_unclassified_photos_are_written_to_active_csv(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            csv_path = Path(temporary) / "labels.csv"
+            with csv_path.open("w", newline="") as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=["location_id", "image_file", "class", "manual_label"],
+                )
+                writer.writeheader()
+                writer.writerows(
+                    [
+                        {
+                            "location_id": "camera1",
+                            "image_file": "classified.jpg",
+                            "class": "fox",
+                        },
+                        {
+                            "location_id": "camera1",
+                            "image_file": "reviewed.jpg",
+                            "class": "",
+                            "manual_label": "badger",
+                        },
+                        {
+                            "location_id": "camera1",
+                            "image_file": "unknown.jpg",
+                            "class": "unknown",
+                        },
+                    ]
+                )
+            before = csv_path.read_bytes()
+            paths = {
+                ("camera1", name): Path(temporary) / name
+                for name in ("classified.jpg", "reviewed.jpg", "unknown.jpg", "new.jpg")
+            }
+            with (
+                patch.object(wildl_id, "DEFAULT_CSV", csv_path, create=True),
+                patch.object(wildl_id, "image_paths", return_value=paths, create=True),
+                patch.object(
+                    wildl_id, "process_images_with_pytorch_wildlife"
+                ) as process,
+            ):
+                self.assertTrue(callable(getattr(wildl_id, "label_new_images", None)))
+                self.assertTrue(wildl_id.label_new_images(camera="seissiger"))
+            process.assert_called_once_with(
+                camera="seissiger",
+                output_csv_path=csv_path,
+                image_keys={("camera1", "unknown.jpg"), ("camera1", "new.jpg")},
+            )
+            self.assertEqual(csv_path.read_bytes(), before)
+
+    def test_empty_scan_does_not_load_models(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(
+                wildl_id, "DEFAULT_CSV", Path(temporary) / "absent.csv", create=True
+            ),
+            patch.object(wildl_id, "image_paths", return_value={}, create=True),
+            patch.object(wildl_id, "process_images_with_pytorch_wildlife") as process,
+        ):
+            self.assertTrue(callable(getattr(wildl_id, "label_new_images", None)))
+            self.assertTrue(wildl_id.label_new_images())
+            process.assert_not_called()
+
+    def test_model_failure_returns_failure_without_modifying_labels(self):
+        with (
+            tempfile.TemporaryDirectory() as temporary,
+            patch.object(
+                wildl_id, "DEFAULT_CSV", Path(temporary) / "absent.csv", create=True
+            ),
+            patch.object(
+                wildl_id,
+                "image_paths",
+                return_value={("camera1", "new.jpg"): Path(temporary) / "new.jpg"},
+                create=True,
+            ),
+            patch.object(
+                wildl_id,
+                "process_images_with_pytorch_wildlife",
+                side_effect=RuntimeError("fixture failure"),
+            ),
+        ):
+            self.assertTrue(callable(getattr(wildl_id, "label_new_images", None)))
+            self.assertFalse(wildl_id.label_new_images())
 
 
 if __name__ == "__main__":

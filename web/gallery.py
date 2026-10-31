@@ -753,19 +753,23 @@ def annotation_labels(row):
     return " · ".join(labels) or "Unlabelled"
 
 
-def boxed_image(row, source, classes, display_size=(320, 180)):
+def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=False):
     image = ui.interactive_image(source).classes(classes)
-    image.on(
-        "loaded",
-        lambda event: image.set_content(
+
+    def on_loaded(event):
+        width, height = event.args["width"], event.args["height"]
+        if fit_viewport:
+            image.style(f"width: min(85vw, {60 * width / height:g}vh)")
+        image.set_content(
             box_overlay_svg(
                 row,
-                (event.args["width"], event.args["height"]),
+                (width, height),
                 display_size=display_size,
                 show_label=annotation_labels(row) != "Unlabelled",
             )
-        ),
-    )
+        )
+
+    image.on("loaded", on_loaded)
     return image
 
 
@@ -773,11 +777,10 @@ def gallery_card(row, source, on_click, show_boxes=False):
     taken = row_datetime(row)
     when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
     with ui.card().tight().classes("w-full"):
-        classes = "w-full h-40 cursor-pointer"
         image = (
-            boxed_image(row, source, classes)
+            boxed_image(row, source, "w-full cursor-pointer")
             if show_boxes
-            else ui.image(source).props("fit=cover").classes(classes)
+            else ui.image(source).props("fit=contain").classes("w-full cursor-pointer")
         )
         image.on("click", on_click)
         with ui.card_section().classes("p-2"):
@@ -844,7 +847,9 @@ def build_image_viewer(items, show_boxes=False):
         viewer.clear()
         with viewer:
             if show_boxes:
-                boxed_image(row, source, "w-[85vw] max-w-full max-h-[75vh]", (960, 540))
+                boxed_image(
+                    row, source, "max-w-full", (960, 540), fit_viewport=True
+                ).mark("recent-viewer-image")
             else:
                 ui.image(source).props("fit=contain").classes(
                     "w-[85vw] h-[75vh] max-w-full"
@@ -892,8 +897,28 @@ def build_image_viewer(items, show_boxes=False):
 
 def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
+    all_items = []
+    selected_species = set()
+    missing_count = 0
+    species_names = {
+        species: display_label(species) for species in sorted(RECENT_SPECIES)
+    }
+    species_names["unlabelled"] = "Unlabelled"
+    species_buttons = {}
     with ui.column().classes("w-full gap-3"):
         ui.label("Last 24 hours").classes("text-xl font-semibold")
+        with ui.row().classes("w-full items-center gap-2"):
+            for species, title in {"all": "All", **species_names}.items():
+                species_buttons[species] = (
+                    ui.button(
+                        title, on_click=lambda species=species: toggle_species(species)
+                    )
+                    .props("no-caps dense")
+                    .mark(f"recent-species-{species.replace(' ', '-')}")
+                )
+        species_summary = (
+            ui.label().classes("text-sm text-gray-700").mark("recent-species-summary")
+        )
         status = ui.label().classes("text-sm text-gray-600")
         grid = ui.grid(
             columns="repeat(auto-fit, minmax(min(100%, 220px), 1fr))"
@@ -902,7 +927,73 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
             "direction-links max-pages=5"
         )
     items = []
-    show_image, _ = build_image_viewer(items, show_boxes=True)
+    show_image, close_image_viewer = build_image_viewer(items, show_boxes=True)
+
+    def species_key(row):
+        label = normalize_text(row_label(row))
+        return "unlabelled" if label in {"", "unknown"} else label
+
+    def update_counts():
+        photos = {species: set() for species in species_names}
+        for row, _ in all_items:
+            photos[species_key(row)].add((nfc(row["location_id"]), row["image_file"]))
+        counts = {species: len(keys) for species, keys in photos.items()}
+        counts["all"] = len(set().union(*photos.values()))
+        for species, button in species_buttons.items():
+            title = "All" if species == "all" else species_names[species]
+            button.set_text(f"{title} ({counts[species]})")
+            active = (
+                not selected_species
+                if species == "all"
+                else species in selected_species
+            )
+            button.props(
+                "unelevated" if active else "outline",
+                remove="outline" if active else "unelevated",
+            ).props(f'aria-pressed="{str(active).lower()}"')
+        species_summary.set_text(
+            " · ".join(
+                f"{species_names[species]}: {counts[species]}"
+                for species in species_names
+                if counts[species]
+            )
+            or "No sightings in the last 24 hours"
+        )
+
+    def toggle_species(species):
+        if species == "all":
+            selected_species.clear()
+        elif species in selected_species:
+            selected_species.remove(species)
+        else:
+            selected_species.add(species)
+        close_image_viewer()
+        update_counts()
+        apply_species(reset_page=True)
+
+    def apply_species(reset_page=False):
+        items[:] = [
+            (row, source)
+            for row, source in all_items
+            if not selected_species or species_key(row) in selected_species
+        ]
+        status.set_text(
+            f"{len(items)} images"
+            if items
+            else (
+                "No sightings for selected species"
+                if selected_species
+                else "No sightings in the last 24 hours"
+            )
+        )
+        if missing_count:
+            status.set_text(
+                f"{len(items)} images · {missing_count} not available locally or in the cloud"
+            )
+        pagination.max = max(1, math.ceil(len(items) / PAGE_SIZE))
+        pagination.set_visibility(pagination.max > 1)
+        pagination.set_value(1 if reset_page else min(pagination.value, pagination.max))
+        show_page()
 
     def show_page():
         grid.clear()
@@ -919,6 +1010,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
                 )
 
     def refresh():
+        nonlocal missing_count
         try:
             local_images = image_paths(images_dir)
             try:
@@ -928,7 +1020,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
                     raise
                 rows = []
             rows = recent_rows(rows_with_originals(rows, local_images))
-            items[:] = [
+            all_items[:] = [
                 (row, source)
                 for row in rows
                 if (
@@ -939,22 +1031,15 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
             ]
         except (OSError, ValueError, csv.Error):
             status.set_text("Recent images unavailable")
+            all_items.clear()
             items.clear()
+            update_counts()
             pagination.set_visibility(False)
             grid.clear()
             return
-        missing = len(rows) - len(items)
-        status.set_text(
-            f"{len(items)} images" if items else "No sightings in the last 24 hours"
-        )
-        if missing:
-            status.set_text(
-                f"{len(items)} images · {missing} not available locally or in the cloud"
-            )
-        pagination.max = max(1, math.ceil(len(items) / PAGE_SIZE))
-        pagination.set_visibility(pagination.max > 1)
-        pagination.set_value(min(pagination.value, pagination.max))
-        show_page()
+        missing_count = len(rows) - len(all_items)
+        update_counts()
+        apply_species()
 
     refresh()
     ui.timer(60, refresh, immediate=False)
