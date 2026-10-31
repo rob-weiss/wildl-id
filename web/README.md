@@ -1,7 +1,7 @@
 # Local Web App
 
 The home page at <http://127.0.0.1:8080> links to manual review, the gallery,
-visualisations, and predictions, with a brief description of each. Every page includes a
+visualisations, predictions, and the camera map, with a brief description of each. Every page includes a
 navigation rail that starts collapsed to icons. Hover for page names, or expand
 the rail to show the full logo and navigation labels.
 
@@ -98,6 +98,19 @@ Charts and summaries live only in the container's 64 MiB `/tmp` filesystem.
 They disappear when the container stops or restarts. A failed rerun keeps the
 previous successful results. The visualiser never writes to host
 `docs/diagrams/`.
+
+## Camera Map
+
+Open `/map` for camera locations on Esri World Imagery satellite tiles.
+Fill `latitude` and `longitude` (decimal degrees, WGS84) per camera in
+`config/camera_locations.json`; cameras left `null` are listed as missing.
+The read-only `config/` mount picks up edits on page reload, without a rebuild.
+Direct Python launches may override the path with `WILDL_ID_CAMERA_LOCATIONS`.
+
+The slider selects one of the next 24 hours. Each camera shows an arrow
+pointing downwind, its length and colour scaled by the Open-Meteo 10 m wind
+speed; the list below gives speed, source direction and gusts. Forecasts are
+cached for 15 minutes. The map needs internet access for tiles and wind.
 
 ## Predictions
 

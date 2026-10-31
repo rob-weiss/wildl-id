@@ -1,0 +1,49 @@
+{
+    "cameras": [
+        {
+            "location_id": "Douglasien",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Eichelesgarten",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Grenzweg",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Grenzwiese",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Madenhäule",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Sauloch hinten",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Sauloch vorne",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Schelmentor",
+            "latitude": null,
+            "longitude": null
+        },
+        {
+            "location_id": "Wendeplatte",
+            "latitude": null,
+            "longitude": null
+        }
+    ]
+}

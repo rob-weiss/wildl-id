@@ -6,6 +6,8 @@
 !web/app.py
 !web/gallery.py
 !web/visualisations.py
+!web/predictions.py
+!web/camera_map.py
 !src/
 !src/labelling/
 !src/labelling/review_app.py

@@ -257,7 +257,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Predictions")
 
     async def test_navigation_starts_as_icon_rail_on_every_page(self):
-        for path in ("/", "/review", "/gallery", "/visualisations", "/predictions"):
+        for path in (
+            "/",
+            "/review",
+            "/gallery",
+            "/visualisations",
+            "/predictions",
+            "/map",
+        ):
             with self.subTest(path=path):
                 async with self.app_user(path) as user:
                     drawers = user.find(kind=ui.left_drawer).elements
@@ -273,7 +280,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     }
                     self.assertEqual(
                         links,
-                        {"/", "/review", "/gallery", "/visualisations", "/predictions"},
+                        {
+                            "/",
+                            "/review",
+                            "/gallery",
+                            "/visualisations",
+                            "/predictions",
+                            "/map",
+                        },
                     )
                     user.find(marker="navigation-toggle").click()
                     self.assertFalse(drawer.props.get("mini"))
@@ -301,6 +315,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "Gallery": "/gallery",
                     "Visualisations": "/visualisations",
                     "Predictions": "/predictions",
+                    "Camera map": "/map",
                 },
             )
             recent_heading = next(
@@ -360,6 +375,62 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(chart.options["series"][0]["data"]), 24)
                 self.assertEqual(forecast.call_args.args[2], "camera1")
                 self.assertFalse(forecast.call_args.kwargs["assume_continuous"])
+
+    async def test_camera_map_shows_satellite_cameras_and_wind_slider(self):
+        import pandas as pd
+        from web import camera_map
+
+        locations = self.root / "camera_locations.json"
+        locations.write_text(
+            '{"cameras": ['
+            '{"location_id": "North", "latitude": 48.64, "longitude": 9.01},'
+            '{"location_id": "South", "latitude": null, "longitude": null}]}',
+            encoding="utf-8",
+        )
+        start = pd.Timestamp("2026-10-31T12:00", tz="UTC")
+        wind = {
+            "North": [
+                camera_map.WindHour(
+                    start + pd.Timedelta(hours=hour), 5.0 + hour, 270.0, 9.0
+                )
+                for hour in range(24)
+            ]
+        }
+        with (
+            patch.dict(os.environ, {"WILDL_ID_CAMERA_LOCATIONS": str(locations)}),
+            patch.object(camera_map, "fetch_wind", return_value=wind) as fetch,
+        ):
+            async with self.app_user("/map") as user:
+                await user.should_see("Camera map")
+                await user.should_see("Missing coordinates")
+                await user.should_see("North: 5 km/h from W (270°), gusts 9 km/h")
+                await user.should_see("Sat 31 Oct 13:00 CET")
+                leaflet = next(iter(user.find(marker="camera-map").elements))
+                kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
+                self.assertEqual(kinds, ["tileLayer", "circleMarker", "polyline"])
+                self.assertIn("World_Imagery", leaflet.layers[0].url_template)
+                self.assertEqual(
+                    [camera.location_id for camera in fetch.call_args.args[0]],
+                    ["North"],
+                )
+                slider = next(iter(user.find(marker="wind-hour").elements))
+                slider.set_value(10)
+                await user.should_see("North: 15 km/h from W (270°), gusts 9 km/h")
+                self.assertEqual(len(leaflet.layers), 3)
+
+    async def test_camera_map_without_coordinates_is_safe(self):
+        from web import camera_map
+
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_CAMERA_LOCATIONS": str(self.root / "missing.json")},
+            ),
+            patch.object(camera_map, "fetch_wind") as fetch,
+        ):
+            async with self.app_user("/map") as user:
+                await user.should_see("Camera locations unavailable")
+                fetch.assert_not_called()
 
     async def test_predictions_page_missing_model_is_safe(self):
         from web import predictions

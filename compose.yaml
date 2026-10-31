@@ -13,6 +13,7 @@ services:
       - ./labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:/app/labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:ro
       - ./images:/app/images:ro
       - ./models:/app/models:ro
+      - ./config:/app/config:ro
     restart: unless-stopped
     read_only: true
     tmpfs:

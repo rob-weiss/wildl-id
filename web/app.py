@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
+from web.camera_map import build_camera_map_page
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.predictions import build_predictions_page
 from web.visualisations import (
@@ -75,6 +76,7 @@ def add_navigation(current_path: str) -> None:
                 ("Gallery", "/gallery", "photo_library"),
                 ("Visualisations", "/visualisations", "bar_chart"),
                 ("Predictions", "/predictions", "show_chart"),
+                ("Camera map", "/map", "map"),
             ):
                 with (
                     ui.item()
@@ -151,6 +153,12 @@ def home_page() -> None:
                     "show_chart",
                     "Expected activity over the next 24 hours.",
                 ),
+                (
+                    "Camera map",
+                    "/map",
+                    "map",
+                    "Camera locations and wind over the next 24 hours.",
+                ),
             ):
                 with ui.row().classes(
                     "w-full items-start flex-nowrap gap-4 py-5 border-t border-gray-200"
@@ -184,6 +192,13 @@ async def predictions_page() -> None:
     add_navigation("/predictions")
     add_brand_logo()
     await build_predictions_page(DEFAULT_CSV)
+
+
+@ui.page("/map")
+async def camera_map_page() -> None:
+    add_navigation("/map")
+    add_brand_logo()
+    await build_camera_map_page()
 
 
 @ui.page("/visualisations")
