@@ -249,14 +249,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         async with self.app_user("/review") as user:
             await user.should_see("Review data unavailable")
 
-    async def test_home_has_no_navigation_links(self):
-        async with self.app_user("/") as user:
-            for kind in (ui.left_drawer, ui.item, ui.link):
-                with self.subTest(kind=kind), self.assertRaises(AssertionError):
-                    user.find(kind=kind)
-
     async def test_navigation_starts_as_icon_rail_on_every_page(self):
         for path in (
+            "/",
             "/review",
             "/gallery",
             "/visualisations",
@@ -319,6 +314,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 image
                 for image in user.find(kind=ui.image).elements
                 if image.props.get("alt") == "wildl-id logo"
+                and "mx-auto" in image.classes
             )
             self.assertIn("mx-auto", logo.classes)
             recent_heading = next(

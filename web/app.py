@@ -142,6 +142,7 @@ def build_default_review_page() -> None:
 
 @ui.page("/")
 def home_page() -> None:
+    add_navigation("/")
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 sm:p-6 gap-6"):
         with ui.column().classes("w-full items-center gap-2 text-center"):
             add_brand_logo()
