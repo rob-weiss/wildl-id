@@ -352,7 +352,12 @@ async def build_camera_map_page() -> None:
         with ui.row().classes("w-full items-center gap-4 flex-nowrap"):
             ui.label("Wind").classes("text-sm font-medium")
             slider = (
-                ui.slider(min=0, max=WIND_HOURS - 1, step=1, value=0)
+                ui.slider(
+                    min=0,
+                    max=WIND_HOURS - RANKING_HOURS,
+                    step=1,
+                    value=0,
+                )
                 .props("markers snap")
                 .classes("flex-1 min-w-0")
                 .mark("wind-hour")
@@ -360,6 +365,10 @@ async def build_camera_map_page() -> None:
             hour_label = (
                 ui.label().classes("text-sm font-medium w-36").mark("wind-time")
             )
+        ui.label(
+            "Three hourly arrows per camera, left to right from the selected "
+            "time; colour indicates speed."
+        ).classes("text-sm text-gray-600")
         wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
         missing = [camera.location_id for camera in cameras if not camera.located]
         if missing:
@@ -407,33 +416,41 @@ async def build_camera_map_page() -> None:
             hours = state["wind"].get(camera.location_id)
             if not hours:
                 continue
-            hour = hours[index]
-            hour_label.set_text(
-                hour.time.tz_convert(LOCAL_TIMEZONE).strftime("%a %d %b %H:%M %Z")
-            )
-            state["arrows"].append(
-                leaflet.generic_layer(
-                    name="polyline",
-                    args=[
-                        arrow_points(
-                            camera.latitude,
-                            camera.longitude,
-                            hour.speed,
-                            hour.direction,
-                        ),
-                        {
-                            "color": wind_colour(hour.speed),
-                            "weight": 3,
-                            "opacity": 0.95,
-                        },
-                    ],
+            forecast = hours[index : index + RANKING_HOURS]
+            if forecast:
+                hour_label.set_text(
+                    forecast[0]
+                    .time.tz_convert(LOCAL_TIMEZONE)
+                    .strftime("%a %d %b %H:%M %Z")
                 )
-            )
+            for hour_index, hour in enumerate(forecast):
+                offset = (hour_index - (len(forecast) - 1) / 2) * 18
+                origin = _offset(
+                    [camera.latitude, camera.longitude], offset, math.pi / 2
+                )
+                state["arrows"].append(
+                    leaflet.generic_layer(
+                        name="polyline",
+                        args=[
+                            arrow_points(
+                                origin[0],
+                                origin[1],
+                                hour.speed,
+                                hour.direction,
+                            ),
+                            {
+                                "color": wind_colour(hour.speed),
+                                "weight": 3,
+                                "opacity": 0.95,
+                            },
+                        ],
+                    )
+                )
 
-        def wind_text(camera):
-            hour = state["wind"][camera.location_id][index]
+        def wind_text(camera, hour):
+            time_label = hour.time.tz_convert(LOCAL_TIMEZONE).strftime("%H:%M")
             return (
-                f"{camera.location_id}: {hour.speed:.0f} km/h from "
+                f"{camera.location_id} · {time_label}: {hour.speed:.0f} km/h from "
                 f"{compass(hour.direction)} ({hour.direction:.0f}°), "
                 f"gusts {hour.gusts:.0f} km/h"
             )
@@ -454,13 +471,22 @@ async def build_camera_map_page() -> None:
                     f"Best seats {first:%H:%M}-{last:%H:%M}: wind from the viewed area"
                 ).classes("font-medium")
                 for rank, (camera, score) in enumerate(ranking, 1):
+                    selected_hour = state["wind"][camera.location_id][index]
                     ui.label(
-                        f"{rank}. {score:.0%} · {wind_text(camera)} · view "
+                        f"{rank}. {score:.0%} · "
+                        f"{wind_text(camera, selected_hour)} "
+                        f"· view "
                         f"{compass(camera.view_direction)} {camera.view_angle:.0f}°"
                     ).mark("seat-rank")
             for camera in located:
-                if not camera.has_view and camera.location_id in state["wind"]:
-                    ui.label(f"{wind_text(camera)} · no view angle")
+                hours = state["wind"].get(camera.location_id)
+                if not hours:
+                    continue
+                for hour in hours[index : index + RANKING_HOURS]:
+                    details = wind_text(camera, hour)
+                    if not camera.has_view:
+                        details += " · no view angle"
+                    ui.label(details).mark("wind-forecast")
 
     async def refresh() -> None:
         if not located:
@@ -470,7 +496,10 @@ async def build_camera_map_page() -> None:
         status.set_text("Loading wind forecast...")
         try:
             state["wind"] = await run.io_bound(fetch_wind, located)
-            status.set_text("Wind at 10 m from Open-Meteo; arrows point downwind")
+            status.set_text(
+                "Wind at 10 m from Open-Meteo; arrows show three hours "
+                "and point downwind"
+            )
         except OSError, ValueError, KeyError, TypeError:
             state["wind"] = {}
             status.set_text("Wind forecast unavailable")

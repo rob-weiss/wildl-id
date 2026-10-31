@@ -269,6 +269,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     theme = next(iter(user.find(kind=ui.colors).elements))
                     self.assertEqual(theme.props.get("primary"), "#214a3a")
                     self.assertIn("color: #53675d", user.client.head_html)
+                    self.assertIn(
+                        "body { background: #f4f6f4; }", user.client.head_html
+                    )
                     links = {
                         item.props["href"]
                         for item in drawer.descendants()
@@ -306,6 +309,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertIn(
                 "Gallery: Browse wildlife images and filter your sightings.", tooltips
+            )
+            self.assertIn(
+                "Camera map: Camera locations and wind for the next three hours.",
+                tooltips,
             )
 
     async def test_home_centres_summary_and_moves_page_descriptions_to_navigation(self):
@@ -387,7 +394,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         wind = {
             "North": [
                 camera_map.WindHour(
-                    start + pd.Timedelta(hours=hour), 5.0 + hour, 270.0, 9.0
+                    start + pd.Timedelta(hours=hour),
+                    5.0 + hour,
+                    (270.0, 0.0, 90.0)[hour % 3],
+                    9.0,
                 )
                 for hour in range(24)
             ]
@@ -398,21 +408,48 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with self.app_user("/map") as user:
                 await user.should_see("Camera map")
+                await user.should_see(
+                    "Three hourly arrows per camera, left to right from the selected "
+                    "time; colour indicates speed."
+                )
                 await user.should_see("Missing coordinates")
-                await user.should_see("North: 5 km/h from W (270°), gusts 9 km/h")
+                await user.should_see(
+                    "North · 13:00: 5 km/h from W (270°), gusts 9 km/h"
+                )
+                await user.should_see(
+                    "North · 14:00: 6 km/h from N (0°), gusts 9 km/h"
+                )
+                await user.should_see(
+                    "North · 15:00: 7 km/h from E (90°), gusts 9 km/h"
+                )
                 await user.should_see("Sat 31 Oct 13:00 CET")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
-                self.assertEqual(kinds, ["tileLayer", "circleMarker", "polyline"])
+                self.assertEqual(kinds.count("polyline"), 3)
+                self.assertEqual(kinds[:2], ["tileLayer", "circleMarker"])
                 self.assertIn("World_Imagery", leaflet.layers[0].url_template)
                 self.assertEqual(
                     [camera.location_id for camera in fetch.call_args.args[0]],
                     ["North"],
                 )
                 slider = next(iter(user.find(marker="wind-hour").elements))
+                self.assertEqual(slider.props["max"], 21)
                 slider.set_value(10)
-                await user.should_see("North: 15 km/h from W (270°), gusts 9 km/h")
-                self.assertEqual(len(leaflet.layers), 3)
+                await user.should_see(
+                    "North · 23:00: 15 km/h from N (0°), gusts 9 km/h"
+                )
+                await user.should_see(
+                    "North · 00:00: 16 km/h from E (90°), gusts 9 km/h"
+                )
+                await user.should_see(
+                    "North · 01:00: 17 km/h from W (270°), gusts 9 km/h"
+                )
+                self.assertEqual(
+                    [layer.to_dict()["type"] for layer in leaflet.layers].count(
+                        "polyline"
+                    ),
+                    3,
+                )
 
     async def test_camera_map_ranks_seats_and_draws_views(self):
         import pandas as pd
@@ -461,9 +498,17 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
                 self.assertTrue(ranking()[0].startswith("1. 100% · West"))
                 slider = next(iter(user.find(marker="wind-hour").elements))
+                self.assertEqual(slider.props["max"], 21)
                 slider.set_value(5)
                 await user.should_see("Best seats 18:00-21:00")
                 self.assertTrue(ranking()[0].startswith("1. 100% · East"))
+                self.assertEqual(
+                    [
+                        layer.to_dict()["type"]
+                        for layer in leaflet.layers
+                    ].count("polyline"),
+                    6,
+                )
 
     async def test_camera_map_without_coordinates_is_safe(self):
         from web import camera_map
@@ -1502,7 +1547,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         output_dir = self.root / "automatic-results"
         output_dir.mkdir()
         (output_dir / "summary_statistics.txt").write_text(
-            "first visit results", encoding="utf-8"
+            "WILDLIFE CAMERA ACTIVITY ANALYSIS\n"
+            "Total Images: 24\n"
+            "Images with Timestamps: 20\n"
+            "Unique Species: 2\n"
+            "Unique Locations: 2\n"
+            "Date Range: 2024-01-01 to 2024-12-31\n"
+            "Most Common Species: fox\n"
+            "Most Active Location: North\n\n"
+            "SPECIES COUNTS:\n"
+            "class\nfox 18\nwild boar 6\n\n"
+            "LOCATION COUNTS:\n"
+            "location_id\nNorth 12\nSouth 12\n",
+            encoding="utf-8",
         )
         (output_dir / "01_species_distribution.svg").write_text(
             "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
@@ -1512,10 +1569,31 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.app_user("/visualisations") as user:
             await user.should_see("Filter-based plots")
+            await user.should_see(
+                "Enter filter terms as in the gallery to select the images."
+            )
             await user.should_see("Generate filtered plot")
             await user.should_not_see("Generate visualisations")
             await user.should_see("Visualisations ready")
-            await user.should_see("01_species_distribution.svg")
+            chart_picker = user.find("Chart")
+            chart_picker.click()
+            await user.should_see("01 species distribution")
+            tables = {
+                table.props["columns"][0]["name"]: table
+                for table in user.find(kind=ui.table).elements
+            }
+            self.assertEqual(len(tables), 3)
+            self.assertIn(
+                {"metric": "Total Images", "value": "24"},
+                tables["metric"].props["rows"],
+            )
+            self.assertIn(
+                {"species": "fox", "count": "18"}, tables["species"].props["rows"]
+            )
+            self.assertIn(
+                {"location": "North", "count": "12"},
+                tables["location"].props["rows"],
+            )
 
         self.assertEqual(run_store.generate_calls, 1)
         run_store.result = None
@@ -1525,9 +1603,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see(
                 "Visualisations failed; see container logs for details."
             )
-            await user.should_see("01_species_distribution.svg")
-            user.find("Summary statistics").click()
-            await user.should_see("first visit results")
+            user.find("Chart").click()
+            await user.should_see("01 species distribution")
+            tables = {
+                table.props["columns"][0]["name"]: table
+                for table in user.find(kind=ui.table).elements
+            }
+            self.assertIn(
+                {"metric": "Total Images", "value": "24"},
+                tables["metric"].props["rows"],
+            )
         self.assertEqual(run_store.generate_calls, 2)
 
     async def test_dynamic_plot_uses_filter_and_keeps_static_plot_action(self):
@@ -1561,15 +1646,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             user.find("Plot filter").type("foxes in 2024")
             user.find("Generate filtered plot").click()
             await user.should_see("1 filtered SVG ready")
-            await user.should_see("14_fox_daily_yearly_activity_pattern.svg")
+            await user.should_see("14 fox daily yearly activity pattern")
 
             user.find("Plot type").click()
             user.find("Individual species timelines").click()
             user.find("Plot filter").clear().type("wild boar in 2025")
             user.find("Generate filtered plot").click()
             await user.should_see("1 filtered SVG ready; 2 runs retained")
-            first_label = "foxes in 2024 · 14_fox_daily_yearly_activity_pattern.svg"
-            second_label = "wild boar in 2025 · 09_individual_species_timelines.svg"
+            first_label = "foxes in 2024 · 14 fox daily yearly activity pattern"
+            second_label = "wild boar in 2025 · 09 individual species timelines"
             filtered_svg_selector = user.find("Filtered SVGs")
             filtered_svg_selector.click()
             await user.should_see(first_label)
@@ -1596,7 +1681,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         output_dir = self.root / "results"
         output_dir.mkdir()
         (output_dir / "summary_statistics.txt").write_text(
-            "24 images analysed", encoding="utf-8"
+            "WILDLIFE CAMERA ACTIVITY ANALYSIS\n"
+            "Total Images: 24\n"
+            "Images with Timestamps: 20\n"
+            "Unique Species: 2\n"
+            "Unique Locations: 2\n"
+            "Date Range: 2024-01-01 to 2024-12-31\n"
+            "Most Common Species: fox\n"
+            "Most Active Location: North\n\n"
+            "SPECIES COUNTS:\n"
+            "class\nfox 18\nwild boar 6\n\n"
+            "LOCATION COUNTS:\n"
+            "location_id\nNorth 12\nSouth 12\n",
+            encoding="utf-8",
         )
         (output_dir / "01_species_distribution.svg").write_text(
             "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
@@ -1606,10 +1703,25 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
         async with self.app_user("/visualisations") as user:
             await user.should_see("Summary statistics")
-            await user.should_see("01_species_distribution.svg")
+            user.find("Chart").click()
+            await user.should_see("01 species distribution")
             await user.should_see(kind=ui.image)
-            user.find("Summary statistics").click()
-            await user.should_see("24 images analysed")
+            tables = {
+                table.props["columns"][0]["name"]: table
+                for table in user.find(kind=ui.table).elements
+            }
+            self.assertEqual(len(tables), 3)
+            self.assertIn(
+                {"metric": "Total Images", "value": "24"},
+                tables["metric"].props["rows"],
+            )
+            self.assertIn(
+                {"species": "fox", "count": "18"}, tables["species"].props["rows"]
+            )
+            self.assertIn(
+                {"location": "North", "count": "12"},
+                tables["location"].props["rows"],
+            )
 
         self.assertEqual(run_store.generate_calls, 1)
 
@@ -1617,7 +1729,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         output_dir = self.root / "previous-results"
         output_dir.mkdir()
         (output_dir / "summary_statistics.txt").write_text(
-            "previous successful run", encoding="utf-8"
+            "WILDLIFE CAMERA ACTIVITY ANALYSIS\n"
+            "Total Images: 24\n"
+            "Images with Timestamps: 20\n"
+            "Unique Species: 2\n"
+            "Unique Locations: 2\n"
+            "Date Range: 2024-01-01 to 2024-12-31\n"
+            "Most Common Species: fox\n"
+            "Most Active Location: North\n\n"
+            "SPECIES COUNTS:\n"
+            "class\nfox 18\nwild boar 6\n\n"
+            "LOCATION COUNTS:\n"
+            "location_id\nNorth 12\nSouth 12\n",
+            encoding="utf-8",
         )
         (output_dir / "01_species_distribution.svg").write_text(
             "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
@@ -1633,8 +1757,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 "Visualisations failed; see container logs for details."
             )
             await user.should_not_see("fixture generation failure")
-            await user.should_see("previous successful run")
-            await user.should_see("01_species_distribution.svg")
+            user.find("Chart").click()
+            await user.should_see("01 species distribution")
+            self.assertEqual(len(user.find(kind=ui.table).elements), 3)
 
         self.assertEqual(run_store.generate_calls, 1)
 

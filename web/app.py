@@ -40,6 +40,7 @@ def add_navigation(current_path: str) -> None:
     ui.colors(primary="#214a3a")
     ui.add_head_html(
         """<style>
+        body { background: #f4f6f4; }
         a:not(.q-item):not(.q-btn) { color: #53675d; }
         a:not(.q-item):not(.q-btn):hover { color: #214a3a; }
         </style>"""
@@ -107,7 +108,7 @@ def add_navigation(current_path: str) -> None:
                     "Camera map",
                     "/map",
                     "map",
-                    "Camera locations and wind over the next 24 hours.",
+                    "Camera locations and wind for the next three hours.",
                 ),
             ):
                 with (
@@ -145,6 +146,45 @@ def build_review_page(csv_path: Path = DEFAULT_CSV) -> None:
 
 def build_default_review_page() -> None:
     build_review_page(DEFAULT_CSV)
+
+
+def parse_summary_statistics(
+    summary_text: str,
+) -> tuple[list[dict[str, str]], list[dict[str, str]], list[dict[str, str]]]:
+    metrics = []
+    species_counts = []
+    location_counts = []
+    section = "metrics"
+    for line in summary_text.splitlines():
+        value = line.strip()
+        if value == "SPECIES COUNTS:":
+            section = "species"
+            continue
+        if value == "LOCATION COUNTS:":
+            section = "locations"
+            continue
+        if section == "metrics" and ":" in value:
+            metric, result = value.split(":", 1)
+            if metric.strip() and result.strip():
+                metrics.append(
+                    {"metric": metric.strip(), "value": result.strip()}
+                )
+            continue
+        if section in {"species", "locations"}:
+            fields = value.rsplit(maxsplit=1)
+            if len(fields) == 2 and fields[1].isdigit():
+                row = {"count": fields[1]}
+                row["species" if section == "species" else "location"] = fields[0]
+                (species_counts if section == "species" else location_counts).append(
+                    row
+                )
+    if not metrics:
+        raise ValueError("Summary statistics contain no metric rows")
+    return metrics, species_counts, location_counts
+
+
+def plot_display_name(path: Path) -> str:
+    return Path(path).stem.replace("_", " ")
 
 
 @ui.page("/")
@@ -198,9 +238,9 @@ def visualisations_page() -> None:
     ui.label("Visualisations").classes("text-xl font-semibold")
     ui.label("Filter-based plots").classes("text-lg font-semibold mt-4")
     ui.label(
-        "Uses the gallery filter syntax. Daily yearly plots create one SVG per "
-        "matching species; timelines include all matching species. Sort order "
-        "and result limits do not affect plots."
+        "Enter filter terms as in the gallery to select the images. Daily/yearly "
+        "charts create one plot per matching species; individual timelines "
+        "compare all matching species. Sort order and result limits are ignored."
     ).classes("text-sm text-gray-600")
     with ui.row().classes("w-full items-center gap-2"):
         plot_filter = (
@@ -225,7 +265,7 @@ def visualisations_page() -> None:
     def show_filtered_results(preferred_path: Path | None = None) -> None:
         filtered_results.clear()
         available_plots = [
-            (path, f"{plot_run.prompt or 'All images'} · {path.name}")
+            (path, f"{plot_run.prompt or 'All images'} · {plot_display_name(path)}")
             for plot_run in filtered_plot_runs.runs
             for path in plot_run.paths
         ]
@@ -319,18 +359,81 @@ def visualisations_page() -> None:
             return
 
         summary_text = summary_path.read_text(encoding="utf-8")
+        try:
+            metrics, species_counts, location_counts = parse_summary_statistics(
+                summary_text
+            )
+        except ValueError:
+            logger.exception("Could not parse visualisation summary statistics")
+            status.set_text("Summary statistics unavailable; see container logs.")
+            metrics, species_counts, location_counts = [], [], []
         results.clear()
         with results:
             chart_image = {}
             ui.select(
-                {str(path): path.name for path in chart_paths},
+                {str(path): plot_display_name(path) for path in chart_paths},
                 value=str(chart_paths[0]),
                 label="Chart",
                 on_change=lambda event: chart_image["element"].set_source(event.value),
             ).classes("w-full")
             chart_image["element"] = ui.image(chart_paths[0]).classes("w-full")
             with ui.expansion("Summary statistics").classes("w-full"):
-                ui.label(summary_text).classes("whitespace-pre-wrap")
+                ui.table(
+                    columns=[
+                        {
+                            "name": "metric",
+                            "label": "Statistic",
+                            "field": "metric",
+                            "align": "left",
+                        },
+                        {
+                            "name": "value",
+                            "label": "Value",
+                            "field": "value",
+                            "align": "left",
+                        },
+                    ],
+                    rows=metrics,
+                    row_key="metric",
+                ).props("flat bordered").classes("w-full")
+                ui.label("Species counts").classes("font-medium mt-3")
+                ui.table(
+                    columns=[
+                        {
+                            "name": "species",
+                            "label": "Species",
+                            "field": "species",
+                            "align": "left",
+                        },
+                        {
+                            "name": "count",
+                            "label": "Images",
+                            "field": "count",
+                            "align": "right",
+                        },
+                    ],
+                    rows=species_counts,
+                    row_key="species",
+                ).props("flat bordered").classes("w-full")
+                ui.label("Location counts").classes("font-medium mt-3")
+                ui.table(
+                    columns=[
+                        {
+                            "name": "location",
+                            "label": "Location",
+                            "field": "location",
+                            "align": "left",
+                        },
+                        {
+                            "name": "count",
+                            "label": "Images",
+                            "field": "count",
+                            "align": "right",
+                        },
+                    ],
+                    rows=location_counts,
+                    row_key="location",
+                ).props("flat bordered").classes("w-full")
 
     if visualisation_runs.current_directory is not None:
         show_results(visualisation_runs.current_directory)

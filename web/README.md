@@ -122,10 +122,12 @@ Fill `latitude` and `longitude` (decimal degrees, WGS84) per camera in
 The read-only `config/` mount picks up edits on page reload, without a rebuild.
 Direct Python launches may override the path with `WILDL_ID_CAMERA_LOCATIONS`.
 
-The slider selects one of the next 24 hours. Each camera shows an arrow
-pointing downwind, its length and colour scaled by the Open-Meteo 10 m wind
-speed; the list below gives speed, source direction and gusts. Forecasts are
-cached for 15 minutes. The map needs internet access for tiles and wind.
+The slider selects the start of a three-hour window within the next 24 hours.
+Each camera shows three hourly arrows pointing downwind, ordered left to right
+from the selected time; their length and colour reflect Open-Meteo 10 m wind
+speed. The list below gives each hour's speed, source direction and gusts.
+Forecasts are cached for 15 minutes. The map needs internet access for tiles
+and wind.
 
 Optional `view_direction` (compass degrees) and `view_angle` (opening, degrees)
 draw each camera's view sector. Seats are ranked for the three hours starting
