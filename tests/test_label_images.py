@@ -13,6 +13,65 @@ from src.labelling import label_images
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_resume_selection_skips_completed_and_manual_labels(self):
+        names = [
+            "reviewed.jpg", "complete.jpg", "unknown.jpg", "animal.jpg", "empty.jpg", "new.jpg"
+        ]
+        image_info = [{"location_id": "camera", "name": name} for name in names]
+        existing = pd.DataFrame(
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": name,
+                    "class": automatic,
+                    "manual_label": manual,
+                }
+                for name, automatic, manual in (
+                    ("reviewed.jpg", "", "fox"),
+                    ("complete.jpg", "none", ""),
+                    ("unknown.jpg", "unknown", ""),
+                    ("animal.jpg", "animal", ""),
+                    ("empty.jpg", "", ""),
+                )
+            ]
+        )
+
+        selected = label_images.images_requiring_processing(image_info, existing)
+
+        self.assertEqual([image["name"] for image in selected], names[2:])
+
+    def test_reprocess_missing_retries_metadata_but_preserves_manual_labels(self):
+        names = [
+            "complete.jpg", "timestamp.jpg", "temperature.jpg", "manual.jpg", "new.jpg"
+        ]
+        image_info = [{"location_id": "camera", "name": name} for name in names]
+        existing = pd.DataFrame(
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": name,
+                    "class": "fox",
+                    "manual_label": manual,
+                    "timestamp": timestamp,
+                    "temperature_celsius": temperature,
+                }
+                for name, timestamp, temperature, manual in (
+                    ("complete.jpg", "2026-10-29 12:00:00", "0", ""),
+                    ("timestamp.jpg", "", "10", ""),
+                    ("temperature.jpg", "2026-10-29 12:00:00", "", ""),
+                    ("manual.jpg", "", "", "fox"),
+                )
+            ]
+        )
+
+        selected = label_images.images_requiring_processing(
+            image_info, existing, reprocess_missing=True
+        )
+
+        self.assertEqual(
+            [image["name"] for image in selected], names[1:3] + ["new.jpg"]
+        )
+
     def test_unlabelled_selection_includes_new_images_and_skips_manual_labels(self):
         image_info = [
             {"location_id": "camera", "name": name}
@@ -74,7 +133,7 @@ class AutomaticLabelTests(unittest.TestCase):
             old.touch()
             self.assertEqual(label_images.latest_classifier_weights(models), newest)
 
-    def test_default_reruns_every_image_and_preserves_manual_labels(self):
+    def test_force_reruns_every_image_and_preserves_manual_labels(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             labels_dir = root / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
@@ -157,7 +216,7 @@ class AutomaticLabelTests(unittest.TestCase):
                     {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
                 ),
             ):
-                label_images.process_images_with_pytorch_wildlife()
+                label_images.process_images_with_pytorch_wildlife(force=True)
             output_dir = labels_dir.with_name(
                 labels_dir.name + "_deepfaune_finetuned_20261029-221530_new"
             )
@@ -180,7 +239,7 @@ class AutomaticLabelTests(unittest.TestCase):
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), original)
 
-    def test_unlabelled_run_updates_active_csv_and_skips_reviewed_images(self):
+    def test_default_run_updates_active_csv_and_skips_completed_images(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             labels_dir = root / "labels/active"
@@ -234,8 +293,18 @@ class AutomaticLabelTests(unittest.TestCase):
                 ),
             ):
                 label_images.process_images_with_pytorch_wildlife(
-                    unlabelled_only=True,
                     output_csv_path=csv_path,
+                )
+                self.assertEqual(detector.single_image_detection.call_count, 1)
+                saved = csv_path.read_bytes()
+                detector.reset_mock()
+                label_images.process_images_with_pytorch_wildlife(
+                    output_csv_path=csv_path,
+                )
+                detector.single_image_detection.assert_not_called()
+                self.assertEqual(csv_path.read_bytes(), saved)
+                label_images.process_images_with_pytorch_wildlife(
+                    output_csv_path=csv_path, unlabelled_only=True
                 )
 
             self.assertEqual(detector.single_image_detection.call_count, 2)
@@ -244,6 +313,7 @@ class AutomaticLabelTests(unittest.TestCase):
             )
             self.assertEqual(updated.loc["reviewed.jpg", "manual_label"], "fox")
             self.assertEqual(updated.loc["unreviewed.jpg", "manual_label"], "")
+            self.assertEqual(updated.loc["unreviewed.jpg", "class"], "none")
             self.assertIn("new.jpg", updated.index)
 
     def test_targeted_run_preserves_manual_edits_made_during_inference(self):

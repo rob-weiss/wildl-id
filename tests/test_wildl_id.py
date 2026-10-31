@@ -26,6 +26,46 @@ class WildlifeCommandLineTests(unittest.TestCase):
 
         self.assertTrue(args.download)
 
+    def test_force_cli_reaches_label_and_pipeline_actions(self):
+        for flag, action in (("--label", "label_images"), ("--all", "run_all")):
+            with (
+                self.subTest(flag=flag),
+                patch.object(sys, "argv", ["wildl_id.py", flag, "--force"]),
+                patch.object(wildl_id, action, return_value=True) as invoked,
+                redirect_stdout(StringIO()),
+            ):
+                self.assertEqual(wildl_id.main(), 0)
+                invoked.assert_called_once_with(
+                    camera="seissiger", reprocess_missing=False, force=True
+                )
+
+    def test_label_action_forwards_resume_and_force_options(self):
+        for force in (False, True):
+            with (
+                self.subTest(force=force),
+                patch.object(
+                    wildl_id, "process_images_with_pytorch_wildlife"
+                ) as process,
+                redirect_stdout(StringIO()),
+            ):
+                self.assertTrue(wildl_id.label_images(camera="zeiss", force=force))
+                process.assert_called_once_with(
+                    camera="zeiss", reprocess_missing=False, force=force
+                )
+
+    def test_pipeline_forwards_force_to_labelling(self):
+        with (
+            patch.object(wildl_id, "organize_images", return_value=True),
+            patch.object(wildl_id, "label_images", return_value=True) as label,
+            patch.object(wildl_id, "generate_visualizations", return_value=True),
+            redirect_stdout(StringIO()),
+        ):
+            self.assertTrue(wildl_id.run_all(camera="zeiss", force=True))
+
+        label.assert_called_once_with(
+            camera="zeiss", reprocess_missing=False, force=True
+        )
+
     def test_menu_has_download_choice_five_and_exit_choice_six(self):
         output = StringIO()
         with redirect_stdout(output):
@@ -200,7 +240,9 @@ class WildlifeCommandLineTests(unittest.TestCase):
             self.assertEqual(wildl_id.main(), 0)
 
         download.assert_called_once_with(organize=False)
-        run_all.assert_called_once_with(camera="seissiger", reprocess_missing=False)
+        run_all.assert_called_once_with(
+            camera="seissiger", reprocess_missing=False, force=False
+        )
         organize.assert_not_called()
 
     def test_menu_download_choice_runs_action_and_six_exits(self):

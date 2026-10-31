@@ -251,8 +251,14 @@ copies, a CSV backup, and the keeper mapping are saved under
 uv run src/labelling/label_images.py
 ```
 
-Each run repeats MegaDetector detection and species classification for every image,
-including new and manually reviewed images. Species classification automatically
+Labelling resumes by default: images with manual labels or a completed automatic
+class are skipped. New images and entries with an empty, `unknown`, or `animal`
+class are processed. Use `uv run wildl_id.py --label --reprocess-missing` to also
+retry entries with missing timestamps or temperatures; manually labelled images
+are still skipped. Use `uv run wildl_id.py --label --force` to repeat detection
+and classification for every image while preserving manual labels. These options
+also apply to `--all`; `--force` takes precedence over `--reprocess-missing`.
+Species classification automatically
 uses `weights.pt` from the newest timestamped `models/deepfaune_finetuned_*` run;
 incomplete runs without weights are ignored. If no fine-tuned model exists, it uses
 pretrained DeepFaune. A checkpoint loading error stops the run instead of silently
@@ -264,6 +270,7 @@ both models. Pretrained DeepFaune uses the `deepfaune_pretrained` suffix.
 A new model folder starts with a full copy of the most recently modified matching
 labels CSV, including manual labels; the source CSV is left unchanged. Subsequent
 runs for the same model use that model's CSV.
+Use `--force` to refresh existing predictions after selecting a new model.
 
 Before rewriting an existing CSV, the script duplicates it as
 `*.csv.before-relabel-<timestamp>.bak`, including all manual labels. It refreshes

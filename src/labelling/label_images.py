@@ -896,12 +896,35 @@ def images_without_manual_labels(image_info_list, existing_df):
     ]
 
 
+def images_requiring_processing(image_info_list, existing_df, reprocess_missing=False):
+    completed = set()
+    if existing_df is not None:
+        for row in existing_df.to_dict("records"):
+            manual = str(row.get("manual_label") or "").strip()
+            automatic = str(row.get("class") or "").strip().casefold()
+            metadata_complete = all(
+                pd.notna(row.get(field)) and str(row.get(field, "")).strip()
+                for field in ("timestamp", "temperature_celsius")
+            )
+            if manual or (
+                automatic not in {"", "unknown", "animal"}
+                and (not reprocess_missing or metadata_complete)
+            ):
+                completed.add((nfc(row["location_id"]), row["image_file"]))
+    return [
+        image
+        for image in image_info_list
+        if (nfc(image["location_id"]), image["name"]) not in completed
+    ]
+
+
 def process_images_with_pytorch_wildlife(
     camera=None,
     reprocess_missing=False,
     unlabelled_only=False,
     output_csv_path=None,
     image_keys=None,
+    force=False,
 ):
     """Process images using PyTorch Wildlife MegaDetector for efficient animal detection.
 
@@ -1043,15 +1066,19 @@ def process_images_with_pytorch_wildlife(
         if existing_df is not None
         else {}
     )
-    images_to_process = (
-        images_without_manual_labels(image_info_list, existing_df)
-        if unlabelled_only or image_keys is not None
-        else image_info_list
-    )
+    if force:
+        images_to_process = image_info_list
+    elif unlabelled_only or image_keys is not None:
+        images_to_process = images_without_manual_labels(image_info_list, existing_df)
+    else:
+        images_to_process = images_requiring_processing(
+            image_info_list, existing_df, reprocess_missing=reprocess_missing
+        )
 
     print(
         f"Found {len(image_info_list)} total images in {len(locations)} locations, "
-        f"processing {len(images_to_process)} images\n"
+        f"processing {len(images_to_process)} images "
+        f"(skipping {len(image_info_list) - len(images_to_process)} completed images)\n"
     )
 
     results = []

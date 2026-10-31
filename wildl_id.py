@@ -158,7 +158,7 @@ def label_new_images(camera=None):
         return False
 
 
-def label_images(camera=None, reprocess_missing=False):
+def label_images(camera=None, reprocess_missing=False, force=False):
     """Label and classify images using MegaDetector."""
     print("\n" + "=" * 70)
     print("🏷️  LABELLING IMAGES")
@@ -171,7 +171,7 @@ def label_images(camera=None, reprocess_missing=False):
 
     try:
         process_images_with_pytorch_wildlife(
-            camera=camera, reprocess_missing=reprocess_missing
+            camera=camera, reprocess_missing=reprocess_missing, force=force
         )
         print("\n✓ Labelling completed successfully!")
         return True
@@ -213,7 +213,7 @@ def generate_visualizations():
         return False
 
 
-def run_all(camera=None, reprocess_missing=False):
+def run_all(camera=None, reprocess_missing=False, force=False):
     """Run all supported steps in sequence."""
     print("\n" + "=" * 70)
     print("🚀  RUNNING COMPLETE PIPELINE")
@@ -229,7 +229,9 @@ def run_all(camera=None, reprocess_missing=False):
         ("ORGANISING IMAGES", organize_images),
         (
             "LABELLING IMAGES",
-            lambda: label_images(camera=camera, reprocess_missing=reprocess_missing),
+            lambda: label_images(
+                camera=camera, reprocess_missing=reprocess_missing, force=force
+            ),
         ),
         ("GENERATING VISUALISATIONS", generate_visualizations),
     )
@@ -266,6 +268,7 @@ Examples:
     %(prog)s -l --camera seissiger   Label with explicit Seissiger camera format
     %(prog)s -l --camera zeiss       Label with explicit Zeiss camera format
     %(prog)s -l --reprocess-missing  Reprocess incomplete/missing label entries
+    %(prog)s -l --force          Relabel every image, preserving manual labels
         """,
     )
 
@@ -300,7 +303,7 @@ Examples:
         "-l",
         "--label",
         action="store_true",
-        help="Label/classify images using MegaDetector and species classifier",
+        help="Label/classify new or incomplete images, skipping completed labels",
     )
 
     parser.add_argument(
@@ -321,6 +324,12 @@ Examples:
         "--reprocess-missing",
         action="store_true",
         help="When labelling, reprocess entries with missing class/timestamp/temperature",
+    )
+
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="When labelling, rerun every image while preserving manual labels",
     )
 
     return parser.parse_args()
@@ -349,7 +358,9 @@ def main():
             if args.download:
                 download_success = download_images(organize=False)
             pipeline_success = run_all(
-                camera=args.camera, reprocess_missing=args.reprocess_missing
+                camera=args.camera,
+                reprocess_missing=args.reprocess_missing,
+                force=args.force,
             )
             success = pipeline_success and download_success
             if args.notify:
@@ -367,7 +378,9 @@ def main():
             if args.label:
                 success = (
                     label_images(
-                        camera=args.camera, reprocess_missing=args.reprocess_missing
+                        camera=args.camera,
+                        reprocess_missing=args.reprocess_missing,
+                        force=args.force,
                     )
                     and success
                 )
