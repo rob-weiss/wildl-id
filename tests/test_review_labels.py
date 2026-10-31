@@ -309,6 +309,31 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_unknown_manual_label_is_unseen(self):
+        with self.csv_path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        rows.append(
+            {
+                "location_id": "camera1",
+                "image_file": "unknown.jpg",
+                "class": "",
+                "box": "",
+                "manual_label": "unknown",
+            }
+        )
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        review = LabelReview(self.csv_path)
+
+        self.assertEqual(review.pending, [0, 3])
+        review.set_mode("Seen")
+        self.assertEqual(review.pending, [1, 2])
+
     def test_auto_label_button_runs_background_job_and_reloads_review(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:
