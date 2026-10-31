@@ -144,7 +144,8 @@ def label_new_images(camera=None):
                     automatic = (row.get("class") or "").strip().casefold()
                     inferred = (row.get("classifier_model") or "").strip()
                     if manual or (
-                        automatic and (inferred or automatic not in {"unknown", "animal"})
+                        automatic
+                        and (inferred or automatic not in {"unknown", "animal"})
                     ):
                         completed.add((nfc(row["location_id"]), row["image_file"]))
         pending = {

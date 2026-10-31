@@ -2,11 +2,11 @@ import csv
 import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from importlib import import_module
 from pathlib import Path
-from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 from zoneinfo import ZoneInfo
 
 from PIL import Image
@@ -220,8 +220,12 @@ class DailySummaryTests(unittest.TestCase):
             writer = csv.DictWriter(
                 stream,
                 fieldnames=[
-                    "location_id", "image_file", "timestamp_exif", "timestamp",
-                    "class", "manual_label",
+                    "location_id",
+                    "image_file",
+                    "timestamp_exif",
+                    "timestamp",
+                    "class",
+                    "manual_label",
                 ],
             )
             writer.writeheader()
@@ -229,31 +233,42 @@ class DailySummaryTests(unittest.TestCase):
 
     def row(self, name, stamp, species="fox", manual="", location="Wendeplatte"):
         return dict(
-            location_id=location, image_file=name, timestamp_exif=stamp,
-            timestamp="", **{"class": species}, manual_label=manual,
+            location_id=location,
+            image_file=name,
+            timestamp_exif=stamp,
+            timestamp="",
+            **{"class": species},
+            manual_label=manual,
         )
 
     def run_summary(self, **kwargs):
         return alerts.send_daily_summary(
-            self.config, self.state, self.labels,
+            self.config,
+            self.state,
+            self.labels,
             now=kwargs.pop("now", self.now),
             keychain_reader=lambda *args: "topic-x",
-            publisher=kwargs.pop("publisher", lambda request: self.published.append(request)),
+            publisher=kwargs.pop(
+                "publisher", lambda request: self.published.append(request)
+            ),
             **kwargs,
         )
 
     def test_digest_counts_unique_photos_with_manual_labels_and_exact_window(self):
         row = self.row("one.jpg", "2026-10-30 07:00:00", manual="roe deer")
-        self.write_rows([
-            row, row,
-            self.row("two.jpg", "2026-10-31 06:59:59", location="Douglasien"),
-            self.row("old.jpg", "2026-10-30 06:59:59"),
-            self.row("future.jpg", "2026-10-31 07:00:00"),
-            self.row("empty.jpg", "2026-10-31 06:00:00", manual="none"),
-            self.row("human.jpg", "2026-10-31 06:00:00", species="human"),
-            self.row("invalid.jpg", "not a timestamp"),
-            self.row("undated.jpg", ""),
-        ])
+        self.write_rows(
+            [
+                row,
+                row,
+                self.row("two.jpg", "2026-10-31 06:59:59", location="Douglasien"),
+                self.row("old.jpg", "2026-10-30 06:59:59"),
+                self.row("future.jpg", "2026-10-31 07:00:00"),
+                self.row("empty.jpg", "2026-10-31 06:00:00", manual="none"),
+                self.row("human.jpg", "2026-10-31 06:00:00", species="human"),
+                self.row("invalid.jpg", "not a timestamp"),
+                self.row("undated.jpg", ""),
+            ]
+        )
 
         result = self.run_summary()
         again = self.run_summary()
@@ -265,38 +280,14 @@ class DailySummaryTests(unittest.TestCase):
         self.assertIn("Total: 2 sightings", request.data.decode())
         self.assertIn("By species: 1 fox 1 roe deer", request.data.decode())
         self.assertEqual(urlsplit(request.full_url).path, "/topic-x")
-        self.assertEqual(parse_qs(urlsplit(request.full_url).query)["priority"], ["default"])
+        self.assertEqual(
+            parse_qs(urlsplit(request.full_url).query)["priority"], ["default"]
+        )
 
     def test_not_due_before_seven_berlin_even_on_utc_host(self):
-        result = self.run_summary(now=datetime(2026, 10, 31, 5, 59, tzinfo=timezone.utc))
+        result = self.run_summary(now=datetime(2026, 10, 31, 5, 59, tzinfo=UTC))
         self.assertEqual(result.sent, 0)
         self.assertFalse(self.state.exists())
-
-    def test_only_landing_page_species_contribute_to_total_and_location_counts(self):
-        relevant = ["roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"]
-        rows = [
-            self.row(f"relevant-{index}.jpg", "2026-10-31 06:00:00", species=species)
-            for index, species in enumerate(relevant)
-        ]
-        rows.extend([
-            self.row("fox.jpg", "2026-10-31 06:00:00", location="Douglasien"),
-            self.row("manual.jpg", "2026-10-31 06:00:00", species="woodpecker", manual="hare", location="Douglasien"),
-            self.row("excluded.jpg", "2026-10-31 06:00:00", species="fox", manual="squirrel", location="Bird camera"),
-            self.row("bird.jpg", "2026-10-31 06:00:00", species="woodpecker", location="Bird camera"),
-            self.row("unknown.jpg", "2026-10-31 06:00:00", species="unknown"),
-        ])
-        self.write_rows(rows)
-
-        result = self.run_summary()
-
-        self.assertEqual((result.sent, result.failures), (1, ()))
-        body = self.published[0].data.decode()
-        self.assertIn("Total: 9 sightings", body)
-        self.assertIn("Wendeplatte: 1 badger", body)
-        self.assertIn("Douglasien: 1 fox 1 hare", body)
-        self.assertNotIn("Bird camera", body)
-        self.assertNotIn("woodpecker", body)
-        self.assertIn("1 roe deer", body)
 
     def test_configured_summary_species_are_independent_of_immediate_alerts(self):
         self.config.write_text(
@@ -334,55 +325,123 @@ class DailySummaryTests(unittest.TestCase):
                 self.assertFalse(self.state.exists())
         self.assertEqual(self.published, [])
 
-    def test_summary_breaks_down_global_and_location_totals_by_species(self):
-        rows = [
-            self.row(
-                f"boar-{index}.jpg", "2026-10-31 06:00:00",
-                species="wild boar", location="Grenzweg",
-            )
-            for index in range(3)
+    def test_only_landing_page_species_contribute_to_total_and_location_counts(self):
+        relevant = [
+            "roe deer",
+            "wild boar",
+            "badger",
+            "marten",
+            "fox",
+            "hare",
+            "raccoon",
         ]
-        rows.extend([
-            self.row(
-                "roe.jpg", "2026-10-31 06:00:00",
-                species="roe deer", location="Grenzweg",
-            ),
-            self.row(
-                "second-roe.jpg", "2026-10-31 06:00:00",
-                species="roe deer", location="Douglasien",
-            ),
-            self.row("fox.jpg", "2026-10-31 06:00:00", location="Douglasien"),
-        ])
+        rows = [
+            self.row(f"relevant-{index}.jpg", "2026-10-31 06:00:00", species=species)
+            for index, species in enumerate(relevant)
+        ]
+        rows.extend(
+            [
+                self.row("fox.jpg", "2026-10-31 06:00:00", location="Douglasien"),
+                self.row(
+                    "manual.jpg",
+                    "2026-10-31 06:00:00",
+                    species="woodpecker",
+                    manual="hare",
+                    location="Douglasien",
+                ),
+                self.row(
+                    "excluded.jpg",
+                    "2026-10-31 06:00:00",
+                    species="fox",
+                    manual="squirrel",
+                    location="Bird camera",
+                ),
+                self.row(
+                    "bird.jpg",
+                    "2026-10-31 06:00:00",
+                    species="woodpecker",
+                    location="Bird camera",
+                ),
+                self.row("unknown.jpg", "2026-10-31 06:00:00", species="unknown"),
+            ]
+        )
         self.write_rows(rows)
 
         result = self.run_summary()
 
         self.assertEqual((result.sent, result.failures), (1, ()))
-        self.assertEqual(self.published[0].data.decode().splitlines()[1:], [
-            "Total: 6 sightings in the last 24 hours.",
-            "By species: 3 wild boar 2 roe deer 1 fox",
-            "Douglasien: 1 fox 1 roe deer",
-            "Grenzweg: 3 wild boar 1 roe deer",
-        ])
+        body = self.published[0].data.decode()
+        self.assertIn("Total: 9 sightings", body)
+        self.assertIn("Wendeplatte: 1 badger", body)
+        self.assertIn("Douglasien: 1 fox 1 hare", body)
+        self.assertNotIn("Bird camera", body)
+        self.assertNotIn("woodpecker", body)
+        self.assertIn("1 roe deer", body)
+
+    def test_summary_breaks_down_global_and_location_totals_by_species(self):
+        rows = [
+            self.row(
+                f"boar-{index}.jpg",
+                "2026-10-31 06:00:00",
+                species="wild boar",
+                location="Grenzweg",
+            )
+            for index in range(3)
+        ]
+        rows.extend(
+            [
+                self.row(
+                    "roe.jpg",
+                    "2026-10-31 06:00:00",
+                    species="roe deer",
+                    location="Grenzweg",
+                ),
+                self.row(
+                    "second-roe.jpg",
+                    "2026-10-31 06:00:00",
+                    species="roe deer",
+                    location="Douglasien",
+                ),
+                self.row("fox.jpg", "2026-10-31 06:00:00", location="Douglasien"),
+            ]
+        )
+        self.write_rows(rows)
+
+        result = self.run_summary()
+
+        self.assertEqual((result.sent, result.failures), (1, ()))
+        self.assertEqual(
+            self.published[0].data.decode().splitlines()[1:],
+            [
+                "Total: 6 sightings in the last 24 hours.",
+                "By species: 3 wild boar 2 roe deer 1 fox",
+                "Douglasien: 1 fox 1 roe deer",
+                "Grenzweg: 3 wild boar 1 roe deer",
+            ],
+        )
 
     def test_summer_seven_is_five_utc(self):
-        result = self.run_summary(now=datetime(2026, 7, 1, 5, tzinfo=timezone.utc))
+        result = self.run_summary(now=datetime(2026, 7, 1, 5, tzinfo=UTC))
         self.assertEqual(result.sent, 1)
 
     def test_dst_transition_still_uses_twenty_four_elapsed_hours(self):
         self.now = datetime(2026, 10, 25, 7, tzinfo=ZoneInfo("Europe/Berlin"))
-        self.write_rows([
-            self.row("old.jpg", "2026-10-24 06:59:59"),
-            self.row("included.jpg", "2026-10-24 07:00:00"),
-        ])
+        self.write_rows(
+            [
+                self.row("old.jpg", "2026-10-24 06:59:59"),
+                self.row("included.jpg", "2026-10-24 07:00:00"),
+            ]
+        )
         self.run_summary()
         self.assertIn("Total: 1 sighting", self.published[0].data.decode())
 
     def test_wake_after_seven_uses_scheduled_window(self):
-        self.write_rows([
-            self.row("early.jpg", "2026-10-30 07:01:00"),
-            self.row("late.jpg", "2026-10-31 08:00:00"),
-        ])
+        self.write_rows(
+            [
+                self.row("early.jpg", "2026-10-30 07:01:00"),
+                self.row("late.jpg", "2026-10-31 08:00:00"),
+            ]
+        )
         self.run_summary(now=self.now + timedelta(hours=3))
         self.assertIn("Total: 1 sighting", self.published[0].data.decode())
 
@@ -419,7 +478,11 @@ class DailySummaryTests(unittest.TestCase):
         expected = alerts.AlertResult(True, 1, ())
         with (
             patch.object(alerts, "send_daily_summary", return_value=expected) as daily,
-            patch.object(alerts, "_send_species_alerts", return_value=alerts.AlertResult(True, 0, ())),
+            patch.object(
+                alerts,
+                "_send_species_alerts",
+                return_value=alerts.AlertResult(True, 0, ()),
+            ),
         ):
             result = alerts.send_push_alerts(config_path=self.config, now=self.now)
         self.assertEqual(result.sent, 1)

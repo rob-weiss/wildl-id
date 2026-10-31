@@ -369,10 +369,16 @@ def send_daily_summary(
         seen = set()
         with Path(csv_path).open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
-            if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or ()):
-                raise ValueError("summary CSV needs location_id, image_file, and class columns")
+            if not {"location_id", "image_file", "class"}.issubset(
+                reader.fieldnames or ()
+            ):
+                raise ValueError(
+                    "summary CSV needs location_id, image_file, and class columns"
+                )
             for row in reader:
-                stamp = (row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+                stamp = (
+                    row.get("timestamp_exif") or row.get("timestamp") or ""
+                ).strip()
                 if not stamp:
                     continue
                 try:
@@ -401,7 +407,8 @@ def send_daily_summary(
             f"Total: {total} {'sighting' if total == 1 else 'sightings'} in the last 24 hours.",
         ]
         for label, species_counts in [
-            ("By species", species_totals), *sorted(counts.items())
+            ("By species", species_totals),
+            *sorted(counts.items()),
         ]:
             if not species_counts:
                 continue
@@ -414,7 +421,9 @@ def send_daily_summary(
             lines.append(f"{label}: {details}")
         if not total:
             lines.append("No relevant species sightings in this period.")
-        topic = (keychain_reader or _read_keychain_secret)(KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT)
+        topic = (keychain_reader or _read_keychain_secret)(
+            KEYCHAIN_SERVICE, KEYCHAIN_ACCOUNT
+        )
         if not topic:
             raise RuntimeError("ntfy topic is missing from macOS Keychain")
         params = urlencode({"title": "Wildl-ID daily summary", "priority": "default"})
@@ -434,7 +443,9 @@ def send_daily_summary(
         os.replace(temporary, state_path)
         return AlertResult(True, 1, ())
     except Exception as error:
-        return AlertResult(True, 0, (f"Daily summary: {type(error).__name__}: {error}",))
+        return AlertResult(
+            True, 0, (f"Daily summary: {type(error).__name__}: {error}",)
+        )
 
 
 def send_push_alerts(
@@ -449,9 +460,13 @@ def send_push_alerts(
 ) -> AlertResult:
     summary = send_daily_summary(config_path, keychain_reader=keychain_reader, now=now)
     alerts = _send_species_alerts(
-        config_path, state_path, images_dir,
-        keychain_reader=keychain_reader, analyser_factory=analyser_factory,
-        publisher=publisher, now=now,
+        config_path,
+        state_path,
+        images_dir,
+        keychain_reader=keychain_reader,
+        analyser_factory=analyser_factory,
+        publisher=publisher,
+        now=now,
     )
     return AlertResult(
         summary.enabled or alerts.enabled,
