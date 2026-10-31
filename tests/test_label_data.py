@@ -224,7 +224,7 @@ class LabelDataTests(unittest.TestCase):
         human = label_data.read_records(self.human)
         self.assertEqual(tuple(human[0]), label_data.HUMAN_COLUMNS)
         self.assertEqual(human[0]["manual_label"], "cat")
-        predictions = label_data.read_records(self.model / "predictions.csv")
+        predictions = label_data.read_records(label_data.predictions_path(self.root))
         self.assertEqual(predictions[0]["class"], "hare")
         backups = list(
             self.human.parent.glob("human_labels.csv.before-separation-*.bak")
@@ -247,7 +247,7 @@ class LabelDataTests(unittest.TestCase):
             ],
         )
         self.write(
-            self.model / "predictions.csv",
+            label_data.predictions_path(self.root),
             [
                 {
                     "location_id": "camera",
@@ -269,7 +269,8 @@ class LabelDataTests(unittest.TestCase):
         self.assertEqual(joined[0]["class"], "")
         self.assertEqual(joined[0]["manual_label"], "cat")
         self.assertEqual(
-            label_data.predictions_path(self.root), newer / "predictions.csv"
+            label_data.predictions_path(self.root),
+            self.root / "labels" / f"labels_{newer.name}" / "predictions.csv",
         )
 
     def test_prediction_only_images_are_not_lost(self):
@@ -285,7 +286,7 @@ class LabelDataTests(unittest.TestCase):
             ],
         )
         self.write(
-            self.model / "predictions.csv",
+            label_data.predictions_path(self.root),
             [
                 {
                     "location_id": "camera",
@@ -304,7 +305,26 @@ class LabelDataTests(unittest.TestCase):
     def test_incomplete_training_run_is_not_selected(self):
         (self.root / "models/deepfaune_finetuned_20261101-120000_incomplete").mkdir()
         self.assertEqual(
-            label_data.predictions_path(self.root), self.model / "predictions.csv"
+            label_data.predictions_path(self.root),
+            self.root / "labels" / f"labels_{self.model.name}" / "predictions.csv",
+        )
+
+    def test_model_predictions_are_stored_under_labels(self):
+        self.assertEqual(
+            label_data.predictions_path(self.root),
+            self.root
+            / "labels"
+            / f"labels_{self.model.name}"
+            / "predictions.csv",
+        )
+
+    def test_validation_predictions_are_stored_under_labels(self):
+        self.assertEqual(
+            label_data.validation_predictions_dir(self.root, self.model.name),
+            self.root
+            / "labels"
+            / f"labels_{self.model.name}"
+            / "validation_predictions",
         )
 
     def test_training_keeps_burst_timestamps_outside_human_labels(self):
@@ -352,7 +372,7 @@ class LabelDataTests(unittest.TestCase):
                 }
             ],
         )
-        prediction = self.model / "predictions.csv"
+        prediction = label_data.predictions_path(self.root)
         self.write(
             prediction,
             [
@@ -424,7 +444,9 @@ class LabelDataTests(unittest.TestCase):
             label_images.process_images_with_pytorch_wildlife()
             self.assertEqual(detector.single_image_detection.call_count, 2)
             self.assertEqual(self.human.read_bytes(), original)
-            saved = label_data.read_records(self.model / "predictions.csv")
+            saved_path = label_data.predictions_path(self.root, self.model.name)
+            saved = label_data.read_records(saved_path)
+            self.assertTrue(saved_path.is_relative_to(self.root / "labels"))
             self.assertEqual(len(saved), 2)
             self.assertNotIn("manual_label", saved[0])
             self.assertEqual(saved[0]["classifier_model"], self.model.name)
@@ -440,7 +462,10 @@ class LabelDataTests(unittest.TestCase):
             classifier.weights_path = newer / "weights.pt"
             label_images.process_images_with_pytorch_wildlife()
             self.assertEqual(detector.single_image_detection.call_count, 2)
-            self.assertEqual(len(label_data.read_records(newer / "predictions.csv")), 2)
+            self.assertEqual(
+                len(label_data.read_records(label_data.predictions_path(self.root))),
+                2,
+            )
             self.assertEqual(self.human.read_bytes(), original)
 
 

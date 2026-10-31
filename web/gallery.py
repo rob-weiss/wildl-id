@@ -926,7 +926,7 @@ def build_image_viewer(items, boxes, compact=False):
         update_overlay()
         taken = row_datetime(row)
         when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
-        labels = annotation_labels(row) if compact else display_label(row_label(row))
+        labels = annotation_labels(row)
         caption.set_text(
             f"{index + 1} / {len(visible_items)} · {labels} · {row['location_id']} · {when}"
         )
@@ -1263,6 +1263,7 @@ def build_gallery_page(
                     source,
                     lambda index=index: show_image(index),
                     show_boxes=boxes.visible,
+                    detailed=True,
                 )
 
     boxes.listeners.append(show_page)

@@ -984,6 +984,68 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find("Smart filter").type("only foxes").trigger("keydown.enter")
                 await user.should_see("1 images · only 🦊 fox")
 
+    async def test_gallery_shows_predictions_from_latest_model(self):
+        from src.labelling import label_data
+
+        labels_dir = self.root / "labels"
+        human_csv = labels_dir / "human_labels.csv"
+        label_data.write_records(
+            human_csv,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+            label_data.HUMAN_COLUMNS,
+        )
+        label_data.write_records(
+            labels_dir / "image_metadata.csv",
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-01T00:00:00",
+                }
+            ],
+            label_data.METADATA_COLUMNS,
+        )
+        models_dir = self.root / "models"
+        old_model = models_dir / "deepfaune_finetuned_20261028-120000_old"
+        latest_model = models_dir / "deepfaune_finetuned_20261029-120000_latest"
+        for model in (old_model, latest_model):
+            model.mkdir(parents=True)
+            (model / "weights.pt").touch()
+        for model, predicted_label in (
+            (old_model, "hare"),
+            (latest_model, "wild boar"),
+        ):
+            label_data.write_records(
+                label_data.predictions_path(self.root, model.name),
+                [
+                    {
+                        "location_id": "camera1",
+                        "image_file": "fox.jpg",
+                        "class": predicted_label,
+                    }
+                ],
+                label_data.PREDICTION_COLUMNS,
+            )
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(web_app, "DEFAULT_CSV", human_csv),
+        ):
+            async with self.app_user("/gallery") as user:
+                await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
+                await user.should_not_see("Automatic: 🐇 hare")
+                user.find(kind=ui.image, content="fox.jpg").click()
+                await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
+
     async def test_gallery_example_applies_filter(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class"],

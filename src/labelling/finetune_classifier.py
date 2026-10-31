@@ -8,9 +8,11 @@ Each run writes to models/deepfaune_finetuned_<date>_<git hash>/:
 - weights.pt          state dict plus class names, git hash, date and hyperparameters
 - metadata.json       the same metadata without the weights, plus training history
 - training_data/      the exact crops used for training and validation, with labels.csv
-- validation_predictions/predictions.csv  true and predicted class for each validation image
 - confusion_matrix.svg  validation counts for the best model, with class labels
 - finetune_classifier.py and git_diff.patch (if the work tree was dirty)
+
+Validation predictions and rendered images are written to
+labels/labels_<run>/validation_predictions/.
 
 Usage:
     uv run src/labelling/finetune_classifier.py
@@ -531,7 +533,7 @@ def main():
     save_confusion_matrix(targets, preds, class_names, confusion_matrix_path)
     print(f"Validation confusion matrix saved to {confusion_matrix_path}")
     val_df = df[~train_mask]
-    validation_images_dir = out_dir / "validation_predictions"
+    validation_images_dir = label_data.validation_predictions_dir(REPO_DIR, run_name)
     save_validation_predictions(
         val_df, targets, preds, class_names, validation_images_dir
     )

@@ -119,7 +119,7 @@ class RemoveEmptyImagesTests(unittest.TestCase):
             ],
             data.HUMAN_COLUMNS,
         )
-        prediction = self.root / "models/deepfaune_pretrained/predictions.csv"
+        prediction = data.predictions_path(self.root, "deepfaune_pretrained")
         data.write_records(
             prediction,
             [
@@ -465,6 +465,33 @@ class LabelReviewTests(unittest.TestCase):
                 app.change_mode("Seen")
                 self.assertEqual(app.prediction.text, "🏷️ Predicted: 🦊 fox")
 
+    def test_missing_model_prediction_is_not_shown_as_predicted_in_sidebar(self):
+        csv_path = Path(self.temp_dir.name) / "missing-prediction.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=["location_id", "image_file", "class", "manual_label"],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "location_id": "camera1",
+                    "image_file": "missing.jpg",
+                    "class": "",
+                    "manual_label": "fox",
+                }
+            )
+        app = review_app_module.ReviewApp(csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+                app.change_mode("Seen")
+        self.addCleanup(container.delete)
+
+        self.assertEqual(app.prediction.text, "🏷️ True: 🦊 fox")
+        self.assertNotIn("Predicted:", app.prediction.text)
+        self.assertNotIn("🐾", app.prediction.text)
+
     def test_unseen_mode_hides_validation_truth_but_incorrect_mode_shows_it(self):
         app = review_app_module.ReviewApp(self.csv_path)
         filename = "camera1_unchecked.jpg"
@@ -584,7 +611,14 @@ class LabelReviewTests(unittest.TestCase):
             (older, "camera1_old.jpg"),
             (latest, "camera1_latest.jpg"),
         ):
-            incorrect_dir = run_dir / "validation_predictions" / "incorrect"
+            run_dir.mkdir(parents=True)
+            incorrect_dir = (
+                models_dir.parent
+                / "labels"
+                / f"labels_{run_dir.name}"
+                / "validation_predictions"
+                / "incorrect"
+            )
             incorrect_dir.mkdir(parents=True)
             (incorrect_dir / filename).touch()
 
@@ -596,11 +630,24 @@ class LabelReviewTests(unittest.TestCase):
     def test_latest_run_without_errors_does_not_fall_back_to_older_run(self):
         models_dir = Path(self.temp_dir.name) / "models"
         older = models_dir / "deepfaune_finetuned_20261019-200723_old"
-        incorrect_dir = older / "validation_predictions" / "incorrect"
+        older.mkdir(parents=True)
+        incorrect_dir = (
+            models_dir.parent
+            / "labels"
+            / f"labels_{older.name}"
+            / "validation_predictions"
+            / "incorrect"
+        )
         incorrect_dir.mkdir(parents=True)
         (incorrect_dir / "camera1_old.jpg").touch()
         latest = models_dir / "deepfaune_finetuned_20261020-191127_latest"
-        validation_dir = latest / "validation_predictions"
+        latest.mkdir(parents=True)
+        validation_dir = (
+            models_dir.parent
+            / "labels"
+            / f"labels_{latest.name}"
+            / "validation_predictions"
+        )
         validation_dir.mkdir(parents=True)
         with (validation_dir / "predictions.csv").open(
             "w", newline="", encoding="utf-8"
@@ -634,7 +681,13 @@ class LabelReviewTests(unittest.TestCase):
     def test_latest_validation_predictions_are_loaded_for_csv_rows(self):
         models_dir = Path(self.temp_dir.name) / "models"
         run_dir = models_dir / "deepfaune_finetuned_20261020-191127_latest"
-        validation_dir = run_dir / "validation_predictions"
+        run_dir.mkdir(parents=True)
+        validation_dir = (
+            models_dir.parent
+            / "labels"
+            / f"labels_{run_dir.name}"
+            / "validation_predictions"
+        )
         incorrect_dir = validation_dir / "incorrect"
         incorrect_dir.mkdir(parents=True)
         (incorrect_dir / "camera1_incorrect.jpg").touch()
@@ -689,6 +742,20 @@ class LabelReviewTests(unittest.TestCase):
         self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
         self.assertIn('font-size="16"', overlay)
+
+    def test_box_overlay_omits_prediction_when_latest_model_has_none(self):
+        overlay = review_app_module.box_overlay_svg(
+            {
+                "class": "",
+                "manual_label": "fox",
+                "box": "[0.5, 0.5, 0.4, 0.4]",
+            },
+            (400, 300),
+        )
+
+        self.assertIn("True: 🦊 fox", overlay)
+        self.assertNotIn("Predicted:", overlay)
+        self.assertNotIn("🐾", overlay)
 
     def test_box_overlay_keeps_annotation_size_in_display_pixels(self):
         row = {
@@ -880,9 +947,13 @@ class LabelReviewTests(unittest.TestCase):
 
     def test_modes_select_rows_and_preserve_current_row(self):
         models_dir = Path(self.temp_dir.name) / "models"
+        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(
+            parents=True
+        )
         incorrect_dir = (
-            models_dir
-            / "deepfaune_finetuned_20261020-191127_latest"
+            models_dir.parent
+            / "labels"
+            / "labels_deepfaune_finetuned_20261020-191127_latest"
             / "validation_predictions"
             / "incorrect"
         )
@@ -917,9 +988,13 @@ class LabelReviewTests(unittest.TestCase):
             )
 
         models_dir = Path(self.temp_dir.name) / "models"
+        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(
+            parents=True
+        )
         incorrect_dir = (
-            models_dir
-            / "deepfaune_finetuned_20261020-191127_latest"
+            models_dir.parent
+            / "labels"
+            / "labels_deepfaune_finetuned_20261020-191127_latest"
             / "validation_predictions"
             / "incorrect"
         )
@@ -1008,6 +1083,23 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(axes.patches[0].get_edgecolor(), to_rgba("#c62828"))
         self.assertEqual(axes.texts[0].get_text(), "True: hare | Predicted: fox")
+
+    def test_static_box_label_omits_missing_prediction(self):
+        review = LabelReview(self.csv_path)
+        figure, axes = plt.subplots()
+        self.addCleanup(plt.close, figure)
+        review.image_axes = axes
+
+        review.draw_box_label(
+            {
+                "class": "",
+                "manual_label": "fox",
+                "box": "[0.5, 0.5, 0.4, 0.4]",
+            },
+            (100, 100),
+        )
+
+        self.assertEqual([text.get_text() for text in axes.texts], ["True: fox"])
 
     def test_undo_restores_manual_label_that_existed_before_review(self):
         review = LabelReview(self.csv_path)

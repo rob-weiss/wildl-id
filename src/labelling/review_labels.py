@@ -68,7 +68,9 @@ def latest_incorrect_predictions(models_dir=None):
         reverse=True,
     )
     for run_dir in run_dirs:
-        validation_dir = run_dir / "validation_predictions"
+        validation_dir = label_data.validation_predictions_dir(
+            models_dir.parent, run_dir.name
+        )
         if not validation_dir.is_dir():
             continue
         manifest = validation_dir / "predictions.csv"
@@ -80,7 +82,7 @@ def latest_incorrect_predictions(models_dir=None):
                     if row.get("status") == "incorrect"
                 }
             return run_dir.name, filenames
-        incorrect_dir = run_dir / "validation_predictions" / "incorrect"
+        incorrect_dir = validation_dir / "incorrect"
         if incorrect_dir.is_dir():
             return run_dir.name, {
                 path.name for path in incorrect_dir.iterdir() if path.is_file()
@@ -94,7 +96,8 @@ def load_validation_predictions(run_name, models_dir=None):
         return {}
     models_dir = Path(models_dir or MODELS_DIR)
     predictions_path = (
-        models_dir / run_name / "validation_predictions" / "predictions.csv"
+        label_data.validation_predictions_dir(models_dir.parent, run_name)
+        / "predictions.csv"
     )
     if not predictions_path.is_file():
         return {}
@@ -476,12 +479,8 @@ class LabelReview:
         left = max(0, (x_center - width / 2) * image_width)
         top = max(0, (y_center - height / 2) * image_height)
         manual_label = str(row.get("manual_label") or "").strip()
-        color = bounding_box_color(row["class"], manual_label)
-        label = (
-            f"True: {manual_label} | Predicted: {row['class']}"
-            if manual_label
-            else f"Predicted: {row['class']}"
-        )
+        predicted_label = str(row.get("class") or "").strip()
+        color = bounding_box_color(predicted_label, manual_label)
         self.image_axes.add_patch(
             Rectangle(
                 (left, top),
@@ -492,6 +491,14 @@ class LabelReview:
                 facecolor="none",
             )
         )
+        if manual_label and predicted_label:
+            label = f"True: {manual_label} | Predicted: {predicted_label}"
+        elif manual_label:
+            label = f"True: {manual_label}"
+        elif predicted_label:
+            label = f"Predicted: {predicted_label}"
+        else:
+            return
         self.image_axes.annotate(
             label,
             (left, top),

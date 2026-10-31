@@ -1027,7 +1027,7 @@ def process_images_with_pytorch_wildlife(
             and classification_model.weights_path is not None
             else repo_dir / "models" / (classifier_run or "megadetector")
         )
-        csv_path = model_dir / "predictions.csv"
+        csv_path = label_data.predictions_path(repo_dir, model_dir.name)
     else:
         csv_path = Path(output_csv_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)

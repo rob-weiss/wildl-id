@@ -51,10 +51,10 @@ The app uses the default dataset:
 
 - Human annotations: `labels/human_labels.csv` (location, filename, box, manual label)
 - Image metadata: `labels/image_metadata.csv`
-- Automatic predictions: `models/<latest-completed-run>/predictions.csv`
+- Automatic predictions: `labels/labels_<latest-completed-run>/predictions.csv`
 - Annotated images: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images/`
 - Original images: `images/`
-- Validation predictions: `models/`
+- Validation predictions: `labels/labels_<run>/validation_predictions/`
 
 The container can write human annotations and their `.before-review.bak` backup.
 Readers join human annotations with metadata and the latest completed model's

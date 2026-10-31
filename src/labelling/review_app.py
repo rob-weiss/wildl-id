@@ -52,11 +52,17 @@ def display_label(label):
 
 
 def format_annotation(true_label, predicted_label):
+    true_label = str(true_label or "").strip()
+    predicted_label = str(predicted_label or "").strip()
     if true_label:
+        if not predicted_label:
+            return f"🏷️ True: {display_label(true_label)}"
         return (
             f"🏷️ True: {display_label(true_label)} | "
             f"Predicted: {display_label(predicted_label)}"
         )
+    if not predicted_label:
+        return ""
     return f"🏷️ {display_label(predicted_label)}"
 
 
@@ -126,6 +132,8 @@ def box_overlay_svg(
     if not show_label:
         return outline
     label = format_annotation(true_label, predicted_label)
+    if not label:
+        return outline
     font_size = 16
     padding_x = round(font_size * 0.45)
     line_height = round(font_size * 1.5)
@@ -421,16 +429,19 @@ class ReviewApp:
             None if self.review.mode == "Unseen" else self.prediction_for_row(row)
         )
         if prediction:
-            self.prediction.set_text(
-                f"🏷️ True: {display_label(prediction['true_label'])} | "
-                f"Predicted: {display_label(prediction['predicted_label'])}"
+            label = format_annotation(
+                prediction["true_label"], prediction["predicted_label"]
             )
         else:
-            self.prediction.set_text(
-                f"🏷️ Predicted: {display_label(row['class'])}"
-                if str(row.get("manual_label") or "").strip()
-                else f"🏷️ {display_label(row['class'])}"
-            )
+            manual_label = str(row.get("manual_label") or "").strip()
+            predicted_label = str(row.get("class") or "").strip()
+            if manual_label and not predicted_label:
+                label = format_annotation(manual_label, "")
+            elif manual_label:
+                label = f"🏷️ Predicted: {display_label(predicted_label)}"
+            else:
+                label = format_annotation("", predicted_label)
+        self.prediction.set_text(label)
         self.empty_message.set_visibility(self.current_image_path is None)
         if self.current_image_path is None:
             self.empty_message.set_text("Image file not found")

@@ -125,10 +125,20 @@ def latest_weights(models_dir):
     return max(candidates, key=lambda path: path.parent.name, default=None)
 
 
-def predictions_path(repo_dir=REPO_DIR):
-    weights = latest_weights(Path(repo_dir) / "models")
-    run = weights.parent if weights else Path(repo_dir) / "models/deepfaune_pretrained"
-    return run / "predictions.csv"
+def model_labels_dir(repo_dir, run_name):
+    return Path(repo_dir) / "labels" / f"labels_{run_name}"
+
+
+def validation_predictions_dir(repo_dir, run_name):
+    return model_labels_dir(repo_dir, run_name) / "validation_predictions"
+
+
+def predictions_path(repo_dir=REPO_DIR, run_name=None):
+    repo_dir = Path(repo_dir)
+    if run_name is None:
+        weights = latest_weights(repo_dir / "models")
+        run_name = weights.parent.name if weights else "deepfaune_pretrained"
+    return model_labels_dir(repo_dir, run_name) / "predictions.csv"
 
 
 def read_records(path):
@@ -215,9 +225,10 @@ def migrate_human_labels(repo_dir=REPO_DIR):
     save_image_metadata(repo_dir, [*displaced, *rows])
     prediction_path = predictions_path(repo_dir)
     verified = {image_key(row): row for row in read_records(prediction_path)}
+    run_name = prediction_path.parent.name.removeprefix("labels_")
     for row in [*displaced, *rows]:
         if (
-            row.get("classifier_model") == prediction_path.parent.name
+            row.get("classifier_model") == run_name
             and row.get("class", "").strip()
         ):
             verified.setdefault(image_key(row), row)

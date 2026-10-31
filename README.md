@@ -309,9 +309,10 @@ The dataset is separated by ownership:
 - `labels/image_metadata.csv`: timestamps, lighting, and temperature. Training
   uses the retained timestamps to keep image bursts in the same split; the human
   CSV does not need timestamp columns.
-- `models/<classifier-run>/predictions.csv`: automatic classes, detected boxes,
-  confidence, model identity, and metadata for that model. This is separate from
-  its validation-only `validation_predictions/predictions.csv`.
+- `labels/labels_<classifier-run>/predictions.csv`: automatic classes, detected
+  boxes, confidence, model identity, and metadata for that model.
+- `labels/labels_<classifier-run>/validation_predictions/predictions.csv`:
+  validation-only true and predicted classes for that model.
 
 Readers join by location and filename, with human labels and reviewed boxes
 taking precedence. The app, training, reports, and email workflow automatically
