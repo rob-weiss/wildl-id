@@ -1,6 +1,7 @@
 import sys
 import tempfile
 import unittest
+from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
@@ -11,8 +12,34 @@ import torch
 from PIL import Image
 from src.labelling import label_images
 
+wildl_id = import_module("wildl_id")
+
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_saved_generic_predictions_are_not_repeated(self):
+        names = ["unknown.jpg", "animal.jpg", "pending.jpg"]
+        existing = pd.DataFrame(
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": name,
+                    "class": automatic,
+                    "manual_label": "",
+                    "classifier_model": model,
+                }
+                for name, automatic, model in (
+                    ("unknown.jpg", "unknown", "deepfaune_finetuned_latest"),
+                    ("animal.jpg", "animal", "deepfaune_finetuned_latest"),
+                    ("pending.jpg", "unknown", ""),
+                )
+            ]
+        )
+        images = [{"location_id": "camera", "name": name} for name in names]
+
+        selected = label_images.images_requiring_processing(images, existing)
+
+        self.assertEqual([image["name"] for image in selected], ["pending.jpg"])
+
     def test_resume_selection_skips_completed_and_manual_labels(self):
         names = [
             "reviewed.jpg",
@@ -142,6 +169,17 @@ class AutomaticLabelTests(unittest.TestCase):
             old.touch()
             self.assertEqual(label_images.latest_classifier_weights(models), newest)
 
+    def test_classifier_loader_uses_latest_available_weights(self):
+        newest = Path("models/deepfaune_finetuned_20261029-221530_new/weights.pt")
+        with (
+            patch.object(label_images, "latest_classifier_weights", return_value=newest),
+            patch.object(label_images, "SpeciesClassifier") as classifier,
+        ):
+            loaded = label_images.load_species_classifier("cpu")
+
+        classifier.assert_called_once_with(newest, "cpu")
+        self.assertIs(loaded, classifier.return_value)
+
     def test_force_reruns_every_image_and_preserves_manual_labels(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -229,9 +267,9 @@ class AutomaticLabelTests(unittest.TestCase):
             output_dir = labels_dir.with_name(
                 labels_dir.name + "_deepfaune_finetuned_20261029-221530_new"
             )
-            output_csv = output_dir / csv_path.name
+            output_csv = csv_path
             self.assertTrue(output_csv.is_file())
-            self.assertEqual(csv_path.read_bytes(), original)
+            self.assertFalse((output_dir / csv_path.name).exists())
             updated = pd.read_csv(output_csv, keep_default_na=False).set_index(
                 "image_file"
             )
@@ -241,19 +279,26 @@ class AutomaticLabelTests(unittest.TestCase):
             self.assertEqual(reviewed["manual_label"].tolist(), ["cat ", "fox"])
             self.assertEqual(updated.loc["new.jpg", "manual_label"], "")
             self.assertEqual(set(updated.loc[names, "class"]), {"song_bird"})
+            self.assertEqual(
+                set(updated.loc[names, "classifier_model"]),
+                {"deepfaune_finetuned_20261029-221530_new"},
+            )
             self.assertEqual(updated.loc["missing.jpg", "manual_label"], "dog")
             self.assertEqual(updated.loc["missing.jpg", "class"], "fox")
             self.assertTrue((reviewed["box"] != "[0.1, 0.1, 0.1, 0.1]").all())
-            backups = list(output_dir.glob("*.before-relabel-*.bak"))
+            backups = list(csv_path.parent.glob("*.before-relabel-*.bak"))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), original)
 
-    def test_default_run_updates_active_csv_and_skips_completed_images(self):
+    def test_download_then_app_and_cli_reuse_saved_predictions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            labels_dir = root / "labels/active"
+            labels_dir = root / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
             labels_dir.mkdir(parents=True)
-            csv_path = labels_dir / "labels.csv"
+            csv_path = (
+                labels_dir
+                / "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
+            )
             pd.DataFrame(
                 [
                     {
@@ -282,6 +327,15 @@ class AutomaticLabelTests(unittest.TestCase):
                 root / "models/deepfaune_finetuned_test/weights.pt"
             )
             with (
+                patch.object(sys, "argv", ["wildl_id.py", "--download"]),
+                patch.object(wildl_id, "download_images", return_value=True),
+                patch.object(wildl_id, "DEFAULT_CSV", csv_path),
+                patch.object(wildl_id, "image_paths", return_value=paths),
+                patch.object(
+                    wildl_id,
+                    "process_images_with_pytorch_wildlife",
+                    label_images.process_images_with_pytorch_wildlife,
+                ),
                 patch.object(label_images, "repo_dir", root),
                 patch.object(label_images, "image_paths", return_value=paths),
                 patch.object(label_images, "enable_ocr", False),
@@ -301,28 +355,45 @@ class AutomaticLabelTests(unittest.TestCase):
                     {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
                 ),
             ):
-                label_images.process_images_with_pytorch_wildlife(
-                    output_csv_path=csv_path,
-                )
+                self.assertEqual(wildl_id.main(), 0)
                 self.assertEqual(detector.single_image_detection.call_count, 1)
                 saved = csv_path.read_bytes()
                 detector.reset_mock()
-                label_images.process_images_with_pytorch_wildlife(
-                    output_csv_path=csv_path,
-                )
+                self.assertEqual(wildl_id.main(), 0)
+                label_images.process_images_with_pytorch_wildlife()
                 detector.single_image_detection.assert_not_called()
                 self.assertEqual(csv_path.read_bytes(), saved)
                 label_images.process_images_with_pytorch_wildlife(
                     output_csv_path=csv_path, unlabelled_only=True
                 )
+                detector.single_image_detection.assert_not_called()
+                for name in ("additional_a.jpg", "additional_b.jpg"):
+                    path = root / name
+                    Image.new("RGB", (40, 40)).save(path)
+                    paths[("camera", name)] = path
+                detector.single_image_detection.side_effect = [{}, KeyboardInterrupt]
+                with self.assertRaises(KeyboardInterrupt):
+                    label_images.process_images_with_pytorch_wildlife()
+                interrupted = pd.read_csv(csv_path, keep_default_na=False).set_index(
+                    "image_file"
+                )
+                self.assertEqual(interrupted.loc["additional_a.jpg", "class"], "none")
+                self.assertNotIn("additional_b.jpg", interrupted.index)
+                detector.single_image_detection.side_effect = None
+                detector.reset_mock()
+                self.assertEqual(wildl_id.main(), 0)
 
-            self.assertEqual(detector.single_image_detection.call_count, 2)
+            self.assertEqual(detector.single_image_detection.call_count, 1)
             updated = pd.read_csv(csv_path, keep_default_na=False).set_index(
                 "image_file"
             )
             self.assertEqual(updated.loc["reviewed.jpg", "manual_label"], "fox")
             self.assertEqual(updated.loc["unreviewed.jpg", "manual_label"], "")
-            self.assertEqual(updated.loc["unreviewed.jpg", "class"], "none")
+            self.assertEqual(updated.loc["unreviewed.jpg", "class"], "fox")
+            self.assertEqual(
+                updated.loc["new.jpg", "classifier_model"],
+                "deepfaune_finetuned_test",
+            )
             self.assertIn("new.jpg", updated.index)
 
     def test_targeted_run_preserves_manual_edits_made_during_inference(self):

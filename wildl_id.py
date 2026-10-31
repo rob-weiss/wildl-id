@@ -136,7 +136,10 @@ def label_new_images(camera=None):
                 for row in csv.DictReader(source):
                     manual = (row.get("manual_label") or "").strip()
                     automatic = (row.get("class") or "").strip().casefold()
-                    if manual or automatic not in {"", "unknown", "animal"}:
+                    inferred = (row.get("classifier_model") or "").strip()
+                    if manual or (
+                        automatic and (inferred or automatic not in {"unknown", "animal"})
+                    ):
                         completed.add((nfc(row["location_id"]), row["image_file"]))
         pending = {
             key

@@ -326,6 +326,45 @@ class WildlifeCommandLineTests(unittest.TestCase):
 
 
 class IncrementalMailLabellingTests(unittest.TestCase):
+    def test_saved_unknown_prediction_is_not_labelled_again(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            csv_path = Path(temporary) / "labels.csv"
+            with csv_path.open("w", newline="") as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=[
+                        "location_id",
+                        "image_file",
+                        "class",
+                        "manual_label",
+                        "classifier_model",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "location_id": "camera1",
+                        "image_file": "unknown.jpg",
+                        "class": "unknown",
+                        "classifier_model": "deepfaune_finetuned_latest",
+                    }
+                )
+            with (
+                patch.object(wildl_id, "DEFAULT_CSV", csv_path),
+                patch.object(
+                    wildl_id,
+                    "image_paths",
+                    return_value={
+                        ("camera1", "unknown.jpg"): Path(temporary) / "unknown.jpg"
+                    },
+                ),
+                patch.object(
+                    wildl_id, "process_images_with_pytorch_wildlife"
+                ) as process,
+            ):
+                self.assertTrue(wildl_id.label_new_images())
+                process.assert_not_called()
+
     def test_only_new_unclassified_photos_are_written_to_active_csv(self):
         with tempfile.TemporaryDirectory() as temporary:
             csv_path = Path(temporary) / "labels.csv"

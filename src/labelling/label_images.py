@@ -902,12 +902,13 @@ def images_requiring_processing(image_info_list, existing_df, reprocess_missing=
         for row in existing_df.to_dict("records"):
             manual = str(row.get("manual_label") or "").strip()
             automatic = str(row.get("class") or "").strip().casefold()
+            inferred = str(row.get("classifier_model") or "").strip()
             metadata_complete = all(
                 pd.notna(row.get(field)) and str(row.get(field, "")).strip()
                 for field in ("timestamp", "temperature_celsius")
             )
             if manual or (
-                automatic not in {"", "unknown", "animal"}
+                automatic and (inferred or automatic not in {"unknown", "animal"})
                 and (not reprocess_missing or metadata_complete)
             ):
                 completed.add((nfc(row["location_id"]), row["image_file"]))
@@ -981,11 +982,10 @@ def process_images_with_pytorch_wildlife(
         if use_classification
         else ""
     )
-    run_suffix = f"_{classifier_run}" if classifier_run else ""
     labels_dir = (
         repo_dir
         / "labels"
-        / f"labels_{model_version}_{model_name}{classifier_suffix}{run_suffix}"
+        / f"labels_{model_version}_{model_name}{classifier_suffix}"
     )
     labels_dir.mkdir(parents=True, exist_ok=True)
     images_output_dir = labels_dir / "images"
@@ -1024,12 +1024,6 @@ def process_images_with_pytorch_wildlife(
         )
     )
     csv_path.parent.mkdir(parents=True, exist_ok=True)
-    if not csv_path.exists() and output_csv_path is None:
-        source_csvs = list((repo_dir / "labels").glob(f"*/{csv_path.name}"))
-        if source_csvs:
-            source_csv = max(source_csvs, key=lambda path: path.stat().st_mtime_ns)
-            shutil.copy2(source_csv, csv_path)
-            print(f"Copied existing labels (including manual labels): {source_csv}")
     print(f"Writing labels to: {csv_path}")
 
     # Define explicit dtypes to avoid FutureWarning about NA entries
@@ -1045,6 +1039,7 @@ def process_images_with_pytorch_wildlife(
         "classification_confidence": float,
         "temperature_celsius": float,
         "manual_label": str,
+        "classifier_model": str,
     }
 
     existing_df = None
@@ -1068,8 +1063,6 @@ def process_images_with_pytorch_wildlife(
     )
     if force:
         images_to_process = image_info_list
-    elif unlabelled_only or image_keys is not None:
-        images_to_process = images_without_manual_labels(image_info_list, existing_df)
     else:
         images_to_process = images_requiring_processing(
             image_info_list, existing_df, reprocess_missing=reprocess_missing
@@ -1083,6 +1076,54 @@ def process_images_with_pytorch_wildlife(
 
     results = []
     start_time = time.time()
+
+    def save_results():
+        nonlocal existing_df
+        if not results:
+            return
+        # Create DataFrame from accumulated results with explicit dtypes
+        new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
+        if csv_path.exists():
+            existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
+            if "manual_label" not in existing_df:
+                existing_df["manual_label"] = ""
+        if existing_df is not None and len(existing_df) > 0:
+            keys = ["location_id", "image_file"]
+            existing_df = existing_df.set_index(keys)
+            existing_df.index = pd.MultiIndex.from_tuples(
+                [(nfc(location), name) for location, name in existing_df.index],
+                names=keys,
+            )
+            new_rows_df = new_rows_df.set_index(keys)
+            retained = existing_df.loc[~existing_df.index.isin(new_rows_df.index)]
+            refreshed = existing_df.loc[
+                existing_df.index.isin(new_rows_df.index)
+            ].copy()
+            saved_boxes = refreshed.get(
+                "box", pd.Series("", index=refreshed.index)
+            ).copy()
+            for column in new_rows_df.columns:
+                if column != "manual_label":
+                    values = new_rows_df[column].reindex(refreshed.index).to_numpy()
+                    if column == "box":
+                        values = [
+                            saved
+                            if saved != original_boxes.get(key, "")
+                            else automatic
+                            for key, saved, automatic in zip(
+                                refreshed.index, saved_boxes, values, strict=True
+                            )
+                        ]
+                    refreshed[column] = values
+            added = new_rows_df.loc[~new_rows_df.index.isin(existing_df.index)]
+            existing_df = pd.concat([retained, refreshed, added]).reset_index()
+        else:
+            existing_df = new_rows_df
+        temporary_csv = csv_path.with_suffix(".csv.tmp")
+        existing_df.to_csv(temporary_csv, index=False)
+        temporary_csv.replace(csv_path)
+        # Clear results to free memory
+        results.clear()
 
     # Batch size for incremental saves (to avoid memory issues)
     BATCH_SIZE = 50  # Reduced from 100 to save memory
@@ -1230,7 +1271,10 @@ def process_images_with_pytorch_wildlife(
                     )
                 else:
                     metadata = {"timestamp": None, "temperature_celsius": None}
-        except Exception as e:
+        except (Exception, KeyboardInterrupt) as e:
+            save_results()
+            if isinstance(e, KeyboardInterrupt):
+                raise
             raise RuntimeError(
                 f"Labelling failed; original image retained: {image_path}"
             ) from e
@@ -1256,57 +1300,14 @@ def process_images_with_pytorch_wildlife(
             if metadata["temperature_celsius"] is not None
             else np.nan,
             "manual_label": "",
+            "classifier_model": classifier_run,
         }
         results.append(result_dict)
 
         # Save to CSV in batches to avoid memory issues
         # Only save every BATCH_SIZE images or on the last image
         if (idx + 1) % BATCH_SIZE == 0 or (idx + 1) == len(images_to_process):
-            # Create DataFrame from accumulated results with explicit dtypes
-            new_rows_df = pd.DataFrame(results).astype(COLUMN_DTYPES)
-
-            if csv_path.exists():
-                existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
-                if "manual_label" not in existing_df:
-                    existing_df["manual_label"] = ""
-            if existing_df is not None and len(existing_df) > 0:
-                keys = ["location_id", "image_file"]
-                existing_df = existing_df.set_index(keys)
-                existing_df.index = pd.MultiIndex.from_tuples(
-                    [(nfc(location), name) for location, name in existing_df.index],
-                    names=keys,
-                )
-                new_rows_df = new_rows_df.set_index(keys)
-                retained = existing_df.loc[~existing_df.index.isin(new_rows_df.index)]
-                refreshed = existing_df.loc[
-                    existing_df.index.isin(new_rows_df.index)
-                ].copy()
-                saved_boxes = refreshed.get(
-                    "box", pd.Series("", index=refreshed.index)
-                ).copy()
-                for column in new_rows_df.columns:
-                    if column != "manual_label":
-                        values = new_rows_df[column].reindex(refreshed.index).to_numpy()
-                        if column == "box":
-                            values = [
-                                saved
-                                if saved != original_boxes.get(key, "")
-                                else automatic
-                                for key, saved, automatic in zip(
-                                    refreshed.index, saved_boxes, values, strict=True
-                                )
-                            ]
-                        refreshed[column] = values
-                added = new_rows_df.loc[~new_rows_df.index.isin(existing_df.index)]
-                existing_df = pd.concat([retained, refreshed, added]).reset_index()
-            else:
-                existing_df = new_rows_df
-            temporary_csv = csv_path.with_suffix(".csv.tmp")
-            existing_df.to_csv(temporary_csv, index=False)
-            temporary_csv.replace(csv_path)
-
-            # Clear results to free memory
-            results = []
+            save_results()
 
             # Force garbage collection after each batch
             gc.collect()
