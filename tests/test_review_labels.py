@@ -104,6 +104,52 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertEqual([row["image_file"] for row in logged], ["empty.jpg"])
         self.assertEqual(self.default_csv.read_bytes(), b"do not change")
 
+    def test_remove_empty_supports_human_only_csv_and_hides_deleted_predictions(self):
+        data = import_module("src.labelling.label_data")
+        human = self.root / "labels/human_labels.csv"
+        data.write_records(
+            human,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "empty.jpg",
+                    "box": "",
+                    "manual_label": "none",
+                }
+            ],
+            data.HUMAN_COLUMNS,
+        )
+        prediction = self.root / "models/deepfaune_pretrained/predictions.csv"
+        data.write_records(
+            prediction,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "empty.jpg",
+                    "class": "none",
+                    "box": "",
+                }
+            ],
+            data.PREDICTION_COLUMNS,
+        )
+        original_predictions = prediction.read_bytes()
+
+        removed = empty_images_module.remove_empty_images(
+            csv_path=human, annotated_dir=self.annotated_dir
+        )
+
+        self.assertEqual(removed, 1)
+        self.assertFalse((self.original_dir / "empty.jpg").exists())
+        self.assertEqual(data.read_records(human), [])
+        self.assertEqual(data.load_rows(human), [])
+        self.assertEqual(prediction.read_bytes(), original_predictions)
+        data.write_records(
+            self.root / "labels/image_metadata.csv",
+            [{"location_id": "camera1", "image_file": "empty.jpg"}],
+            data.METADATA_COLUMNS,
+        )
+        self.assertEqual(data.load_rows(human), [])
+
     def test_remove_empty_dry_run_does_not_change_files(self):
         before = self.csv_path.read_bytes()
         count = empty_images_module.remove_empty_images(
@@ -906,6 +952,50 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(axes.patches[0].get_edgecolor(), to_rgba("#2e7d32"))
         self.assertEqual(axes.texts[0].get_text(), "True: fox | Predicted: fox")
+
+    def test_bounding_box_color_reflects_review_status(self):
+        for manual_label, expected in (
+            ("", "#f9a825"),
+            ("fox", "#2e7d32"),
+            ("hare", "#c62828"),
+        ):
+            with self.subTest(manual_label=manual_label):
+                self.assertEqual(
+                    review_module.bounding_box_color("fox", manual_label), expected
+                )
+
+    def test_unchecked_boxes_are_yellow_in_static_and_browser_viewers(self):
+        review = LabelReview(self.csv_path)
+        row = {**review.rows[0], "box": "[0.5, 0.5, 0.4, 0.4]", "manual_label": ""}
+        figure, axes = plt.subplots()
+        self.addCleanup(plt.close, figure)
+        review.image_axes = axes
+
+        review.draw_box_label(row, (100, 100))
+
+        self.assertEqual(axes.patches[0].get_edgecolor(), to_rgba("#f9a825"))
+        for manual, color in (
+            ("", "#f9a825"),
+            (row["class"], "#2e7d32"),
+            ("other species", "#c62828"),
+        ):
+            with self.subTest(manual=manual):
+                overlay = review_app_module.box_overlay_svg(
+                    {**row, "manual_label": manual}, (100, 100)
+                )
+                self.assertIn(f'stroke="{color}"', overlay)
+        overlay = review_app_module.box_overlay_svg(
+            {**row, "manual_label": "corrected species"},
+            (100, 100),
+            prediction={
+                "true_label": row["class"],
+                "predicted_label": row["class"],
+                "status": "correct",
+            },
+            display_size=(960, 540),
+        )
+        self.assertIn('stroke="#c62828"', overlay)
+        self.assertIn("corrected species", overlay)
 
     def test_box_and_annotation_are_red_and_keep_true_label_when_incorrect(self):
         review = LabelReview(self.csv_path)

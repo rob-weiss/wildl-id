@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 import numpy as np
 import pandas as pd
 import torch
+from matplotlib.colors import to_rgba
 from PIL import Image
 from src.labelling import label_images
 
@@ -16,6 +17,26 @@ wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_prediction_bounding_boxes_are_yellow(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "fox.jpg"
+            Image.new("RGB", (40, 30), "black").save(image_path)
+            figure, axes = label_images.plt.subplots()
+            self.addCleanup(label_images.plt.close, figure)
+
+            with (
+                patch.object(label_images.plt, "subplots", return_value=(figure, axes)),
+                patch.object(label_images.plt, "show"),
+                patch.object(label_images.plt, "close"),
+            ):
+                label_images.show_image_with_detection(
+                    image_path, "fox.jpg", "fox", [0.5, 0.5, 0.4, 0.4]
+                )
+
+            self.assertEqual(
+                axes.patches[0].get_edgecolor(), to_rgba("#f9a825")
+            )
+
     def test_saved_generic_predictions_are_not_repeated(self):
         names = ["unknown.jpg", "animal.jpg", "pending.jpg"]
         existing = pd.DataFrame(

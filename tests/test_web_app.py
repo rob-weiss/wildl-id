@@ -1222,9 +1222,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     iter(user.find(marker="gallery-viewer-image").elements)
                 )
                 user.find(marker="gallery-viewer-image").trigger(
-                    "loaded", {"width": 1600, "height": 900}
+                    "loaded", {"width": 1200, "height": 1600}
                 )
+                viewer_size = (1200, 1600)
+                self.assertEqual(tuple(viewer_image.props["size"]), viewer_size)
                 viewer_style = dict(viewer_image.style)
+                self.assertEqual(viewer_style["aspect-ratio"], "1200/1600")
                 viewer_toggle = next(
                     iter(user.find(marker="gallery-image-boxes").elements)
                 )
@@ -1236,31 +1239,115 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(retained_image.id, viewer_image.id)
                 self.assertEqual(dict(retained_image.style), viewer_style)
+                self.assertEqual(tuple(retained_image.props["size"]), viewer_size)
                 self.assertEqual(retained_image.content, "")
                 await user.should_see("1 / 1")
+                user.find(marker="gallery-image-boxes").click()
+                self.assertEqual(dict(viewer_image.style), viewer_style)
+                self.assertEqual(tuple(viewer_image.props["size"]), viewer_size)
+                self.assertTrue(viewer_image.content)
 
-    async def test_gallery_limits_page_navigation_for_large_datasets(self):
+    async def test_gallery_box_colors_match_review_status(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp", "class", "manual_label", "box"],
             [
                 {
                     "location_id": "camera1",
-                    "image_file": f"fox-{index}.jpg",
+                    "image_file": f"{status}.jpg",
                     "timestamp": "2025-01-02T00:00:00",
                     "class": "fox",
+                    "manual_label": manual_label,
+                    "box": "[0.5, 0.5, 0.4, 0.2]",
                 }
-                for index in range(gallery.PAGE_SIZE * 8)
+                for status, manual_label in (
+                    ("unchecked", ""),
+                    ("correct", "fox"),
+                    ("incorrect", "hare"),
+                )
             ],
+        )
+        with patch.dict(
+            os.environ,
+            {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+        ):
+            async with self.app_user("/gallery") as user:
+                user.find(marker="gallery-boxes").click()
+                images = list(user.find(kind=ui.interactive_image).elements)
+                self.assertEqual(len(images), 3)
+                user.find(kind=ui.interactive_image).trigger(
+                    "loaded", {"width": 100, "height": 100}
+                )
+
+                colors = {
+                    image.content.split('stroke="')[1].split('"', maxsplit=1)[0]
+                    for image in images
+                }
+                self.assertEqual(colors, {"#f9a825", "#2e7d32", "#c62828"})
+
+    async def test_gallery_limits_page_navigation_for_large_datasets(self):
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": f"fox-{index}.jpg",
+                "timestamp": "2025-01-02T00:00:00",
+                "class": "fox",
+            }
+            for index in range(gallery.PAGE_SIZE * 8)
+        ]
+        rows[-1]["timestamp"] = ""
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            rows,
         )
         with patch.dict(
             os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
         ):
             async with self.app_user("/gallery") as user:
+                await user.should_see("383 images")
+                await user.should_see("1 not available locally or in the cloud")
                 pagination = next(iter(user.find(kind=ui.pagination).elements))
                 self.assertEqual(pagination.max, 8)
                 self.assertEqual(int(pagination.props.get("max-pages", 0)), 7)
                 self.assertTrue(pagination.props.get("ellipses"))
                 self.assertTrue(pagination.props.get("boundary-links"))
+
+                def gallery_images():
+                    return [
+                        image
+                        for image in user.find(kind=ui.image).elements
+                        if image.source.startswith(
+                            "https://cdn.example.test/images/"
+                        )
+                    ]
+
+                pagination.set_value(2)
+                for page, first_image, last_image in (
+                    (1, "fox-0.jpg", "fox-47.jpg"),
+                    (4, "fox-144.jpg", "fox-191.jpg"),
+                    (8, "fox-336.jpg", "fox-382.jpg"),
+                ):
+                    pagination.set_value(page)
+                    images = gallery_images()
+                    self.assertEqual(
+                        len(images),
+                        min(gallery.PAGE_SIZE, 383 - (page - 1) * gallery.PAGE_SIZE),
+                    )
+                    self.assertTrue(
+                        any(image.source.endswith(first_image) for image in images)
+                    )
+                    self.assertTrue(
+                        any(image.source.endswith(last_image) for image in images)
+                    )
+
+                prompt = next(iter(user.find(kind=ui.input).elements))
+                prompt.set_value("only foxes")
+                user.find(kind=ui.button, content="Filter").click()
+                await user.should_see("383 images")
+                await user.should_see("1 not available locally or in the cloud")
+                self.assertEqual(pagination.value, 1)
+                self.assertTrue(
+                    any(image.source.endswith("fox-0.jpg") for image in gallery_images())
+                )
 
     async def test_home_and_viewer_toggle_bounding_boxes(self):
         self.write_original_image("fox.jpg", datetime.now() - timedelta(minutes=1))
@@ -1310,18 +1397,35 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_visualisations_page_generates_on_each_visit_without_button(self):
-        run_store = FakeVisualisationRunStore()
+        output_dir = self.root / "automatic-results"
+        output_dir.mkdir()
+        (output_dir / "summary_statistics.txt").write_text(
+            "first visit results", encoding="utf-8"
+        )
+        (output_dir / "01_species_distribution.svg").write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg'></svg>", encoding="utf-8"
+        )
+        run_store = FakeVisualisationRunStore(result=output_dir)
         self.patch_run_store(run_store)
 
         async with self.app_user("/visualisations") as user:
             await user.should_see("Filter-based plots")
             await user.should_see("Generate filtered plot")
             await user.should_not_see("Generate visualisations")
-            await user.should_see("Visualisations could not be generated.")
+            await user.should_see("Visualisations ready")
+            await user.should_see("01_species_distribution.svg")
 
         self.assertEqual(run_store.generate_calls, 1)
+        run_store.result = None
+        run_store.error = RuntimeError("fixture generation failure")
         async with self.app_user("/visualisations") as user:
-            await user.should_see("Visualisations could not be generated.")
+            await user.should_not_see("Generate visualisations")
+            await user.should_see(
+                "Visualisations failed; see container logs for details."
+            )
+            await user.should_see("01_species_distribution.svg")
+            user.find("Summary statistics").click()
+            await user.should_see("first visit results")
         self.assertEqual(run_store.generate_calls, 2)
 
     async def test_dynamic_plot_uses_filter_and_keeps_static_plot_action(self):

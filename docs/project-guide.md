@@ -109,8 +109,8 @@ Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
 Each choice is saved immediately in a new `manual_label` column in the same CSV.
 The original `class` column remains unchanged: an empty manual label means unchecked,
 a matching label means confirmed, and a different label means corrected. By default,
-the reviewer shows unchecked rows. Use the in-window mode dropdown to select **Latest
-model incorrect**, **Unseen + errors**, **Seen**, or **All**. The incorrect-prediction
+the reviewer shows unchecked rows. The browser mode dropdown offers **Unseen**
+and **Latest model incorrect**. The incorrect-prediction
 mode uses validation images from the newest timestamped fine-tuning run under `models/`.
 A `.csv.before-review.bak` backup is created before the first changed save.
 Organising, labelling, review, and confirmed-empty cleanup retain the five newest

@@ -68,9 +68,11 @@ from tqdm import tqdm
 try:
     from . import label_data
     from .organize_images import image_paths, nfc
+    from .review_labels import bounding_box_color
 except ImportError:
     import label_data
     from organize_images import image_paths, nfc
+    from review_labels import bounding_box_color
 
 # Configuration (must be defined before OCR framework checks)
 repo_dir = Path(__file__).resolve().parents[2]
@@ -817,7 +819,14 @@ def show_image_with_detection(
         y = (y_center - height / 2) * img_h
         w = width * img_w
         h = height * img_h
-        rect = Rectangle((x, y), w, h, linewidth=2, edgecolor="r", facecolor="none")
+        rect = Rectangle(
+            (x, y),
+            w,
+            h,
+            linewidth=2,
+            edgecolor=bounding_box_color(img_class),
+            facecolor="none",
+        )
         ax.add_patch(rect)
 
     if save_path:

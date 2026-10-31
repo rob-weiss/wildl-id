@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 try:
+    from . import label_data
     from .label_data import backup_csv
     from .organize_images import (
         ANNOTATED_DIR,
@@ -28,6 +29,7 @@ try:
         rewrite_csv,
     )
 except ImportError:
+    import label_data
     from label_data import backup_csv
     from organize_images import (
         ANNOTATED_DIR,
@@ -46,10 +48,9 @@ EMPTY_LABEL = "none"
 
 
 def is_confirmed_empty(row):
-    return (
-        row["class"].strip() == EMPTY_LABEL
-        and (row.get("manual_label") or "").strip() == EMPTY_LABEL
-    )
+    return (row.get("class") or "").strip() == EMPTY_LABEL and (
+        row.get("manual_label") or ""
+    ).strip() == EMPTY_LABEL
 
 
 def annotated_paths(removed, annotated_dir=None):
@@ -91,12 +92,18 @@ def remove_empty_images(
         print("CSV has no manual_label column, nothing to remove")
         return 0
 
-    kept, removed = [], set()
-    for row in rows:
+    removed = set()
+    review_rows = (
+        label_data.load_rows(csv_path) if csv_path.name == "human_labels.csv" else rows
+    )
+    for row in review_rows:
         if is_confirmed_empty(row):
             removed.add((nfc(row["location_id"]), row["image_file"]))
-        else:
-            kept.append(row)
+    kept = [
+        row
+        for row in rows
+        if (nfc(row["location_id"]), row["image_file"]) not in removed
+    ]
 
     paths = image_paths(IMAGES_DIR)
     files = [paths[key] for key in sorted(removed) if key in paths]
@@ -131,6 +138,20 @@ def remove_empty_images(
             relative = path.relative_to(REPO_DIR) if path else ""
             writer.writerow([location, name, relative])
     print(f"Deleted paths written to {log_path.relative_to(REPO_DIR)}")
+
+    if csv_path.name == "human_labels.csv":
+        deleted_path = csv_path.parent / "deleted_images.csv"
+        deleted = {
+            label_data.image_key(row) for row in label_data.read_records(deleted_path)
+        } | removed
+        label_data.write_records(
+            deleted_path,
+            [
+                {"location_id": location, "image_file": name}
+                for location, name in sorted(deleted)
+            ],
+            ("location_id", "image_file"),
+        )
 
     for path in files + annotated:
         path.unlink()

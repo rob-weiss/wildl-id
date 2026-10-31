@@ -832,6 +832,8 @@ class BoxToggle:
 def build_image_viewer(items, boxes, compact=False):
     visible_items = []
     current_index = None
+    viewer_image = None
+    image_size = (960, 540)
     marker = "recent-image" if compact else "gallery-image"
 
     def close_image_viewer():
@@ -844,7 +846,7 @@ def build_image_viewer(items, boxes, compact=False):
             show_image(current_index + offset)
 
     with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
-        viewer = ui.column().classes("w-full")
+        viewer = ui.column().classes("w-full gap-0")
         caption = ui.label()
         with ui.row().classes("w-full items-center justify-between gap-2"):
             previous_button = (
@@ -878,22 +880,50 @@ def build_image_viewer(items, boxes, compact=False):
                 'aria-label="Close image"' if compact else 'aria-label="Close"'
             ).mark(f"{marker}-close").tooltip("Close image" if compact else "Close")
 
+    def update_overlay():
+        if viewer_image is None or current_index is None:
+            return
+        row, _ = visible_items[current_index]
+        viewer_image.set_content(
+            box_overlay_svg(
+                row,
+                image_size,
+                display_size=(960, 540),
+                show_label=annotation_labels(row) != "Unlabelled",
+            )
+            if boxes.visible
+            else ""
+        )
+
+    def on_image_loaded(event):
+        nonlocal image_size
+        width, height = event.args["width"], event.args["height"]
+        image_size = (width, height)
+        viewer_image.props["size"] = image_size
+        viewer_image.update()
+        viewer_image.style(
+            f"width: min(85vw, {60 * width / height:g}vh); aspect-ratio: {width}/{height}"
+        )
+        update_overlay()
+
     def show_image(index):
-        nonlocal current_index
+        nonlocal current_index, viewer_image
         if index < 0 or index >= len(visible_items):
             return
         current_index = index
         row, source = visible_items[index]
-        viewer.clear()
-        with viewer:
-            if boxes.visible:
-                boxed_image(
-                    row, source, "max-w-full", (960, 540), fit_viewport=True
-                ).mark("recent-viewer-image" if compact else "gallery-viewer-image")
-            else:
-                ui.image(source).props("fit=contain").classes(
-                    "w-[85vw] h-[75vh] max-w-full"
+        if viewer_image is None:
+            with viewer:
+                viewer_image = (
+                    ui.interactive_image(source, size=image_size)
+                    .classes("max-w-full")
+                    .style("width: min(85vw, 106.667vh); aspect-ratio: 16/9")
+                    .mark("recent-viewer-image" if compact else "gallery-viewer-image")
                 )
+                viewer_image.on("loaded", on_image_loaded)
+        elif viewer_image.source != source:
+            viewer_image.set_source(source)
+        update_overlay()
         taken = row_datetime(row)
         when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
         labels = annotation_labels(row) if compact else display_label(row_label(row))
@@ -915,7 +945,7 @@ def build_image_viewer(items, boxes, compact=False):
 
     def redraw():
         if current_index is not None:
-            show_image(current_index)
+            update_overlay()
 
     def on_key(event):
         if current_index is None or not event.action.keydown:
@@ -1216,7 +1246,7 @@ def build_gallery_page(
     summary = ui.label().classes("text-sm text-gray-600")
     pagination = ui.pagination(
         1, 1, direction_links=True, on_change=lambda: show_page()
-    )
+    ).props("max-pages=7 boundary-links ellipses")
     grid = ui.grid(columns="repeat(auto-fill, minmax(220px, 1fr))").classes(
         "w-full gap-3"
     )

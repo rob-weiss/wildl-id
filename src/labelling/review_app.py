@@ -17,6 +17,7 @@ from .review_labels import (
     MODE_OPTIONS,
     SHORTCUTS,
     LabelReview,
+    bounding_box_color,
     box_from_drag,
 )
 
@@ -111,14 +112,12 @@ def box_overlay_svg(
     box_height = height * image_height
     manual_label = str(row.get("manual_label") or "").strip()
     if prediction:
-        true_label = prediction["true_label"]
+        true_label = manual_label or prediction["true_label"]
         predicted_label = prediction["predicted_label"]
-        is_correct = prediction["status"] == "correct"
     else:
         true_label = manual_label
         predicted_label = row["class"]
-        is_correct = bool(manual_label) and manual_label == row["class"]
-    color = "#2e7d32" if is_correct else "#c62828"
+    color = bounding_box_color(predicted_label, true_label)
     outline = (
         f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
         f'height="{box_height:.1f}" fill="none" stroke="{color}" '
@@ -153,7 +152,7 @@ def box_overlay_svg(
         f'width="{label_width:.1f}" height="{label_height}" rx="2" '
         f'fill="{color}" />'
         f'<text x="{padding_x}" y="{round(font_size * 1.12)}" '
-        f'fill="white" font-size="{font_size}" font-family="sans-serif" font-weight="bold">'
+        f'fill="{"#1f2937" if not true_label else "white"}" font-size="{font_size}" font-family="sans-serif" font-weight="bold">'
         f"{escaped_label}</text></g>"
     )
 
@@ -226,7 +225,7 @@ class ReviewApp:
                 self.run_label = ui.label(run_name).classes("text-sm text-gray-600")
                 self.mode_select = (
                     ui.select(
-                        list(MODE_OPTIONS),
+                        list(MODE_OPTIONS[:2]),
                         value=self.review.mode,
                         label="Review mode",
                         on_change=lambda event: self.change_mode(event.value),

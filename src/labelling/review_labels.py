@@ -52,6 +52,14 @@ SHORTCUTS = {
 }
 
 
+def bounding_box_color(predicted_label, manual_label=""):
+    manual = str(manual_label or "").strip().casefold().replace("_", " ")
+    predicted = str(predicted_label or "").strip().casefold().replace("_", " ")
+    if not manual:
+        return "#f9a825"
+    return "#2e7d32" if manual == predicted else "#c62828"
+
+
 def latest_incorrect_predictions(models_dir=None):
     models_dir = Path(models_dir or MODELS_DIR)
     run_dirs = sorted(
@@ -468,8 +476,7 @@ class LabelReview:
         left = max(0, (x_center - width / 2) * image_width)
         top = max(0, (y_center - height / 2) * image_height)
         manual_label = str(row.get("manual_label") or "").strip()
-        is_correct = bool(manual_label) and manual_label == row["class"]
-        color = "#2e7d32" if is_correct else "#c62828"
+        color = bounding_box_color(row["class"], manual_label)
         label = (
             f"True: {manual_label} | Predicted: {row['class']}"
             if manual_label
@@ -492,7 +499,7 @@ class LabelReview:
             textcoords="offset points",
             ha="left",
             va="top" if top < 30 else "bottom",
-            color="white",
+            color="white" if manual_label else "#1f2937",
             fontsize=12,
             fontweight="bold",
             bbox={"facecolor": color, "edgecolor": "none", "pad": 3},

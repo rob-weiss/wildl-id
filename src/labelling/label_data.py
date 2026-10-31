@@ -252,6 +252,9 @@ def load_rows(csv_path):
     predictions = {
         image_key(row): row for row in read_records(predictions_path(repo_dir))
     }
+    deleted = {
+        image_key(row) for row in read_records(repo_dir / "labels/deleted_images.csv")
+    }
     rows = []
     seen = set()
     for human in humans:
@@ -274,6 +277,6 @@ def load_rows(csv_path):
         rows.append(row)
         seen.add(key)
     for key, prediction in predictions.items():
-        if key not in seen:
+        if key not in seen and key not in deleted:
             rows.append({**metadata.get(key, {}), **prediction, "manual_label": ""})
     return rows

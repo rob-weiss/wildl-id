@@ -10,8 +10,9 @@ services:
       WILDL_ID_IMAGE_BASE_URL: ${WILDL_ID_IMAGE_BASE_URL:-}
     volumes:
       - ./labels:/app/labels:rw
-      - ./labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:/app/labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:ro
-      - ./images:/app/images:ro
+      - ./labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:/app/labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images:rw
+      - ./images:/app/images:rw
+      - ./logs:/app/logs:rw
       - ./models:/app/models:ro
       - ./config:/app/config:ro
     restart: unless-stopped
