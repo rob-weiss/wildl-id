@@ -1143,6 +1143,57 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 press("ArrowLeft")
                 self.assertFalse(dialog.value)
 
+    async def test_gallery_and_viewer_toggle_bounding_boxes(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class", "box"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-02T00:00:00",
+                    "class": "fox",
+                    "box": "[0.5, 0.5, 0.4, 0.2]",
+                }
+            ],
+        )
+        base_url = "https://cdn.example.test/images"
+        with patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}):
+            async with self.app_user("/gallery") as user:
+                await user.should_see("1 images")
+                await user.should_not_see(kind=ui.interactive_image)
+                toggle = next(iter(user.find(marker="gallery-boxes").elements))
+                self.assertEqual(toggle.props.get("aria-pressed"), "false")
+                user.find(marker="gallery-boxes").click()
+                self.assertEqual(toggle.props.get("aria-pressed"), "true")
+                self.assertEqual(len(user.find(kind=ui.interactive_image).elements), 1)
+
+                user.find(kind=ui.interactive_image).click()
+                await user.should_see("1 / 1")
+                self.assertTrue(user.find(marker="gallery-viewer-image").elements)
+                viewer_toggle = next(
+                    iter(user.find(marker="gallery-image-boxes").elements)
+                )
+                self.assertEqual(viewer_toggle.props.get("aria-pressed"), "true")
+                user.find(marker="gallery-image-boxes").click()
+                self.assertEqual(toggle.props.get("aria-pressed"), "false")
+                await user.should_not_see(kind=ui.interactive_image)
+                await user.should_see("1 / 1")
+
+    async def test_home_and_viewer_toggle_bounding_boxes(self):
+        self.write_original_image("fox.jpg", datetime.now() - timedelta(minutes=1))
+        self.write_csv(["location_id", "image_file", "class"], [])
+        async with self.app_user("/") as user:
+            toggle = next(iter(user.find(marker="recent-boxes").elements))
+            self.assertEqual(toggle.props.get("aria-pressed"), "true")
+            self.assertEqual(len(user.find(kind=ui.interactive_image).elements), 1)
+            user.find(marker="recent-boxes").click()
+            await user.should_not_see(kind=ui.interactive_image)
+            user.find(kind=ui.image, content="fox.jpg").click()
+            await user.should_see("1 / 1")
+            user.find(marker="recent-image-boxes").click()
+            self.assertEqual(toggle.props.get("aria-pressed"), "true")
+            self.assertTrue(user.find(marker="recent-viewer-image").elements)
+
     async def test_gallery_page_reports_missing_csv(self):
         async with self.app_user("/gallery") as user:
             await user.should_see("Gallery data unavailable")

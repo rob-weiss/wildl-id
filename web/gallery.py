@@ -773,7 +773,7 @@ def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=Fals
     return image
 
 
-def gallery_card(row, source, on_click, show_boxes=False):
+def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
     taken = row_datetime(row)
     when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
     with ui.card().tight().classes("w-full"):
@@ -785,15 +785,51 @@ def gallery_card(row, source, on_click, show_boxes=False):
         image.on("click", on_click)
         with ui.card_section().classes("p-2"):
             ui.label(
-                annotation_labels(row) if show_boxes else display_label(row_label(row))
+                annotation_labels(row) if detailed else display_label(row_label(row))
             ).classes("font-medium")
             ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
 
 
-def build_image_viewer(items, show_boxes=False):
+class BoxToggle:
+    """Bounding-box visibility shared by a page's thumbnails and image viewer."""
+
+    def __init__(self, visible):
+        self.visible = visible
+        self.buttons = []
+        self.listeners = []
+
+    def button(self, marker, compact=False):
+        button = (
+            ui.button(
+                "" if compact else "Boxes", icon="crop_free", on_click=self.toggle
+            )
+            .props("round" if compact else "no-caps")
+            .props('aria-label="Toggle bounding boxes"')
+            .mark(marker)
+        )
+        button.tooltip("Toggle bounding boxes")
+        self.buttons.append(button)
+        self._style(button)
+        return button
+
+    def toggle(self):
+        self.visible = not self.visible
+        for button in self.buttons:
+            self._style(button)
+        for listener in self.listeners:
+            listener()
+
+    def _style(self, button):
+        button.props(
+            "unelevated" if self.visible else "outline",
+            remove="outline" if self.visible else "unelevated",
+        ).props(f'aria-pressed="{str(self.visible).lower()}"')
+
+
+def build_image_viewer(items, boxes, compact=False):
     visible_items = []
     current_index = None
-    marker = "recent-image" if show_boxes else "gallery-image"
+    marker = "recent-image" if compact else "gallery-image"
 
     def close_image_viewer():
         nonlocal current_index
@@ -810,33 +846,34 @@ def build_image_viewer(items, show_boxes=False):
         with ui.row().classes("w-full items-center justify-between gap-2"):
             previous_button = (
                 ui.button(
-                    "" if show_boxes else "Previous image",
+                    "" if compact else "Previous image",
                     icon="chevron_left",
                     on_click=lambda: move_image(-1),
                 )
-                .props("flat round" if show_boxes else "outline no-caps")
+                .props("flat round" if compact else "outline no-caps")
                 .props('aria-label="Previous image"')
                 .mark(f"{marker}-previous")
             )
             previous_button.tooltip("Previous image")
             next_button = (
                 ui.button(
-                    "" if show_boxes else "Next image",
+                    "" if compact else "Next image",
                     icon="chevron_right",
                     on_click=lambda: move_image(1),
                 )
-                .props("flat round" if show_boxes else "outline no-caps")
+                .props("flat round" if compact else "outline no-caps")
                 .props('aria-label="Next image"')
                 .mark(f"{marker}-next")
             )
             next_button.tooltip("Next image")
+            boxes.button(f"{marker}-boxes", compact=compact)
             ui.button(
-                "" if show_boxes else "Close",
+                "" if compact else "Close",
                 icon="close",
                 on_click=close_image_viewer,
-            ).props("flat round" if show_boxes else "flat no-caps").props(
-                'aria-label="Close image"' if show_boxes else 'aria-label="Close"'
-            ).mark(f"{marker}-close").tooltip("Close image" if show_boxes else "Close")
+            ).props("flat round" if compact else "flat no-caps").props(
+                'aria-label="Close image"' if compact else 'aria-label="Close"'
+            ).mark(f"{marker}-close").tooltip("Close image" if compact else "Close")
 
     def show_image(index):
         nonlocal current_index
@@ -846,17 +883,17 @@ def build_image_viewer(items, show_boxes=False):
         row, source = visible_items[index]
         viewer.clear()
         with viewer:
-            if show_boxes:
+            if boxes.visible:
                 boxed_image(
                     row, source, "max-w-full", (960, 540), fit_viewport=True
-                ).mark("recent-viewer-image")
+                ).mark("recent-viewer-image" if compact else "gallery-viewer-image")
             else:
                 ui.image(source).props("fit=contain").classes(
                     "w-[85vw] h-[75vh] max-w-full"
                 )
         taken = row_datetime(row)
         when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
-        labels = annotation_labels(row) if show_boxes else display_label(row_label(row))
+        labels = annotation_labels(row) if compact else display_label(row_label(row))
         caption.set_text(
             f"{index + 1} / {len(visible_items)} · {labels} · {row['location_id']} · {when}"
         )
@@ -872,6 +909,10 @@ def build_image_viewer(items, show_boxes=False):
         nonlocal current_index
         if not dialog.value:
             current_index = None
+
+    def redraw():
+        if current_index is not None:
+            show_image(current_index)
 
     def on_key(event):
         if current_index is None or not event.action.keydown:
@@ -891,6 +932,7 @@ def build_image_viewer(items, show_boxes=False):
             close_image_viewer()
 
     dialog.on("hide", on_dialog_hide)
+    boxes.listeners.append(redraw)
     ui.keyboard(on_key=on_key, repeating=False, ignore=["input", "select", "textarea"])
     return open_image, close_image_viewer
 
@@ -905,6 +947,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     }
     species_names["unlabelled"] = "Unlabelled"
     species_buttons = {}
+    boxes = BoxToggle(True)
     with ui.column().classes("w-full gap-3"):
         ui.label("Last 24 hours").classes("text-xl font-semibold")
         with ui.row().classes("w-full items-center gap-2"):
@@ -916,6 +959,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
                     .props("no-caps dense")
                     .mark(f"recent-species-{species.replace(' ', '-')}")
                 )
+            boxes.button("recent-boxes").props("dense")
         species_summary = (
             ui.label().classes("text-sm text-gray-700").mark("recent-species-summary")
         )
@@ -927,7 +971,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
             "direction-links max-pages=5"
         )
     items = []
-    show_image, close_image_viewer = build_image_viewer(items, show_boxes=True)
+    show_image, close_image_viewer = build_image_viewer(items, boxes, compact=True)
 
     def species_key(row):
         label = normalize_text(row_label(row))
@@ -1006,7 +1050,8 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
                     row,
                     source,
                     lambda index=index: show_image(index),
-                    show_boxes=True,
+                    show_boxes=boxes.visible,
+                    detailed=True,
                 )
 
     def refresh():
@@ -1041,6 +1086,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
         update_counts()
         apply_species()
 
+    boxes.listeners.append(show_page)
     refresh()
     ui.timer(60, refresh, immediate=False)
 
@@ -1083,7 +1129,8 @@ def build_gallery_page(
         }
     )
     items = []
-    show_image, close_image_viewer = build_image_viewer(items)
+    boxes = BoxToggle(False)
+    show_image, close_image_viewer = build_image_viewer(items, boxes)
 
     with ui.row().classes("w-full items-center gap-2"):
         prompt = (
@@ -1092,6 +1139,7 @@ def build_gallery_page(
             .classes("flex-grow")
         )
         ui.button("Filter", icon="search", on_click=lambda: apply()).props("no-caps")
+        boxes.button("gallery-boxes")
     with ui.expansion("Filter guide", icon="info").classes("w-full"):
         ui.markdown(FILTER_GUIDE).classes("w-full")
     with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
@@ -1177,7 +1225,14 @@ def build_gallery_page(
             for index, (row, source) in enumerate(
                 items[first : first + PAGE_SIZE], start=first
             ):
-                gallery_card(row, source, lambda index=index: show_image(index))
+                gallery_card(
+                    row,
+                    source,
+                    lambda index=index: show_image(index),
+                    show_boxes=boxes.visible,
+                )
+
+    boxes.listeners.append(show_page)
 
     def apply():
         close_image_viewer()
