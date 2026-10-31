@@ -174,8 +174,8 @@ Alerts stay off until the config file exists.
 The first run marks all existing images as seen and sends nothing. Later runs
 classify only unseen images captured within `max_age_minutes`, using the
 labelling models. They send at most one alert per site and species per
-cooldown. Images that also contain a person are sent without the photo. Failed
-sends are retried on the next run. State lives in
+cooldown. Failed sends are retried on the next run. Photos on public ntfy.sh
+expire after 3 hours; later, the app shows the alert text only. State lives in
 `~/Library/Application Support/wildl-id/push-alerts/state.json`.
 
 Run once by hand with:

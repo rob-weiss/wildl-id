@@ -29,7 +29,7 @@ class PushAlertTests(unittest.TestCase):
         self.factory_calls = 0
 
     def image(
-        self, name, captured, location="Wendeplatte", result=(["wild boar"], False)
+        self, name, captured, location="Wendeplatte", result=("wild boar",)
     ):
         path = self.images / "2026" / location / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -84,9 +84,9 @@ class PushAlertTests(unittest.TestCase):
             "image_0000003.jpg",
             NOW - timedelta(minutes=4),
             location="Douglasien",
-            result=(["raccoon", "raccoon", "fox"], False),
+            result=["raccoon", "raccoon", "fox"],
         )
-        self.image("image_0000004.jpg", NOW, result=(["roe deer"], False))
+        self.image("image_0000004.jpg", NOW, result=["roe deer"])
 
         result = self.run_alerts()
         again = self.run_alerts()
@@ -129,13 +129,13 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(result.sent, 0)
         self.assertEqual(self.analysed, [])
 
-    def test_image_with_person_is_sent_without_attachment(self):
+    def test_image_is_attached_by_default(self):
         self.run_alerts()
-        self.image("image_0000002.jpg", NOW, result=(["wild boar"], True))
+        path = self.image("image_0000002.jpg", NOW)
 
         self.run_alerts()
 
-        self.assertIsNone(self.published[0][2].image_path)
+        self.assertEqual(self.published[0][2].image_path, path)
 
     def test_failed_publish_is_retried_next_run(self):
         self.run_alerts()

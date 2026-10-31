@@ -154,7 +154,7 @@ def _capture_time(path):
 
 
 def _load_analyser(min_confidence):
-    """Return analyse(path) -> (species names, person present) using the labelling models."""
+    """Return analyse(path) -> species names using the labelling models."""
     import numpy as np
     import torch
 
@@ -180,15 +180,13 @@ def _load_analyser(min_confidence):
                 str(path), det_conf_thres=DETECTION_THRESHOLD
             )
         detections = (result or {}).get("detections")
-        species, person = [], False
+        species = []
         if detections is None or not hasattr(detections, "confidence"):
-            return species, person
+            return species
         with Image.open(path) as image:
             width, height = image.size
             for xyxy, class_id in zip(detections.xyxy, detections.class_id):
                 kind = label_images.MEGADETECTOR_CLASS_NAMES.get(int(class_id))
-                if kind == "person":
-                    person = True
                 if kind != "animal":
                     continue
                 x_min, y_min, x_max, y_max = (float(value) for value in xyxy)
@@ -207,7 +205,7 @@ def _load_analyser(min_confidence):
                     )
                 if prediction["confidence"] >= min_confidence:
                     species.append(prediction["prediction"])
-        return species, person
+        return species
 
     return analyse
 
@@ -295,19 +293,18 @@ def send_push_alerts(
         try:
             if analyse is None:
                 analyse = (analyser_factory or _load_analyser)(config["min_confidence"])
-            species, person = analyse(path)
+            species = analyse(path)
             for kind in sorted(set(species) & config["species"]):
                 key = f"{location}|{kind}"
                 previous = state["last_alerts"].get(key)
                 if previous and captured - datetime.fromisoformat(previous) < cooldown:
                     continue
-                attach = config["attach_image"] and not person
                 alert = Alert(
                     location,
                     kind,
                     species.count(kind),
                     captured,
-                    path if attach else None,
+                    path if config["attach_image"] else None,
                 )
                 publish(config["server"], topic, alert)
                 state["last_alerts"][key] = captured.isoformat()
