@@ -339,13 +339,22 @@ New predictions identify the classifier in `classifier_model`. All species
 inference, including push alerts, selects the latest available fine-tuned weights.
 A new model has its own resumable prediction file, never a copy of older predictions.
 
-Before rewriting an existing prediction CSV, the script duplicates it as
-`*.csv.before-relabel-<timestamp>.bak`. Human annotations are never written by
+Before a labelling run changes an existing prediction CSV, the script snapshots it
+as `*.csv.before-relabel-<timestamp>.bak`. Runs with nothing to process do not
+create backups. Human annotations are never written by
 inference. CSV updates are saved atomically in batches; completed results in
 the pending batch are also saved if inference fails or is interrupted. Existing rows whose
 original image is missing are retained unchanged. Inference failures stop the run
 without deleting the original image. Explicit legacy CSV paths remain supported
 for older tools, but are not the active dataset.
+
+Organising, labelling, reviewer saves, and confirmed-empty cleanup share one backup
+policy: keep the five newest byte-distinct snapshots per CSV. Repeated snapshots
+of unchanged content are skipped, and duplicate or older managed backups are
+removed automatically when backups are created. Organising and reviewer no-ops
+do not rewrite their CSVs. Migration `*.before-separation-*.bak` files, unknown
+backup names, and symbolic links are never automatically pruned. Original dataset
+archives are not part of this cleanup.
 
 ### Review Machine Labels
 
@@ -384,9 +393,10 @@ a matching label means confirmed, and a different label means corrected. By defa
 the reviewer shows unchecked rows. Use the in-window mode dropdown to select **Latest
 model incorrect**, **Unseen + errors**, **Seen**, or **All**. The incorrect-prediction
 mode uses validation images from the newest timestamped fine-tuning run under `models/`.
-A `.csv.before-review.bak` backup is created before the first save. Labelling runs
-preserve the manual column but refresh predictions and boxes for reviewed images
-too. Do not run the reviewer and labelling process simultaneously.
+A `.csv.before-review.bak` backup is created before the first changed save;
+subsequent changed states use timestamped snapshots, sharing the five-distinct-
+backup limit above. Unchanged saves create no backup. Inference writes model
+predictions separately and never overwrites human labels or reviewed boxes.
 
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
 By default, the reviewer uses the MegaDetector V6 yolov10-e and DeepFaune labels under

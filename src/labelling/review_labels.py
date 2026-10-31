@@ -5,7 +5,6 @@ import ast
 import csv
 import math
 import os
-import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -236,9 +235,6 @@ class LabelReview:
             raise RuntimeError(
                 "CSV changed outside this reviewer. Close and reopen it before saving."
             )
-        backup = self.csv_path.with_suffix(self.csv_path.suffix + ".before-review.bak")
-        if not backup.exists():
-            shutil.copy2(self.csv_path, backup)
         if self.human_only:
             annotations = []
             for index, row in enumerate(self.rows):
@@ -260,11 +256,21 @@ class LabelReview:
                 ):
                     annotation["box"] = previous.get("box", "")
                 annotations.append(annotation)
+            projected = [
+                {column: row.get(column, "") for column in label_data.HUMAN_COLUMNS}
+                for row in annotations
+            ]
+            if projected == label_data.read_records(self.csv_path):
+                return
+            label_data.backup_csv(self.csv_path, "review")
             label_data.write_records(
                 self.csv_path, annotations, label_data.HUMAN_COLUMNS
             )
             self.original_bytes = self.csv_path.read_bytes()
             return
+        if self.rows == label_data.read_records(self.csv_path):
+            return
+        label_data.backup_csv(self.csv_path, "review")
         temporary_path = None
         try:
             with tempfile.NamedTemporaryFile(

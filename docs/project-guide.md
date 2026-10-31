@@ -112,9 +112,12 @@ a matching label means confirmed, and a different label means corrected. By defa
 the reviewer shows unchecked rows. Use the in-window mode dropdown to select **Latest
 model incorrect**, **Unseen + errors**, **Seen**, or **All**. The incorrect-prediction
 mode uses validation images from the newest timestamped fine-tuning run under `models/`.
-A `.csv.before-review.bak` backup is created before the first save. Labelling runs
-preserve the manual column and skip reviewed images, even if their metadata is
-incomplete. Do not run the reviewer and labelling process simultaneously.
+A `.csv.before-review.bak` backup is created before the first changed save.
+Organising, labelling, review, and confirmed-empty cleanup retain the five newest
+distinct snapshots per CSV and automatically remove duplicate or older snapshots.
+No-op organising, labelling, and review operations create no backups. Migration
+`*.before-separation-*.bak` files and unrecognised backups are protected. Automatic
+predictions are stored separately and never overwrite human annotations.
 
 To review another dataset, use `--csv PATH` and optionally `--images DIRECTORY`.
 By default, the reviewer uses the MegaDetector V6 yolov10-e and DeepFaune labels under

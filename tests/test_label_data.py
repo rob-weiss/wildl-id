@@ -27,6 +27,138 @@ class LabelDataTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
 
+    def test_backup_retention_keeps_five_newest_distinct_states(self):
+        self.write(
+            self.human,
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+        )
+        original = self.human.read_bytes()
+        backups = []
+        for index in range(8):
+            path = self.human.with_name(
+                f"{self.human.name}.before-organize-202610{index + 1:02d}-120000.bak"
+            )
+            path.write_bytes(f"state-{index}".encode())
+            backups.append(path)
+        duplicate = self.human.with_name(
+            f"{self.human.name}.before-relabel-20261101-120000-000000.bak"
+        )
+        duplicate.write_bytes(backups[-1].read_bytes())
+        migration = self.human.with_name(
+            f"{self.human.name}.before-separation-20260101-120000.bak"
+        )
+        migration.write_bytes(b"migration")
+        unknown = self.human.with_name(f"{self.human.name}.custom.bak")
+        unknown.write_bytes(b"custom")
+        linked = self.human.with_name(
+            f"{self.human.name}.before-relabel-20261102-120000.bak"
+        )
+        linked.symlink_to(self.human)
+
+        removed = label_data.prune_csv_backups(self.human)
+
+        self.assertEqual(len(removed), 4)
+        retained = [path for path in [*backups, duplicate] if path.exists()]
+        self.assertEqual(len(retained), 5)
+        self.assertEqual(
+            {path.read_bytes() for path in retained},
+            {f"state-{index}".encode() for index in range(3, 8)},
+        )
+        self.assertTrue(duplicate.exists())
+        self.assertTrue(migration.exists())
+        self.assertTrue(unknown.exists())
+        self.assertTrue(linked.is_symlink())
+        self.assertEqual(self.human.read_bytes(), original)
+
+    def test_unchanged_csv_does_not_create_duplicate_backups(self):
+        self.write(
+            self.human,
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+        )
+
+        first = label_data.backup_csv(self.human, "relabel")
+        second = label_data.backup_csv(self.human, "organize")
+
+        self.assertTrue(first.is_file())
+        self.assertIsNone(second)
+        self.assertEqual(len(list(self.human.parent.glob("*.bak"))), 1)
+
+    def test_backup_cleanup_dry_run_does_not_delete_anything(self):
+        self.human.parent.mkdir(parents=True)
+        for index in range(7):
+            path = self.human.with_name(
+                f"{self.human.name}.before-relabel-202610{index + 1:02d}-120000.bak"
+            )
+            path.write_bytes(str(index).encode())
+
+        removed = label_data.prune_csv_backups(self.human, dry_run=True)
+
+        self.assertEqual(len(removed), 2)
+        self.assertEqual(len(list(self.human.parent.glob("*.bak"))), 7)
+        with self.assertRaises(ValueError):
+            label_data.prune_csv_backups(self.human, keep=0)
+
+    def test_organizing_without_changes_does_not_backup_or_rewrite_csv(self):
+        from src.labelling import organize_images
+
+        self.write(
+            self.human,
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+        )
+        original = self.human.read_bytes()
+        with patch.object(organize_images, "CSV_PATH", self.human):
+            organize_images.update_csv({}, set(), False)
+
+        self.assertEqual(self.human.read_bytes(), original)
+        self.assertEqual(list(self.human.parent.glob("*.bak")), [])
+
+    def test_reviewer_skips_unchanged_saves_and_bounds_its_backups(self):
+        from src.labelling.review_labels import LabelReview
+
+        self.write(
+            self.human,
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+        )
+        original = self.human.read_bytes()
+        review = LabelReview(self.human)
+        review.save()
+        self.assertEqual(self.human.read_bytes(), original)
+        self.assertEqual(list(self.human.parent.glob("*.bak")), [])
+        review.set_mode("All")
+        for label in ("cat", "hare", "dog", "badger", "marten", "owl", "crow"):
+            review.position = 0
+            review.choose(label)
+        self.assertEqual(len(list(self.human.parent.glob("*.bak"))), 5)
+        self.assertEqual(label_data.read_records(self.human)[0]["manual_label"], "crow")
+
     def test_migration_preserves_human_annotations_and_timestamps_separately(self):
         rows = [
             {
@@ -301,6 +433,7 @@ class LabelDataTests(unittest.TestCase):
                 output_csv_path=self.human
             )
             detector.single_image_detection.assert_not_called()
+            self.assertEqual(list(self.model.glob("*.bak")), [])
             newer = self.root / "models/deepfaune_finetuned_20261031-120000_new"
             newer.mkdir()
             (newer / "weights.pt").touch()

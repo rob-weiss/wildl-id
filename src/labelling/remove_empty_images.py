@@ -10,11 +10,11 @@ Usage:
 
 import argparse
 import csv
-import shutil
 from datetime import datetime
 from pathlib import Path
 
 try:
+    from .label_data import backup_csv
     from .organize_images import (
         ANNOTATED_DIR,
         CSV_PATH,
@@ -28,6 +28,7 @@ try:
         rewrite_csv,
     )
 except ImportError:
+    from label_data import backup_csv
     from organize_images import (
         ANNOTATED_DIR,
         CSV_PATH,
@@ -120,8 +121,7 @@ def remove_empty_images(
 
     LOG_DIR.mkdir(exist_ok=True)
     stamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}"
-    backup = csv_path.with_name(f"{csv_path.name}.before-remove-empty-{stamp}.bak")
-    shutil.copy2(csv_path, backup)
+    backup = backup_csv(csv_path, "remove-empty")
     log_path = LOG_DIR / f"remove_empty_images_{stamp}.csv"
     with log_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, lineterminator="\n")
@@ -136,7 +136,9 @@ def remove_empty_images(
         path.unlink()
 
     rewrite_csv(csv_path, kept, fieldnames)
-    print(f"CSV: {len(removed)} rows dropped, backup at {backup.name}")
+    print(
+        f"CSV: {len(removed)} rows dropped; backup: {backup.name if backup else 'existing identical snapshot'}"
+    )
     print(f"Freed {format_size(size)}")
     return len(removed)
 

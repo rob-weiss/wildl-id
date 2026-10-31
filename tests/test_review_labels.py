@@ -130,8 +130,8 @@ class RemoveEmptyImagesTests(unittest.TestCase):
     def test_remove_empty_backup_failure_does_not_delete_images(self):
         with (
             patch.object(
-                empty_images_module.shutil,
-                "copy2",
+                empty_images_module,
+                "backup_csv",
                 side_effect=OSError("backup failed"),
             ),
             self.assertRaisesRegex(OSError, "backup failed"),

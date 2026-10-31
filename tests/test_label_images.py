@@ -172,7 +172,9 @@ class AutomaticLabelTests(unittest.TestCase):
     def test_classifier_loader_uses_latest_available_weights(self):
         newest = Path("models/deepfaune_finetuned_20261029-221530_new/weights.pt")
         with (
-            patch.object(label_images, "latest_classifier_weights", return_value=newest),
+            patch.object(
+                label_images, "latest_classifier_weights", return_value=newest
+            ),
             patch.object(label_images, "SpeciesClassifier") as classifier,
         ):
             loaded = label_images.load_species_classifier("cpu")

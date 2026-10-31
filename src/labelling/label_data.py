@@ -1,6 +1,7 @@
 """Human annotations, image metadata, and model-specific predictions."""
 
 import csv
+import hashlib
 import io
 import os
 import re
@@ -38,6 +39,76 @@ LEGACY_RELATIVE_PATH = (
     "detection_results_MegaDetectorV6_MDV6-yolov10-e_classified.csv"
 )
 DEFAULT_HUMAN_CSV = REPO_DIR / "labels/human_labels.csv"
+
+
+def _csv_backups(csv_path):
+    csv_path = Path(csv_path)
+    pattern = re.compile(
+        re.escape(csv_path.name)
+        + r"\.before-(?:organize|relabel|review|remove-empty|manual-label-trim)-"
+        + r"(?P<stamp>\d{8}-\d{6}(?:-\d{6})?)\.bak"
+    )
+    candidates = []
+    if not csv_path.parent.exists():
+        return []
+    for path in csv_path.parent.glob("*.bak"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        match = pattern.fullmatch(path.name)
+        if match:
+            stamp = match["stamp"]
+            try:
+                created = datetime.strptime(
+                    stamp, "%Y%m%d-%H%M%S-%f" if len(stamp) > 15 else "%Y%m%d-%H%M%S"
+                ).timestamp()
+            except ValueError:
+                continue
+        elif path.name == f"{csv_path.name}.before-review.bak":
+            created = path.stat().st_mtime
+        else:
+            continue
+        candidates.append((created, path.name, path))
+    return [path for _, _, path in sorted(candidates, reverse=True)]
+
+
+def prune_csv_backups(csv_path, keep=5, dry_run=False):
+    if keep < 1:
+        raise ValueError("Keep at least one distinct CSV backup")
+    retained = set()
+    removed = []
+    for path in _csv_backups(csv_path):
+        digest = hashlib.sha256(path.read_bytes()).digest()
+        if digest in retained or len(retained) >= keep:
+            removed.append(path)
+            if not dry_run:
+                path.unlink()
+        else:
+            retained.add(digest)
+    return removed
+
+
+def backup_csv(csv_path, reason):
+    if reason not in {"organize", "relabel", "review", "remove-empty"}:
+        raise ValueError(f"Unknown CSV backup operation: {reason}")
+    csv_path = Path(csv_path)
+    backups = _csv_backups(csv_path)
+    if backups and csv_path.read_bytes() == backups[0].read_bytes():
+        prune_csv_backups(csv_path)
+        return None
+    backup = csv_path.with_name(
+        f"{csv_path.name}.before-{reason}-{datetime.now():%Y%m%d-%H%M%S-%f}.bak"
+    )
+    initial_review = csv_path.with_suffix(csv_path.suffix + ".before-review.bak")
+    if (
+        reason == "review"
+        and not backups
+        and not initial_review.exists()
+        and not initial_review.is_symlink()
+    ):
+        backup = initial_review
+    shutil.copy2(csv_path, backup)
+    prune_csv_backups(csv_path)
+    return backup
 
 
 def image_key(row):

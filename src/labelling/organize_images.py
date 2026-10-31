@@ -33,10 +33,10 @@ from PIL import Image
 from tqdm import tqdm
 
 try:
-    from .label_data import DEFAULT_HUMAN_CSV
+    from .label_data import DEFAULT_HUMAN_CSV, backup_csv
     from .pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 except ImportError:
-    from label_data import DEFAULT_HUMAN_CSV
+    from label_data import DEFAULT_HUMAN_CSV, backup_csv
     from pixel_hash import HASH_VERSION, pixel_digest_path, read_pixel_hash_cache
 
 REPO_DIR = Path(__file__).resolve().parents[2]
@@ -244,14 +244,13 @@ def update_csv(renames, removed, dry_run):
         kept.append(rename_row(row, renames))
 
     print(f"CSV: {renamed} rows renamed, {dropped} rows dropped (deleted images)")
-    if dry_run:
+    if dry_run or kept == rows:
         return
-    backup = CSV_PATH.with_name(
-        f"{CSV_PATH.name}.before-organize-{datetime.now():%Y%m%d-%H%M%S}.bak"
-    )
-    shutil.copy2(CSV_PATH, backup)
+    backup = backup_csv(CSV_PATH, "organize")
     rewrite_csv(CSV_PATH, kept, fieldnames)
-    print(f"CSV updated, backup at {backup.name}")
+    print(
+        f"CSV updated; backup: {backup.name if backup else 'existing identical snapshot'}"
+    )
 
 
 def rename_files(directory, renames, name_fn, dry_run, removed=()):

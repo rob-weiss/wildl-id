@@ -35,7 +35,6 @@ import gc
 import logging
 import os
 import re
-import shutil
 import sys
 import time
 import warnings
@@ -903,7 +902,8 @@ def images_requiring_processing(image_info_list, existing_df, reprocess_missing=
                 for field in ("timestamp", "temperature_celsius")
             )
             if manual or (
-                automatic and (inferred or automatic not in {"unknown", "animal"})
+                automatic
+                and (inferred or automatic not in {"unknown", "animal"})
                 and (not reprocess_missing or metadata_complete)
             ):
                 completed.add((nfc(row["location_id"]), row["image_file"]))
@@ -978,9 +978,7 @@ def process_images_with_pytorch_wildlife(
         else ""
     )
     labels_dir = (
-        repo_dir
-        / "labels"
-        / f"labels_{model_version}_{model_name}{classifier_suffix}"
+        repo_dir / "labels" / f"labels_{model_version}_{model_name}{classifier_suffix}"
     )
     labels_dir.mkdir(parents=True, exist_ok=True)
     images_output_dir = labels_dir / "images"
@@ -1047,11 +1045,6 @@ def process_images_with_pytorch_wildlife(
         existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
         if not separated and "manual_label" not in existing_df:
             existing_df["manual_label"] = ""
-        backup = csv_path.with_name(
-            f"{csv_path.name}.before-relabel-{datetime.now():%Y%m%d-%H%M%S-%f}.bak"
-        )
-        shutil.copy2(csv_path, backup)
-        print(f"Full CSV backup (including manual labels): {backup}")
 
     original_boxes = (
         {
@@ -1073,6 +1066,11 @@ def process_images_with_pytorch_wildlife(
         f"processing {len(images_to_process)} images "
         f"(skipping {len(image_info_list) - len(images_to_process)} completed images)\n"
     )
+
+    if images_to_process and csv_path.exists():
+        backup = label_data.backup_csv(csv_path, "relabel")
+        if backup is not None:
+            print(f"Full CSV backup: {backup}")
 
     results = []
     start_time = time.time()
@@ -1109,9 +1107,7 @@ def process_images_with_pytorch_wildlife(
                     values = new_rows_df[column].reindex(refreshed.index).to_numpy()
                     if column == "box":
                         values = [
-                            saved
-                            if saved != original_boxes.get(key, "")
-                            else automatic
+                            saved if saved != original_boxes.get(key, "") else automatic
                             for key, saved, automatic in zip(
                                 refreshed.index, saved_boxes, values, strict=True
                             )
