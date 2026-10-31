@@ -16,31 +16,27 @@ jobs:
         with:
           enable-cache: true
       - name: Install Python
-        run: uv python install 3.13
+        run: uv python install 3.14
       - name: Check web lockfile
         run: uv lock --project web --check
       - name: Run web tests
-        run: uv run --project web --locked --extra test --python 3.13 python -m unittest discover -s tests -p 'test_web*.py'
+        run: uv run --project web --locked --extra test --python 3.14 python -m unittest discover -s tests -p 'test_web*.py'
   tests:
     runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.14"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - name: Install Python
-        run: uv python install "${{ matrix.python-version }}"
+        run: uv python install 3.14
       - name: Install locked dependencies
-        run: uv sync --locked --python "${{ matrix.python-version }}"
+        run: uv sync --locked --python 3.14
       - name: Check lockfile
         run: uv lock --check
       - name: Compile source and tests
-        run: uv run --locked --python "${{ matrix.python-version }}" python -m compileall -q src wildl_id.py tests
+        run: uv run --locked --python 3.14 python -m compileall -q src wildl_id.py tests
       - name: Run tests
         env:
           PYTHONPATH: .
-        run: uv run --locked --python "${{ matrix.python-version }}" python -m unittest discover -s tests
+        run: uv run --locked --python 3.14 python -m unittest discover -s tests

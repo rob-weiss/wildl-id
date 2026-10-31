@@ -4,7 +4,7 @@ Wildlife Identification and Analysis provides Python tools for processing camera
 
 ## Requirements
 
-Python 3.14.9 is the project default. Python 3.10 is also supported and tested in CI. Python 3.15 is not yet supported because PyTorch has no compatible wheel.
+Python 3.14 is the only supported version, for the tools, web container and CI. Python 3.15 is not yet supported because PyTorch has no compatible wheel.
 
 Install [uv](https://docs.astral.sh/uv/getting-started/installation/), then create the environment from the lockfile:
 

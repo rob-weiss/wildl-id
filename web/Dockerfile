@@ -1,4 +1,4 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /uvx /bin/
 
@@ -16,7 +16,7 @@ COPY src/labelling/review_zoom.js ./src/labelling/
 COPY src/labelling/vendor/panzoom.es.js src/labelling/vendor/PANZOOM-LICENSE.txt ./src/labelling/vendor/
 COPY src/visualisation/evaluate_labels.py ./src/visualisation/
 
-FROM python:3.13-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 ENV PATH="/app/.venv/bin:$PATH" \
     MPLCONFIGDIR=/tmp/matplotlib \

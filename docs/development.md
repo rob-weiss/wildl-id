@@ -2,13 +2,13 @@
 
 ## Setup
 
-Use Python 3.14.9 by default and [uv](https://docs.astral.sh/uv/):
+Use Python 3.14 and [uv](https://docs.astral.sh/uv/):
 
 ```bash
 uv sync --locked
 ```
 
-Python 3.10 remains supported and is tested in CI. To select it locally, run `uv sync --locked --python 3.10`. Python 3.15 is not yet supported because PyTorch does not publish a `cp315` wheel.
+Python 3.14 is the only supported version; the web container and CI use it too. Python 3.15 is not yet supported because PyTorch does not publish a `cp315` wheel.
 
 Open this repository as the VS Code workspace and select `.venv` as the Python interpreter. `pyrightconfig.json` configures the `src/` import path and Python version for Pylance.
 
