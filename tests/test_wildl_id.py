@@ -415,6 +415,29 @@ class IncrementalMailLabellingTests(unittest.TestCase):
             )
             self.assertEqual(csv_path.read_bytes(), before)
 
+    def test_newest_images_are_labelled_first_within_run_limit(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            paths = {}
+            for year, name in ((2024, "old.jpg"), (2026, "newest.jpg"), (2025, "mid.jpg")):
+                path = root / str(year) / "camera1" / name
+                path.parent.mkdir(parents=True)
+                path.touch()
+                paths[("camera1", name)] = path
+            with (
+                patch.object(wildl_id, "DEFAULT_CSV", root / "absent.csv"),
+                patch.object(wildl_id, "image_paths", return_value=paths),
+                patch.object(wildl_id, "MAX_LABELS_PER_RUN", 2),
+                patch.object(
+                    wildl_id, "process_images_with_pytorch_wildlife"
+                ) as process,
+            ):
+                self.assertTrue(wildl_id.label_new_images())
+            self.assertEqual(
+                process.call_args.kwargs["image_keys"],
+                {("camera1", "newest.jpg"), ("camera1", "mid.jpg")},
+            )
+
     def test_empty_scan_does_not_load_models(self):
         with (
             tempfile.TemporaryDirectory() as temporary,

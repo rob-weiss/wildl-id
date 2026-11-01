@@ -41,6 +41,9 @@ from labelling.organize_images import organize_images as organize_main
 from labelling.review_labels import DEFAULT_CSV
 from visualisation.evaluate_labels import main as visualisation_main
 
+# Keeps each scheduled mail run short; older backlog continues on later runs.
+MAX_LABELS_PER_RUN = 100
+
 
 def print_header():
     """Print a nice header."""
@@ -149,18 +152,26 @@ def label_new_images(camera=None):
                     ):
                         completed.add((nfc(row["location_id"]), row["image_file"]))
         pending = {
-            key
+            key: path
             for key, path in image_paths().items()
             if path.suffix.casefold() in {".jpg", ".jpeg", ".png"}
-        } - completed
+            and key not in completed
+        }
         if not pending:
             print("No new images require automatic labelling.")
             return True
+        # images/<year>/<location>/image_<capture-order>.jpg: newest first.
+        selected = sorted(
+            pending,
+            key=lambda key: (pending[key].parent.parent.name, pending[key].name),
+            reverse=True,
+        )[:MAX_LABELS_PER_RUN]
         print(
-            f"Automatically labelling {len(pending)} pending images into {active_csv}"
+            f"Automatically labelling {len(selected)} of {len(pending)} pending "
+            f"images (newest first) into {active_csv}"
         )
         process_images_with_pytorch_wildlife(
-            camera=camera, output_csv_path=DEFAULT_CSV, image_keys=pending
+            camera=camera, output_csv_path=DEFAULT_CSV, image_keys=set(selected)
         )
         return True
     except Exception as error:
