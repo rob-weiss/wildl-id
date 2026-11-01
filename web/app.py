@@ -13,7 +13,7 @@ from src.labelling.label_data import DATE_FORMAT
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web import background
-from web.camera_map import build_camera_map_page
+from web.camera_map import build_best_seats, build_camera_map_page
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.predictions import build_predictions_page
 from web.visualisations import (
@@ -47,6 +47,10 @@ def add_navigation(current_path: str) -> None:
     ui.add_head_html(
         """<style>
         body { background: #f4f6f4; }
+        .nicegui-content { padding-left: 1.5rem; padding-right: 1.5rem; }
+        @media (min-width: 640px) {
+            .nicegui-content { padding-left: 3rem; padding-right: 3rem; }
+        }
         a:not(.q-item):not(.q-btn) { color: #53675d; }
         a:not(.q-item):not(.q-btn):hover { color: #214a3a; }
         .q-drawer--mini .navigation-header {
@@ -209,7 +213,7 @@ def plot_display_name(path: Path) -> str:
 
 
 @ui.page("/")
-def home_page() -> None:
+async def home_page() -> None:
     add_navigation("/")
     with ui.column().classes("w-full max-w-3xl mx-auto p-4 sm:p-6 gap-6"):
         with ui.column().classes("w-full items-center gap-2 text-center"):
@@ -221,6 +225,7 @@ def home_page() -> None:
         build_recent_gallery(
             DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
         )
+        await build_best_seats()
         build_recent_notifications()
 
 

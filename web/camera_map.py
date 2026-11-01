@@ -23,10 +23,6 @@ SATELLITE_TILES = (
     "https://server.arcgisonline.com/ArcGIS/rest/services/"
     "World_Imagery/MapServer/tile/{z}/{y}/{x}"
 )
-SATELLITE_ATTRIBUTION = (
-    "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, "
-    "and the GIS User Community"
-)
 WIND_API = "https://api.open-meteo.com/v1/forecast"
 WIND_HOURS = 24
 WIND_CACHE_SECONDS = 900
@@ -231,7 +227,7 @@ def initial_view(
         math.floor(math.log2(scale * size[0] / width)),
         math.floor(math.log2(scale * size[1] / height)),
     )
-    return center, max(3, min(18, zoom))
+    return center, max(3, min(18, zoom + 1))
 
 
 def arc_distance(
@@ -324,14 +320,14 @@ async def build_camera_map_page() -> None:
         located = [camera for camera in cameras if camera.located]
         center, zoom = initial_view(located)
         leaflet = (
-            ui.leaflet(center=center, zoom=zoom)
+            ui.leaflet(center=center, zoom=zoom, options={"attributionControl": False})
             .classes("w-full h-[60vh] min-h-80")
             .mark("camera-map")
         )
         leaflet.clear_layers()
         leaflet.tile_layer(
             url_template=SATELLITE_TILES,
-            options={"attribution": SATELLITE_ATTRIBUTION, "maxZoom": 19},
+            options={"maxZoom": 19},
         )
         markers = [
             (
@@ -574,3 +570,30 @@ async def build_camera_map_page() -> None:
     hours_select.on_value_change(lambda _: change_hours())
     await refresh()
     ui.timer(WIND_CACHE_SECONDS, refresh)
+
+
+async def build_best_seats() -> None:
+    from nicegui import run, ui
+
+    ui.label("Best seats now").classes("text-xl font-semibold")
+    try:
+        cameras = [
+            camera
+            for camera in read_camera_locations(configured_locations_path())
+            if camera.located
+        ]
+        wind = await run.io_bound(fetch_wind, cameras)
+    except (OSError, ValueError, KeyError, TypeError):
+        ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
+        return
+    ranking = rank_seats(cameras, wind, 0)[:3]
+    if not ranking:
+        ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
+        return
+    ui.label(f"Largest gap between view and wind over the next {RANKING_HOURS} h").classes(
+        "text-sm text-gray-600"
+    )
+    for rank, (camera, gap) in enumerate(ranking, 1):
+        ui.label(f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc").classes(
+            "px-3 py-1 rounded"
+        ).style(f"background-color: {arc_colour(gap)}66")
