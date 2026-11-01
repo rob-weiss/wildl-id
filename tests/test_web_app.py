@@ -998,8 +998,46 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.write_original_image("labelled.jpg", datetime(2026, 10, 1, 12))
         self.write_original_image("new-arrival.jpg", datetime.now())
         async with self.app_user("/gallery") as user:
+            await user.should_see("1 images · relevant species")
+            relevant = next(iter(user.find(marker="gallery-relevant").elements))
+            relevant.value = False
             await user.should_see("2 images · all images")
             await user.should_see("Unlabelled")
+
+    async def test_gallery_relevant_species_and_boxes_are_on_by_default(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": name,
+                    "timestamp": "2025-01-01T00:00:00",
+                    "class": label,
+                }
+                for name, label in (
+                    ("fox.jpg", "fox"),
+                    ("squirrel.jpg", "squirrel"),
+                    ("empty.jpg", "none"),
+                )
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/gallery") as user:
+                await user.should_see("1 images · relevant species")
+                relevant = next(iter(user.find(marker="gallery-relevant").elements))
+                self.assertTrue(relevant.value)
+                boxes = next(iter(user.find(marker="gallery-boxes").elements))
+                self.assertEqual(boxes.props.get("aria-pressed"), "true")
+                user.find("Smart filter").type("only squirrels").trigger(
+                    "keydown.enter"
+                )
+                await user.should_see("1 images · only")
+                user.find("Smart filter").clear()
+                user.find("Smart filter").trigger("keydown.enter")
+                relevant.value = False
+                await user.should_see("3 images · all images")
 
     async def test_home_shows_latest_five_notifications_below_images(self):
         log_path = self.root / "push_alerts.csv"
@@ -1211,7 +1249,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
         ):
             async with self.app_user("/gallery") as user:
-                await user.should_see("2 images · all images")
+                await user.should_see("2 images · relevant species")
                 user.find("Smart filter").type("only foxes").trigger("keydown.enter")
                 await user.should_see("1 images · only 🦊 fox")
 
@@ -1274,7 +1312,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/gallery") as user:
                 await user.should_see("🦊 fox")
                 await user.should_not_see("Automatic:")
-                user.find(kind=ui.image, content="fox.jpg").click()
+                user.find(kind=ui.interactive_image).click()
                 await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
                 await user.should_not_see("Automatic: 🐇 hare")
 
@@ -1295,7 +1333,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
         ):
             async with self.app_user("/gallery") as user:
-                user.find(kind=ui.image, content="fox.jpg").click()
+                user.find(kind=ui.interactive_image).click()
                 await user.should_see("1 / 1 · 🦊 fox · camera1")
                 await user.should_not_see("Manual:")
 
@@ -1452,8 +1490,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         badger_url = f"{base_url}/2025/camera1/badger.jpg"
         with patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}):
             async with self.app_user("/gallery") as user:
+                user.find(marker="gallery-boxes").click()
                 user.find("Smart filter").type("not foxes").trigger("keydown.enter")
-                await user.should_see("2 images · excluding 🦊 fox")
+                await user.should_see("2 images · relevant species · excluding 🦊 fox")
                 user.find(kind=ui.image, content=boar_url).click()
                 await user.should_see("1 / 2")
                 self.assertTrue(
@@ -1523,12 +1562,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}):
             async with self.app_user("/gallery") as user:
                 await user.should_see("1 images")
-                await user.should_not_see(kind=ui.interactive_image)
                 toggle = next(iter(user.find(marker="gallery-boxes").elements))
-                self.assertEqual(toggle.props.get("aria-pressed"), "false")
-                user.find(marker="gallery-boxes").click()
                 self.assertEqual(toggle.props.get("aria-pressed"), "true")
                 self.assertEqual(len(user.find(kind=ui.interactive_image).elements), 1)
+                user.find(marker="gallery-boxes").click()
+                self.assertEqual(toggle.props.get("aria-pressed"), "false")
+                await user.should_not_see(kind=ui.interactive_image)
+                user.find(marker="gallery-boxes").click()
+                self.assertEqual(toggle.props.get("aria-pressed"), "true")
 
                 user.find(kind=ui.interactive_image).click()
                 await user.should_see("1 / 1")
@@ -1587,7 +1628,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
         ):
             async with self.app_user("/gallery") as user:
-                user.find(marker="gallery-boxes").click()
                 images = list(user.find(kind=ui.interactive_image).elements)
                 self.assertEqual(len(images), 4)
                 user.find(kind=ui.interactive_image).trigger(
@@ -1628,6 +1668,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
         ):
             async with self.app_user("/gallery") as user:
+                user.find(marker="gallery-boxes").click()
                 await user.should_see("383 images")
                 await user.should_see("1 not available locally or in the cloud")
                 pagination = next(iter(user.find(kind=ui.pagination).elements))

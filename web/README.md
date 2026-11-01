@@ -176,6 +176,9 @@ read-only inside the container.
 ## Gallery
 
 Choose **Gallery** from the home page to browse the CSV's images, newest first.
+The **Relevant species only** switch (on by default) limits the gallery to the
+species in `config/relevant_species.json`; species named in a filter override
+it. Bounding boxes are shown by default.
 Local originals under `images/` are shown when present; otherwise the app uses
 `WILDL_ID_IMAGE_BASE_URL` (the published `images/` prefix). The **Smart filter**
 turns a prompt such as “Show only wild boar of the last two weeks” into a CSV

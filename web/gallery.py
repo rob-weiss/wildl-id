@@ -1183,7 +1183,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         }
     )
     items = []
-    boxes = BoxToggle(False)
+    boxes = BoxToggle(True)
     show_image, close_image_viewer = build_image_viewer(items, boxes)
 
     with ui.row().classes("w-full items-center gap-2"):
@@ -1194,6 +1194,9 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         )
         ui.button("Filter", icon="search", on_click=lambda: apply()).props("no-caps")
         boxes.button("gallery-boxes")
+        relevant_only = ui.switch(
+            "Relevant species only", value=True, on_change=lambda: apply()
+        ).mark("gallery-relevant")
     with ui.expansion("Filter guide", icon="info").classes("w-full"):
         ui.markdown(FILTER_GUIDE).classes("w-full")
     with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
@@ -1295,6 +1298,15 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         gallery_filter = parse_filter_prompt(text, labels, locations, today)
         if text.strip() and gallery_filter.is_empty():
             ui.notify("Filter not understood; showing all images", type="warning")
+        description = describe_filter(gallery_filter)
+        # Explicitly requested species override the quick filter.
+        if relevant_only.value and not gallery_filter.labels:
+            gallery_filter.labels = set(RECENT_SPECIES) - gallery_filter.excluded_labels
+            description = (
+                "relevant species"
+                if description == "all images"
+                else f"relevant species · {description}"
+            )
         matches = filter_rows(rows, gallery_filter)
         items[:] = [
             (row, source)
@@ -1303,7 +1315,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         ]
         missing = len(matches) - len(items)
         summary.set_text(
-            f"{len(items)} images · {describe_filter(gallery_filter)}"
+            f"{len(items)} images · {description}"
             + (f" · {missing} not available locally or in the cloud" if missing else "")
         )
         pages = max(1, math.ceil(len(items) / PAGE_SIZE))
