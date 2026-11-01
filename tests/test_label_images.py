@@ -17,6 +17,21 @@ wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_ocr_disabled_by_default_preserves_exif_timestamp(self):
+        self.assertFalse(label_images.enable_ocr)
+        with tempfile.TemporaryDirectory() as directory:
+            image_path = Path(directory) / "image.jpg"
+            exif = Image.Exif()
+            exif[0x0132] = "2026:10:25 02:30:00"
+            Image.new("RGB", (8, 8)).save(image_path, exif=exif)
+
+            timestamp = label_images.extract_exif_timestamp(image_path)
+
+            self.assertEqual(
+                label_images.resolve_exif_timestamp(timestamp, "", image_path),
+                "2026-10-25T02:30:00",
+            )
+
     def test_prediction_bounding_boxes_are_yellow(self):
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "fox.jpg"

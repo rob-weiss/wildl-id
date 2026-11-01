@@ -89,7 +89,7 @@ classification_threshold = 0.1  # Minimum confidence for classification
 save_annotated_images = True
 
 # Enable OCR for timestamp/temperature extraction (disable to save memory)
-enable_ocr = True
+enable_ocr = False
 
 # Enable OCR fallback: if macOS Vision fails, try EasyOCR
 # Requires: pip install easyocr

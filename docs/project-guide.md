@@ -37,7 +37,7 @@ The menu provides these actions:
 
 - **Animal Detection**: Uses PyTorch Wildlife MegaDetector V6 for detecting animals, humans, and vehicles
 - **Species Classification**: DeepFaune classifier identifies European wildlife species
-- **Metadata Extraction**: OCR extracts timestamp and temperature data from camera overlay
+- **Metadata Extraction**: EXIF capture timestamps are recorded; optional OCR for camera overlay timestamps and temperatures is disabled by default
 - **Lighting Analysis**: Classifies images as day/night using LAB colour space
 - Supports incremental processing (only processes new images)
 - Configurable to skip incomplete entries
