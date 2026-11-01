@@ -440,9 +440,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see(
                     "North · 13:00: 5 km/h from W (270°), gusts 9 km/h"
                 )
-                await user.should_see(
-                    "North · 14:00: 6 km/h from N (0°), gusts 9 km/h"
-                )
+                await user.should_see("North · 14:00: 6 km/h from N (0°), gusts 9 km/h")
                 await user.should_see(
                     "North · 15:00: 7 km/h from E (90°), gusts 9 km/h"
                 )
@@ -527,10 +525,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Best seats 18:00-21:00")
                 self.assertTrue(ranking()[0].startswith("1. 100% · East"))
                 self.assertEqual(
-                    [
-                        layer.to_dict()["type"]
-                        for layer in leaflet.layers
-                    ].count("polyline"),
+                    [layer.to_dict()["type"] for layer in leaflet.layers].count(
+                        "polyline"
+                    ),
                     6,
                 )
 
@@ -681,8 +678,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(badger.visible)
                 await user.should_not_see("roe deer (0)")
                 self.assertTrue(
-                    next(iter(user.find(marker="recent-species-unlabelled").elements))
-                    .visible
+                    next(
+                        iter(user.find(marker="recent-species-unlabelled").elements)
+                    ).visible
                 )
                 summary = next(
                     iter(user.find(marker="recent-species-summary").elements)
@@ -981,7 +979,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_not_see("Alert 0")
                 await user.should_see("01-11-2026 07:05")
                 heading = next(
-                    iter(user.find(kind=ui.label, content="Latest notifications").elements)
+                    iter(
+                        user.find(
+                            kind=ui.label, content="Latest notifications"
+                        ).elements
+                    )
                 )
                 images = next(
                     iter(user.find(kind=ui.label, content="Last 24 hours").elements)
@@ -1532,9 +1534,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     image.content.split('stroke="')[1].split('"', maxsplit=1)[0]
                     for image in images
                 }
-                self.assertEqual(
-                    colors, {"#f9a825", "#1565c0", "#2e7d32", "#c62828"}
-                )
+                self.assertEqual(colors, {"#f9a825", "#1565c0", "#2e7d32", "#c62828"})
                 self.assertTrue(all("<text" not in image.content for image in images))
                 user.find(kind=ui.interactive_image).click()
                 viewer_image = next(
@@ -1576,9 +1576,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     return [
                         image
                         for image in user.find(kind=ui.image).elements
-                        if image.source.startswith(
-                            "https://cdn.example.test/images/"
-                        )
+                        if image.source.startswith("https://cdn.example.test/images/")
                     ]
 
                 pagination.set_value(2)
@@ -1607,7 +1605,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("1 not available locally or in the cloud")
                 self.assertEqual(pagination.value, 1)
                 self.assertTrue(
-                    any(image.source.endswith("fox-0.jpg") for image in gallery_images())
+                    any(
+                        image.source.endswith("fox-0.jpg") for image in gallery_images()
+                    )
                 )
 
     async def test_home_and_viewer_toggle_bounding_boxes(self):

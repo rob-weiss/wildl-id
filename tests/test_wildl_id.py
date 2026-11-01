@@ -419,7 +419,11 @@ class IncrementalMailLabellingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             paths = {}
-            for year, name in ((2024, "old.jpg"), (2026, "newest.jpg"), (2025, "mid.jpg")):
+            for year, name in (
+                (2024, "old.jpg"),
+                (2026, "newest.jpg"),
+                (2025, "mid.jpg"),
+            ):
                 path = root / str(year) / "camera1" / name
                 path.parent.mkdir(parents=True)
                 path.touch()

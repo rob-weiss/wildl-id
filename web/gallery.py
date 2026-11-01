@@ -1136,9 +1136,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     ui.timer(60, refresh, immediate=False)
 
 
-def build_gallery_page(
-    csv_path, images_dir=None, image_base_url=None, today=None
-):
+def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=None):
     ui.label("Gallery").classes("text-xl font-semibold")
     try:
         rows = load_rows(csv_path)

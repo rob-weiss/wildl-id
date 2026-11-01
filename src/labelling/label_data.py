@@ -228,10 +228,7 @@ def migrate_human_labels(repo_dir=REPO_DIR):
     verified = {image_key(row): row for row in read_records(prediction_path)}
     run_name = prediction_path.parent.name.removeprefix("labels_")
     for row in [*displaced, *rows]:
-        if (
-            row.get("classifier_model") == run_name
-            and row.get("class", "").strip()
-        ):
+        if row.get("classifier_model") == run_name and row.get("class", "").strip():
             verified.setdefault(image_key(row), row)
     write_records(prediction_path, verified.values(), PREDICTION_COLUMNS)
     if legacy.read_bytes() != original:

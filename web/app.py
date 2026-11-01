@@ -181,9 +181,7 @@ def parse_summary_statistics(
         if section == "metrics" and ":" in value:
             metric, result = value.split(":", 1)
             if metric.strip() and result.strip():
-                metrics.append(
-                    {"metric": metric.strip(), "value": result.strip()}
-                )
+                metrics.append({"metric": metric.strip(), "value": result.strip()})
             continue
         if section in {"species", "locations"}:
             fields = value.rsplit(maxsplit=1)

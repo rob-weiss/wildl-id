@@ -1,6 +1,6 @@
 import tempfile
 import unittest
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from web import gallery
@@ -95,7 +95,7 @@ class RecentSightingsTests(unittest.TestCase):
         self.assertEqual(result[-1], "boundary.jpg")
 
     def test_timezone_offsets_and_exif_fallback(self):
-        now = datetime(2026, 10, 30, 12, tzinfo=timezone.utc)
+        now = datetime(2026, 10, 30, 12, tzinfo=UTC)
         rows = [
             make_row("newest.jpg", "fox", "2026-10-30T12:30:00+01:00"),
             make_row("old.jpg", "fox", "2026-10-29T12:30:00+01:00"),
