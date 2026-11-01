@@ -271,6 +271,50 @@ class DailySummaryTests(unittest.TestCase):
             **kwargs,
         )
 
+    def test_digest_reads_human_labels_joined_with_metadata_and_predictions(self):
+        label_data = import_module("src.labelling.label_data")
+        labels_dir = self.labels.parent / "repo" / "labels"
+        human = labels_dir / "human_labels.csv"
+        label_data.write_records(
+            human,
+            [
+                {"location_id": "Wendeplatte", "image_file": name, "manual_label": label}
+                for name, label in (("boar.jpg", "wild boar"), ("fox.jpg", ""))
+            ],
+            label_data.HUMAN_COLUMNS,
+        )
+        label_data.write_records(
+            labels_dir / "image_metadata.csv",
+            [
+                {
+                    "location_id": "Wendeplatte",
+                    "image_file": name,
+                    "timestamp_exif": "2026-10-30T20:00:00",
+                }
+                for name in ("boar.jpg", "fox.jpg")
+            ],
+            label_data.METADATA_COLUMNS,
+        )
+        label_data.write_records(
+            label_data.predictions_path(labels_dir.parent),
+            [{"location_id": "Wendeplatte", "image_file": "fox.jpg", "class": "fox"}],
+            label_data.PREDICTION_COLUMNS,
+        )
+
+        result = alerts.send_daily_summary(
+            self.config,
+            self.state,
+            human,
+            now=self.now,
+            keychain_reader=lambda *args: "topic-x",
+            publisher=self.published.append,
+        )
+
+        self.assertEqual((result.sent, result.failures), (1, ()))
+        message = self.published[0].data.decode()
+        self.assertIn("Total: 2 sightings", message)
+        self.assertIn("By species: 1 fox 1 wild boar", message)
+
     def test_digest_counts_unique_photos_with_manual_labels_and_exact_window(self):
         row = self.row("one.jpg", "2026-10-30 07:00:00", manual="roe deer")
         self.write_rows(

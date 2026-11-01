@@ -1,6 +1,5 @@
 """Send ntfy push alerts for selected species in newly organised images."""
 
-import csv
 import json
 import os
 import subprocess
@@ -18,12 +17,14 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 
 try:
+    from ..labelling import label_data
     from ..labelling.label_data import DATE_FORMAT
     from ..labelling.organize_images import IMAGES_DIR, image_paths
     from ..labelling.species import RECENT_SPECIES
     from . import notification_log
 except ImportError:
     from alerting import notification_log
+    from labelling import label_data
     from labelling.label_data import DATE_FORMAT
     from labelling.organize_images import IMAGES_DIR, image_paths
     from labelling.species import RECENT_SPECIES
@@ -378,36 +379,33 @@ def send_daily_summary(
             csv_path = DEFAULT_CSV
         counts = defaultdict(Counter)
         seen = set()
-        with Path(csv_path).open(newline="", encoding="utf-8") as source:
-            reader = csv.DictReader(source)
-            if not {"location_id", "image_file", "class"}.issubset(
-                reader.fieldnames or ()
-            ):
-                raise ValueError(
-                    "summary CSV needs location_id, image_file, and class columns"
-                )
-            for row in reader:
-                stamp = (
-                    row.get("timestamp_exif") or row.get("timestamp") or ""
-                ).strip()
-                if not stamp:
-                    continue
-                try:
-                    captured = datetime.fromisoformat(stamp)
-                except ValueError:
-                    continue
-                if captured.tzinfo is None:
-                    captured = captured.replace(tzinfo=CAMERA_TIME)
-                if not start <= captured.astimezone(UTC) < end:
-                    continue
-                key = (row["location_id"], row["image_file"])
-                if key in seen:
-                    continue
-                seen.add(key)
-                manual = (row.get("manual_label") or "").strip()
-                species = (manual or row["class"] or "").strip().casefold()
-                if species in config["summary_species"]:
-                    counts[row["location_id"]][species] += 1
+        if not Path(csv_path).is_file():
+            raise FileNotFoundError(f"labels CSV not found: {csv_path}")
+        rows = label_data.load_rows(csv_path)
+        if rows and not {"location_id", "image_file", "class"}.issubset(rows[0]):
+            raise ValueError(
+                "summary CSV needs location_id, image_file, and class columns"
+            )
+        for row in rows:
+            stamp = (row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+            if not stamp:
+                continue
+            try:
+                captured = datetime.fromisoformat(stamp)
+            except ValueError:
+                continue
+            if captured.tzinfo is None:
+                captured = captured.replace(tzinfo=CAMERA_TIME)
+            if not start <= captured.astimezone(UTC) < end:
+                continue
+            key = (row["location_id"], row["image_file"])
+            if key in seen:
+                continue
+            seen.add(key)
+            manual = (row.get("manual_label") or "").strip()
+            species = (manual or row["class"] or "").strip().casefold()
+            if species in config["summary_species"]:
+                counts[row["location_id"]][species] += 1
         species_totals = Counter()
         for location_counts in counts.values():
             species_totals.update(location_counts)
