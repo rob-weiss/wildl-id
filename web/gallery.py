@@ -994,7 +994,9 @@ def build_image_viewer(items, boxes, compact=False):
     return open_image, close_image_viewer
 
 
-def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
+def build_recent_gallery(
+    csv_path, images_dir=None, image_base_url=None, after_heading=None
+):
     images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
     all_items = []
     selected_species = set()
@@ -1006,6 +1008,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     boxes = BoxToggle(True)
     with ui.column().classes("w-full gap-3"):
         ui.label("Last 24 hours").classes("text-xl font-semibold")
+        refresh_after_heading = after_heading() if after_heading else None
         with ui.row().classes("w-full items-center gap-2"):
             for species, title in {"all": "All", **species_names}.items():
                 species_buttons[species] = (
@@ -1148,6 +1151,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     boxes.listeners.append(show_page)
     refresh()
     ui.timer(60, refresh, immediate=False)
+    return refresh_after_heading
 
 
 def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=None):

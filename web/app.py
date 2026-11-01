@@ -212,6 +212,30 @@ def plot_display_name(path: Path) -> str:
     return Path(path).stem.replace("_", " ")
 
 
+def build_home_job_progress():
+    @ui.refreshable
+    def job_progress() -> None:
+        status = background.mail_job_status()
+        if status.running_pid is None:
+            return
+        if status.progress is None:
+            ui.label("Downloading and labelling").classes("text-sm text-gray-700")
+            ui.linear_progress(show_value=False).props("indeterminate").mark(
+                "home-job-progress"
+            )
+            return
+        done, total, remaining = status.progress
+        ui.label(f"Labelling {done} / {total} images · about {remaining} left").classes(
+            "text-sm text-gray-700"
+        )
+        ui.linear_progress(value=done / total, show_value=False).mark(
+            "home-job-progress"
+        )
+
+    job_progress()
+    return job_progress.refresh
+
+
 @ui.page("/")
 async def home_page() -> None:
     add_navigation("/")
@@ -222,9 +246,12 @@ async def home_page() -> None:
             ui.label(
                 "Recent sightings, image review, and activity across your cameras."
             ).classes("text-base text-gray-700 max-w-xl")
-        build_recent_gallery(
-            DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
+        progress_refresh = build_recent_gallery(
+            DEFAULT_CSV,
+            image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL"),
+            after_heading=build_home_job_progress,
         )
+        ui.timer(5, progress_refresh, immediate=False)
         await build_best_seats()
         build_recent_notifications()
 

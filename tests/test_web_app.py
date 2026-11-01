@@ -829,6 +829,45 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(viewer.style.get("width"), "min(85vw, 40vh)")
 
+    async def test_home_hides_job_progress_when_idle(self):
+        async with self.app_user("/") as user:
+            await user.should_not_see(marker="home-job-progress")
+
+    async def test_home_shows_indeterminate_progress_while_downloading(self):
+        self.job_status = background.MailJobStatus(
+            running_pid=4242, paused=False, progress=None
+        )
+
+        with patch.object(gallery.ui, "timer") as timer:
+            async with self.app_user("/") as user:
+                await user.should_see("Downloading and labelling")
+                progress = next(iter(user.find(marker="home-job-progress").elements))
+                self.assertTrue(progress.props.get("indeterminate"))
+                self.job_status = background.MailJobStatus(
+                    running_pid=None, paused=False, progress=None
+                )
+                progress_timer = next(
+                    call.args[1] for call in timer.call_args_list if call.args[0] == 5
+                )
+                progress_timer()
+                await user.should_not_see(marker="home-job-progress")
+
+    async def test_home_shows_determinate_progress_while_labelling(self):
+        self.job_status = background.MailJobStatus(
+            running_pid=4242,
+            paused=False,
+            progress=(24, 100, "02:26"),
+        )
+
+        async with self.app_user("/") as user:
+            await user.should_see("Labelling 24 / 100 images · about 02:26 left")
+            heading = next(
+                iter(user.find(kind=ui.label, content="Last 24 hours").elements)
+            )
+            progress = next(iter(user.find(marker="home-job-progress").elements))
+            self.assertGreater(progress.id, heading.id)
+            self.assertAlmostEqual(progress.value, 0.24)
+
     async def test_home_recent_gallery_shows_boxes_and_refreshes_csv(self):
         now = datetime.now()
         fields = [
@@ -891,8 +930,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("True:", viewer_image.content)
                 user.find(marker="recent-image-close").click()
                 self.assertTrue(timer.call_args_list)
-                self.assertTrue(
-                    all(call.args[0] == 60 for call in timer.call_args_list)
+                self.assertCountEqual(
+                    [call.args[0] for call in timer.call_args_list], [60, 5, 60]
                 )
                 refresh = timer.call_args_list[0].args[1]
                 rows[0]["timestamp"] = (now - timedelta(hours=25)).isoformat()
