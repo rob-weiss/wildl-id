@@ -8,9 +8,11 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 from src.alerting import notification_log
+from src.background import job_control
 from src.labelling.label_data import DATE_FORMAT
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
+from web import background
 from web.camera_map import build_camera_map_page
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.predictions import build_predictions_page
@@ -124,6 +126,12 @@ def add_navigation(current_path: str) -> None:
                     "/map",
                     "map",
                     "Camera locations and wind for the next three hours.",
+                ),
+                (
+                    "Status",
+                    "/status",
+                    "monitor_heart",
+                    "Background downloads, labelling, and services.",
                 ),
             ):
                 with (
@@ -268,6 +276,71 @@ async def camera_map_page() -> None:
     add_navigation("/map")
     add_brand_logo()
     await build_camera_map_page()
+
+
+@ui.page("/status")
+def status_page() -> None:
+    add_navigation("/status")
+    add_brand_logo()
+    with ui.column().classes("w-full max-w-3xl mx-auto p-4 gap-4"):
+        ui.label("Background jobs").classes("text-xl font-semibold")
+        with ui.card().classes("w-full gap-2"):
+            ui.label("Mail download and labelling").classes("font-medium")
+            with ui.row().classes("items-center gap-4"):
+                ui.switch(
+                    "Automatic runs every minute",
+                    value=not background.mail_job_status().paused,
+                    on_change=lambda event: job_control.set_paused(not event.value),
+                ).mark("automatic-runs")
+                ui.button(
+                    "Run now", icon="play_arrow", on_click=start_mail_job
+                ).props("no-caps").mark("run-now")
+            mail_job_details()
+        with ui.card().classes("w-full gap-1"):
+            ui.label("Services").classes("font-medium")
+            service_details()
+    ui.timer(5, mail_job_details.refresh)
+    ui.timer(5, service_details.refresh)
+
+
+def start_mail_job() -> None:
+    ui.notify(background.run_now())
+    mail_job_details.refresh()
+
+
+@ui.refreshable
+def mail_job_details() -> None:
+    status = background.mail_job_status()
+    if status.running_pid is None:
+        state = "Idle"
+    else:
+        state = f"Running (pid {status.running_pid})"
+    if status.paused:
+        state += " · automatic runs paused"
+    ui.label(state).classes("text-sm")
+    if status.progress:
+        done, total, remaining = status.progress
+        ui.linear_progress(value=done / total, show_value=False)
+        ui.label(
+            f"Labelling {done} / {total} images · about {remaining} left"
+        ).classes("text-sm")
+    if status.events:
+        ui.label("Latest run").classes("text-sm font-medium")
+        for event in status.events:
+            ui.label(event).classes("text-sm text-gray-700")
+    if status.last_activity:
+        ui.label(
+            f"Last activity {status.last_activity:{DATE_FORMAT} %H:%M}"
+        ).classes("text-xs text-gray-600")
+
+
+@ui.refreshable
+def service_details() -> None:
+    for title, label in (
+        ("Mail job scheduler", background.MAIL_AGENT),
+        ("Web app", background.WEB_AGENT),
+    ):
+        ui.label(f"{title}: {background.agent_status(label)}").classes("text-sm")
 
 
 @ui.page("/visualisations")

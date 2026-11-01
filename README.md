@@ -143,6 +143,13 @@ The web app agent starts at login and launchd restarts it whenever it exits.
 It reloads automatically when files under `web/` or `src/` change. Logs are in
 `~/Library/Logs/wildl-id/web-stderr.log`.
 
+The web app's **Status** page shows whether the mail job is running, its
+labelling progress, the latest run's events, and the state of both agents.
+Its switch pauses or resumes the automatic runs (the setting persists across
+reboots; a run in progress finishes normally), and **Run now** starts one run
+even while paused. Runs never overlap: a run that finds another one active
+exits immediately.
+
 Remove both agents with:
 
 ```bash

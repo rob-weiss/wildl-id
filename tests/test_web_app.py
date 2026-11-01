@@ -14,7 +14,7 @@ from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
 from web import app as web_app
-from web import gallery
+from web import background, gallery
 
 review_module = import_module("src.labelling.review_app")
 notification_log = import_module("src.alerting.notification_log")
@@ -90,6 +90,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         images_patch = patch.object(gallery, "IMAGES_DIR", self.source_images)
         images_patch.start()
         self.addCleanup(images_patch.stop)
+        self.job_status = background.MailJobStatus(
+            running_pid=None, paused=False, progress=None, events=[]
+        )
+        for name, value in (
+            ("mail_job_status", lambda: self.job_status),
+            ("agent_status", lambda label: "running (pid 7)"),
+        ):
+            background_patch = patch.object(background, name, value)
+            background_patch.start()
+            self.addCleanup(background_patch.stop)
 
     @asynccontextmanager
     async def http_client(self):
@@ -261,6 +271,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             "/visualisations",
             "/predictions",
             "/map",
+            "/status",
         ):
             with self.subTest(path=path):
                 async with self.app_user(path) as user:
@@ -290,12 +301,53 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                             "/visualisations",
                             "/predictions",
                             "/map",
+                            "/status",
                         },
                     )
                     user.find(marker="navigation-toggle").click()
                     self.assertFalse(drawer.props.get("mini"))
                     user.find(marker="navigation-toggle").click()
                     self.assertTrue(drawer.props.get("mini"))
+
+    async def test_status_page_shows_running_job_progress_and_services(self):
+        self.job_status = background.MailJobStatus(
+            running_pid=4242,
+            paused=False,
+            progress=(24, 100, "02:26"),
+            events=["Downloaded 2 images; skipped 1 duplicates"],
+            last_activity=datetime(2026, 11, 1, 16, 45),
+        )
+        async with self.app_user("/status") as user:
+            await user.should_see("Background jobs")
+            await user.should_see("Running (pid 4242)")
+            await user.should_see("Labelling 24 / 100 images · about 02:26 left")
+            await user.should_see("Downloaded 2 images; skipped 1 duplicates")
+            await user.should_see("Last activity 01-11-2026 16:45")
+            await user.should_see("Web app: running (pid 7)")
+            switch = next(iter(user.find(marker="automatic-runs").elements))
+            self.assertTrue(switch.value)
+
+    async def test_status_switch_pauses_and_resumes_automatic_runs(self):
+        with patch.object(web_app.job_control, "set_paused") as set_paused:
+            async with self.app_user("/status") as user:
+                await user.should_see("Idle")
+                switch = next(iter(user.find(marker="automatic-runs").elements))
+                switch.value = False
+                switch.value = True
+
+        self.assertEqual(
+            [call.args[0] for call in set_paused.call_args_list], [True, False]
+        )
+
+    async def test_status_run_now_starts_one_manual_run(self):
+        with patch.object(
+            background, "run_now", return_value="Mail job started"
+        ) as run_now:
+            async with self.app_user("/status") as user:
+                user.find(marker="run-now").click()
+                await user.should_see("Mail job started")
+
+        run_now.assert_called_once_with()
 
     async def test_navigation_header_keeps_height_and_shows_one_logo_per_state(self):
         async with self.app_user("/") as user:
