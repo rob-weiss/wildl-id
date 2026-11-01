@@ -348,6 +348,8 @@ class AutomaticLabelTests(unittest.TestCase):
             )
             with (
                 patch.object(sys, "argv", ["wildl_id.py", "--download"]),
+                patch.object(wildl_id, "MAIL_LOCK_PATH", root / "mail-job.lock"),
+                patch.object(wildl_id, "MAIL_PAUSE_PATH", root / "mail-job.paused"),
                 patch.object(wildl_id, "download_images", return_value=True),
                 patch.object(wildl_id, "DEFAULT_CSV", csv_path),
                 patch.object(wildl_id, "image_paths", return_value=paths),
