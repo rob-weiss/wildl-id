@@ -46,7 +46,11 @@ class BackgroundStatusTests(unittest.TestCase):
         self.plist.write_bytes(
             plistlib.dumps(
                 {
-                    "ProgramArguments": ["/env/python", "/repo/wildl_id.py", "--download"],
+                    "ProgramArguments": [
+                        "/env/python",
+                        "/repo/wildl_id.py",
+                        "--download",
+                    ],
                     "WorkingDirectory": str(self.root),
                     "StandardOutPath": str(self.stdout),
                     "StandardErrorPath": str(self.stderr),

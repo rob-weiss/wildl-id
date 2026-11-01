@@ -664,9 +664,7 @@ class LabelReviewTests(unittest.TestCase):
             ):
                 with self.subTest(mode=mode):
                     app.change_mode(mode)
-                    self.assertEqual(
-                        run_label.visible, mode.startswith("Latest model")
-                    )
+                    self.assertEqual(run_label.visible, mode.startswith("Latest model"))
 
     def test_unseen_mode_advances_after_labeling_removes_current_row(self):
         csv_path = Path(self.temp_dir.name) / "unseen.csv"
@@ -1094,9 +1092,7 @@ class LabelReviewTests(unittest.TestCase):
 
     def test_modes_select_rows_and_preserve_current_row(self):
         models_dir = Path(self.temp_dir.name) / "models"
-        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(
-            parents=True
-        )
+        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(parents=True)
         incorrect_dir = (
             models_dir.parent
             / "labels"
@@ -1135,9 +1131,7 @@ class LabelReviewTests(unittest.TestCase):
             )
 
         models_dir = Path(self.temp_dir.name) / "models"
-        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(
-            parents=True
-        )
+        (models_dir / "deepfaune_finetuned_20261020-191127_latest").mkdir(parents=True)
         incorrect_dir = (
             models_dir.parent
             / "labels"
@@ -1286,9 +1280,7 @@ class LabelReviewTests(unittest.TestCase):
 
         with (data_dir / "labels.csv").open(encoding="utf-8") as source:
             rows = list(csv.DictReader(source))
-        self.assertEqual(
-            [row["predicted_label"] for row in rows], ["", "fox", "fox"]
-        )
+        self.assertEqual([row["predicted_label"] for row in rows], ["", "fox", "fox"])
         self.assertEqual([path.name for path in data_dir.iterdir()], ["labels.csv"])
 
     def test_validation_results_are_read_from_training_data(self):

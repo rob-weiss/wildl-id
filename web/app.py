@@ -292,9 +292,9 @@ def status_page() -> None:
                     value=not background.mail_job_status().paused,
                     on_change=lambda event: job_control.set_paused(not event.value),
                 ).mark("automatic-runs")
-                ui.button(
-                    "Run now", icon="play_arrow", on_click=start_mail_job
-                ).props("no-caps").mark("run-now")
+                ui.button("Run now", icon="play_arrow", on_click=start_mail_job).props(
+                    "no-caps"
+                ).mark("run-now")
             mail_job_details()
         with ui.card().classes("w-full gap-1"):
             ui.label("Services").classes("font-medium")
@@ -321,17 +321,17 @@ def mail_job_details() -> None:
     if status.progress:
         done, total, remaining = status.progress
         ui.linear_progress(value=done / total, show_value=False)
-        ui.label(
-            f"Labelling {done} / {total} images · about {remaining} left"
-        ).classes("text-sm")
+        ui.label(f"Labelling {done} / {total} images · about {remaining} left").classes(
+            "text-sm"
+        )
     if status.events:
         ui.label("Latest run").classes("text-sm font-medium")
         for event in status.events:
             ui.label(event).classes("text-sm text-gray-700")
     if status.last_activity:
-        ui.label(
-            f"Last activity {status.last_activity:{DATE_FORMAT} %H:%M}"
-        ).classes("text-xs text-gray-600")
+        ui.label(f"Last activity {status.last_activity:{DATE_FORMAT} %H:%M}").classes(
+            "text-xs text-gray-600"
+        )
 
 
 @ui.refreshable

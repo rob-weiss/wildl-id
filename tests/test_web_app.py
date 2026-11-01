@@ -812,7 +812,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         exif = Image.Exif()
         exif[0x0132] = taken.strftime("%Y:%m:%d %H:%M:%S")
         Image.new("RGB", (800, 1200), "green").save(path, exif=exif)
-        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "portrait.jpg", "class": "fox"}])
+        self.write_csv(
+            ["location_id", "image_file", "class"],
+            [{"location_id": "camera1", "image_file": "portrait.jpg", "class": "fox"}],
+        )
         async with self.app_user("/") as user:
             images = user.find(kind=ui.interactive_image)
             thumbnail = next(iter(images.elements))
@@ -1071,7 +1074,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_home_shows_dates_as_day_month_year(self):
         taken = datetime.now() - timedelta(minutes=1)
         self.write_original_image("recent.jpg", taken)
-        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "recent.jpg", "class": "fox"}])
+        self.write_csv(
+            ["location_id", "image_file", "class"],
+            [{"location_id": "camera1", "image_file": "recent.jpg", "class": "fox"}],
+        )
         async with self.app_user("/") as user:
             await user.should_see(f"camera1 · {taken:%d-%m-%Y %H:%M}")
 
@@ -1738,7 +1744,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_and_viewer_toggle_bounding_boxes(self):
         self.write_original_image("fox.jpg", datetime.now() - timedelta(minutes=1))
-        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "fox.jpg", "class": "fox"}])
+        self.write_csv(
+            ["location_id", "image_file", "class"],
+            [{"location_id": "camera1", "image_file": "fox.jpg", "class": "fox"}],
+        )
         async with self.app_user("/") as user:
             toggle = next(iter(user.find(marker="recent-boxes").elements))
             self.assertEqual(toggle.props.get("aria-pressed"), "true")

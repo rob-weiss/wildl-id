@@ -83,7 +83,9 @@ def mail_job_status(
             done, total, remaining = matches[-1]
             if done != total:
                 progress = (int(done), int(total), remaining.strip())
-    modified = [path.stat().st_mtime for path in (stdout_path, stderr_path) if path.exists()]
+    modified = [
+        path.stat().st_mtime for path in (stdout_path, stderr_path) if path.exists()
+    ]
     return MailJobStatus(
         running_pid=running_pid,
         paused=job_control.is_paused(pause_path),

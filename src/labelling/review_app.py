@@ -334,9 +334,7 @@ class ReviewApp:
                             label: key for key, label in self.review.shortcuts.items()
                         }
                         for label in labels:
-                            caption = (
-                                f"{display_label(label)} [{shortcuts[label]}]"
-                            )
+                            caption = f"{display_label(label)} [{shortcuts[label]}]"
                             button = ui.button(
                                 caption,
                                 on_click=lambda label=label: self.choose_label(label),

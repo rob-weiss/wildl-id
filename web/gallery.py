@@ -350,7 +350,9 @@ def row_datetime(row):
 
 
 def recent_rows(rows, now=None):
-    return filter_rows(rows, GalleryFilter(labels=set(RECENT_SPECIES), hours=24), now=now)
+    return filter_rows(
+        rows, GalleryFilter(labels=set(RECENT_SPECIES), hours=24), now=now
+    )
 
 
 def shift_months(day, months):
