@@ -1427,6 +1427,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "class": "fox",
                     "manual_label": "badger",
                 },
+                {
+                    "location_id": "camera2",
+                    "image_file": "squirrel.jpg",
+                    "timestamp": f"{today}T13:00:00",
+                    "class": "squirrel",
+                },
             ],
         )
         with patch.dict(
@@ -1434,6 +1440,21 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
         ):
             async with self.app_user("/gallery") as user:
+                species = next(
+                    iter(user.find(kind=ui.select, content="Species").elements)
+                )
+                self.assertEqual(
+                    list(species.options),
+                    [
+                        f"only {label}"
+                        for label in (
+                            *sorted(gallery.RECENT_SPECIES),
+                            "human",
+                            "none",
+                            "unknown",
+                        )
+                    ],
+                )
                 user.find(kind=ui.select, content="Species").click()
                 await user.should_see("🦡 badger")
                 user.find("🦊 fox").click()

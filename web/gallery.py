@@ -1167,7 +1167,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
     locations = {nfc(row["location_id"]) for row in rows}
     species_options = {
         f"only {species}": display_label(species)
-        for species in sorted(labels, key=normalize_text)
+        for species in (*sorted(RECENT_SPECIES), "human", "none", "unknown")
     }
     location_options = {
         f"at {location}": location for location in sorted(locations, key=normalize_text)
