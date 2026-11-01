@@ -128,19 +128,15 @@ Direct Python launches may override the path with `WILDL_ID_CAMERA_LOCATIONS`.
 The **Hours** dropdown (1–10, default 3) sets the window length, and the slider
 selects its start within the next 24 hours. Each camera shows a dashed arc,
 drawn like the view sector, covering every direction the wind blows towards
-during the window (±10°); its radius reflects the maximum speed. Its colour is
-red when it overlaps the camera's view sector, green when it clears the view by
-more than 30° on both sides, and yellow otherwise (cameras without a view keep
-the strongest-wind colour). The list below gives each hour's speed,
-source direction and gusts.
+during the window (±10°) in grey; its radius reflects the maximum speed. The
+list below gives each hour's speed, source direction and gusts.
 Forecasts are cached for 15 minutes. The map needs internet access for tiles
 and wind.
 
 Optional `view_direction` (compass degrees) and `view_angle` (opening, degrees)
-draw each camera's view sector. Seats are ranked for the selected window
-by how much of the wind source sector (forecast direction
-±45°) lies in the view, so scent drifts away from the viewed area. Sectors are
-green (≥67 %), yellow (≥33 %) or red.
+draw each camera's view sector. The sector is red when the wind arc overlaps it,
+yellow when the smallest angular gap is up to 30°, and green when it is larger.
+The list ranks cameras for the selected window by that gap, smallest first.
 
 ## Predictions
 

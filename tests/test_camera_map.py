@@ -66,7 +66,7 @@ class CameraMapTests(unittest.TestCase):
         self.assertEqual(len(wind["A"]), 24)
         self.assertEqual(wind["A"][0].time.tzname(), "UTC")
 
-    def test_seats_rank_by_wind_from_viewed_area(self):
+    def test_seats_rank_by_gap_between_view_and_wind_arc(self):
         import pandas as pd
 
         def hours(direction):
@@ -76,40 +76,29 @@ class CameraMapTests(unittest.TestCase):
                 for h in range(24)
             ]
 
+        # Wind from 270 blows towards 90; the arc spans 80..100.
         upwind = camera_map.Camera("Upwind", 48.6, 9.0, 270, 60)
         side = camera_map.Camera("Side", 48.6, 9.0, 0, 90)
         downwind = camera_map.Camera("Downwind", 48.6, 9.0, 90, 60)
         blind = camera_map.Camera("Blind", 48.6, 9.0)
         wind = {name: hours(270) for name in ("Upwind", "Side", "Downwind", "Blind")}
-        ranking = camera_map.rank_seats([downwind, side, blind, upwind], wind, 0)
+        ranking = camera_map.rank_seats([upwind, side, blind, downwind], wind, 0)
         self.assertEqual(
             [camera.location_id for camera, _ in ranking],
-            ["Upwind", "Downwind", "Side"],
+            ["Downwind", "Side", "Upwind"],
         )
-        self.assertEqual([round(score, 2) for _, score in ranking], [1.0, 0.0, 0.0])
+        self.assertEqual([gap for _, gap in ranking], [0.0, 35.0, 140.0])
 
-        wind["Side"] = hours(0)
-        wind["Side"][2] = camera_map.WindHour(wind["Side"][2].time, 10, 180, 15)
-        self.assertAlmostEqual(
-            dict(camera_map.rank_seats([side], wind, 0))[side], 2 / 3
-        )
-        self.assertEqual(dict(camera_map.rank_seats([side], wind, 3))[side], 1.0)
-        self.assertEqual(
-            dict(camera_map.rank_seats([side], wind, 0, hours=2))[side], 1.0
-        )
-        self.assertAlmostEqual(
-            dict(camera_map.rank_seats([side], wind, 0, hours=6))[side], 5 / 6
-        )
-
-    def test_arc_colour_by_clearance_from_view(self):
-        red, yellow, green = "#ef4444", "#facc15", "#22c55e"
-        # View 0 +-30 deg, arc width 40 (+-20): edges at 30 and centre-20.
-        self.assertEqual(camera_map.arc_colour(0, 60, 40, 40), red)
-        self.assertEqual(camera_map.arc_colour(0, 60, 70, 40), yellow)
-        self.assertEqual(camera_map.arc_colour(0, 60, 180, 40), green)
-        self.assertEqual(camera_map.arc_colour(0, 60, 320, 40), red)
-        # Clear by 30 on one side but only 20 on the other.
-        self.assertEqual(camera_map.arc_colour(0, 180, 235, 20), yellow)
+    def test_arc_colour_by_distance(self):
+        red, yellow, green, grey = "#ef4444", "#facc15", "#22c55e", "#e5e7eb"
+        self.assertEqual(camera_map.arc_distance(0, 60, 40, 40), 0.0)
+        self.assertEqual(camera_map.arc_distance(0, 60, 320, 40), 0.0)
+        self.assertEqual(camera_map.arc_distance(0, 60, 70, 40), 20.0)
+        self.assertEqual(camera_map.arc_distance(0, 60, 180, 40), 130.0)
+        self.assertEqual(camera_map.arc_colour(0), red)
+        self.assertEqual(camera_map.arc_colour(30), yellow)
+        self.assertEqual(camera_map.arc_colour(30.5), green)
+        self.assertEqual(camera_map.arc_colour(None), grey)
 
     def test_downwind_sector_covers_all_selected_hours(self):
         import pandas as pd

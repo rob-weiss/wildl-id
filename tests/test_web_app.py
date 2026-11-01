@@ -485,8 +485,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/map") as user:
                 await user.should_see("Camera map")
                 await user.should_see(
-                    "Each camera's arc shows where the wind blows over the selected "
-                    "hours; red overlaps the view, yellow is close, green clears it by 30°."
+                    "The grey arc shows where the wind blows over the selected hours. "
+                    "The view sector is red when the arc overlaps it, yellow when "
+                    "within 30°, green when further away."
                 )
                 await user.should_see("Missing coordinates")
                 await user.should_see(
@@ -564,15 +565,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             patch.object(camera_map, "fetch_wind", return_value=wind),
         ):
             async with self.app_user("/map") as user:
-                await user.should_see("Best seats 13:00-16:00")
+                await user.should_see("Seats 13:00-16:00")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
                 self.assertEqual(kinds.count("polygon"), 4)
                 hours = next(iter(user.find(marker="wind-hours").elements))
                 hours.set_value(5)
-                await user.should_see("Best seats 13:00-18:00")
+                await user.should_see("Seats 13:00-18:00")
                 hours.set_value(3)
-                await user.should_see("Best seats 13:00-16:00")
+                await user.should_see("Seats 13:00-16:00")
 
                 def ranking():
                     return [
@@ -583,12 +584,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         )
                     ]
 
-                self.assertTrue(ranking()[0].startswith("1. 100% · West"))
+                self.assertTrue(ranking()[0].startswith("1. 0° · East"))
                 slider = next(iter(user.find(marker="wind-hour").elements))
                 self.assertEqual(slider.props["max"], 21)
                 slider.set_value(5)
-                await user.should_see("Best seats 18:00-21:00")
-                self.assertTrue(ranking()[0].startswith("1. 100% · East"))
+                await user.should_see("Seats 18:00-21:00")
+                self.assertTrue(ranking()[0].startswith("1. 0° · West"))
                 self.assertEqual(
                     [layer.to_dict()["type"] for layer in leaflet.layers].count(
                         "polygon"

@@ -53,9 +53,9 @@ _wind_cache: dict[tuple, tuple[float, dict]] = {}
 _wind_cache_lock = threading.Lock()
 RANKING_HOURS = 3
 RANKING_HOUR_OPTIONS = range(1, 11)
-WIND_SPREAD = 45.0
 WIND_ARC_PADDING = 10.0
 ARC_CLEARANCE = 30.0
+WIND_ARC_COLOUR = "#9ca3af"
 VIEW_RADIUS = 120.0
 
 
@@ -203,16 +203,6 @@ def downwind_sector(hours: list[WindHour]) -> tuple[float, float]:
     return (start + width / 2) % 360, min(360.0, width + 2 * WIND_ARC_PADDING)
 
 
-def wind_colour(speed: float) -> str:
-    if speed < 10:
-        return "#7dd3fc"
-    if speed < 20:
-        return "#facc15"
-    if speed < 35:
-        return "#fb923c"
-    return "#ef4444"
-
-
 def compass(direction: float) -> str:
     return COMPASS[round(direction / 22.5) % 16]
 
@@ -243,46 +233,21 @@ def initial_view(
     return center, max(3, min(18, zoom))
 
 
-def sector_overlap(
-    center_a: float, width_a: float, center_b: float, width_b: float
-) -> float:
-    """Degrees shared by two compass sectors, sampled at one-degree steps."""
-
-    def inside(bearing, center, width):
-        return abs((bearing - center + 180) % 360 - 180) <= width / 2
-
-    return float(
-        sum(
-            inside(bearing + 0.5, center_a, width_a)
-            and inside(bearing + 0.5, center_b, width_b)
-            for bearing in range(360)
-        )
-    )
-
-
-def arc_colour(
+def arc_distance(
     view_direction: float, view_angle: float, center: float, width: float
-) -> str:
-    """Red if the wind arc overlaps the view, green if clear by 30 degrees on both sides."""
+) -> float:
+    """Smallest angular gap between two sectors in degrees; 0 when they overlap."""
     offset = (center - view_direction) % 360
     half_sum = (view_angle + width) / 2
-    if offset <= half_sum or 360 - offset <= half_sum:
+    return max(0.0, min(offset, 360 - offset) - half_sum)
+
+
+def arc_colour(distance: float | None) -> str:
+    if distance is None:
+        return "#e5e7eb"
+    if distance <= 0:
         return "#ef4444"
-    if offset - half_sum > ARC_CLEARANCE and 360 - offset - half_sum > ARC_CLEARANCE:
-        return "#22c55e"
-    return "#facc15"
-
-
-def wind_match(camera: Camera, hours: list[WindHour]) -> float:
-    # Wind blowing from the viewed area carries the hunter's scent away from game.
-    window = min(camera.view_angle, 2 * WIND_SPREAD)
-    return sum(
-        sector_overlap(
-            camera.view_direction, camera.view_angle, hour.direction, 2 * WIND_SPREAD
-        )
-        / window
-        for hour in hours
-    ) / len(hours)
+    return "#22c55e" if distance > ARC_CLEARANCE else "#facc15"
 
 
 def rank_seats(
@@ -291,12 +256,16 @@ def rank_seats(
     index: int,
     hours: int = RANKING_HOURS,
 ) -> list[tuple[Camera, float]]:
-    ranked = [
-        (camera, wind_match(camera, forecast[index : index + hours]))
-        for camera in cameras
-        if camera.has_view and (forecast := wind.get(camera.location_id))
-    ]
-    return sorted(ranked, key=lambda item: (-item[1], item[0].location_id))
+    ranked = []
+    for camera in cameras:
+        forecast = wind.get(camera.location_id, [])[index : index + hours]
+        if camera.has_view and forecast:
+            center, width = downwind_sector(forecast)
+            distance = arc_distance(
+                camera.view_direction, camera.view_angle, center, width
+            )
+            ranked.append((camera, distance))
+    return sorted(ranked, key=lambda item: (item[1], item[0].location_id))
 
 
 def sector_polygon(
@@ -322,16 +291,6 @@ def view_polygon(camera: Camera) -> list[list[float]]:
         camera.view_angle,
         VIEW_RADIUS,
     )
-
-
-def match_colour(score: float | None) -> str:
-    if score is None:
-        return "#e5e7eb"
-    if score >= 0.67:
-        return "#22c55e"
-    if score >= 0.33:
-        return "#facc15"
-    return "#ef4444"
 
 
 async def build_camera_map_page() -> None:
@@ -403,8 +362,9 @@ async def build_camera_map_page() -> None:
                 .mark("wind-hours")
             )
         ui.label(
-            "Each camera's arc shows where the wind blows over the selected "
-            "hours; red overlaps the view, yellow is close, green clears it by 30°."
+            "The grey arc shows where the wind blows over the selected hours. "
+            "The view sector is red when the arc overlaps it, yellow when "
+            "within 30°, green when further away."
         ).classes("text-sm text-gray-600")
         wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
         missing = [camera.location_id for camera in cameras if not camera.located]
@@ -431,10 +391,10 @@ async def build_camera_map_page() -> None:
         window = int(hours_select.value)
         hour_label.set_text("")
         ranking = rank_seats(located, state["wind"], index, window)
-        scores = {camera.location_id: score for camera, score in ranking}
+        distances = {camera.location_id: gap for camera, gap in ranking}
         for camera in located:
             if camera.has_view:
-                colour = match_colour(scores.get(camera.location_id))
+                colour = arc_colour(distances.get(camera.location_id))
                 state["arrows"].append(
                     leaflet.generic_layer(
                         name="polygon",
@@ -465,11 +425,6 @@ async def build_camera_map_page() -> None:
                 continue
             center, width = downwind_sector(forecast)
             max_speed = max(hour.speed for hour in forecast)
-            colour = (
-                arc_colour(camera.view_direction, camera.view_angle, center, width)
-                if camera.has_view
-                else wind_colour(max(hour.speed for hour in forecast))
-            )
             state["arrows"].append(
                 leaflet.generic_layer(
                     name="polygon",
@@ -482,10 +437,10 @@ async def build_camera_map_page() -> None:
                             max(40.0, max_speed * 15),
                         ),
                         {
-                            "color": colour,
+                            "color": WIND_ARC_COLOUR,
                             "weight": 2,
                             "dashArray": "6 4",
-                            "fillColor": colour,
+                            "fillColor": WIND_ARC_COLOUR,
                             "fillOpacity": 0.35,
                             "interactive": False,
                         },
@@ -514,12 +469,12 @@ async def build_camera_map_page() -> None:
                     )
                 )
                 ui.label(
-                    f"Best seats {first:%H:%M}-{last:%H:%M}: wind from the viewed area"
+                    f"Seats {first:%H:%M}-{last:%H:%M}: gap between view and wind arc"
                 ).classes("font-medium")
-                for rank, (camera, score) in enumerate(ranking, 1):
+                for rank, (camera, gap) in enumerate(ranking, 1):
                     selected_hour = state["wind"][camera.location_id][index]
                     ui.label(
-                        f"{rank}. {score:.0%} · "
+                        f"{rank}. {gap:.0f}° · "
                         f"{wind_text(camera, selected_hour)} "
                         f"· view "
                         f"{compass(camera.view_direction)} {camera.view_angle:.0f}°"
