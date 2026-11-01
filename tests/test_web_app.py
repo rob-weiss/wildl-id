@@ -692,6 +692,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     iter(user.find(kind=ui.label, content="5 images").elements)
                 )
                 self.assertEqual(full_gallery_link.props.get("href"), "/gallery")
+                review_link = next(
+                    iter(user.find(marker="recent-review-labels").elements)
+                )
+                self.assertEqual(review_link.text, "Review labels")
+                self.assertEqual(review_link.props.get("href"), "/review")
+                self.assertIs(review_link.parent_slot, full_gallery_link.parent_slot)
                 self.assertLess(summary.id, full_gallery_link.id)
                 self.assertLess(full_gallery_link.id, status.id)
                 user.find(marker="recent-species-fox").click()
@@ -758,7 +764,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("(1)", unlabelled.text)
                 user.find(marker="recent-species-unknown").click()
                 await user.should_see("1 images")
-                await user.should_see("Manual: ❓ unknown")
+                await user.should_see("❓ unknown")
 
     async def test_home_preserves_portrait_image_ratio_in_thumbnail_and_viewer(self):
         taken = datetime.now() - timedelta(minutes=1)
@@ -914,8 +920,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 timer.call_args_list[0].args[1]()
                 await user.should_see("1 images")
-                await user.should_see("Manual:")
-                await user.should_see("Automatic:")
+                await user.should_see("🦡 badger")
+                await user.should_not_see("Automatic:")
                 self.assertFalse(
                     any(
                         label.text == "Unlabelled"
@@ -1021,8 +1027,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with self.app_user("/") as user:
                 await user.should_see("1 images")
-                await user.should_see("Manual:")
-                await user.should_see("Automatic:")
+                await user.should_see("🦡 badger")
+                await user.should_not_see("Manual:")
+                await user.should_not_see("🦊 fox")
 
     async def test_home_shows_box_without_inventing_labels(self):
         self.write_csv(
@@ -1230,10 +1237,32 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             patch.object(web_app, "DEFAULT_CSV", human_csv),
         ):
             async with self.app_user("/gallery") as user:
-                await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
-                await user.should_not_see("Automatic: 🐇 hare")
+                await user.should_see("🦊 fox")
+                await user.should_not_see("Automatic:")
                 user.find(kind=ui.image, content="fox.jpg").click()
                 await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
+                await user.should_not_see("Automatic: 🐇 hare")
+
+    async def test_gallery_viewer_states_single_label_when_labels_agree(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "timestamp": "2025-01-01T00:00:00",
+                    "class": "fox",
+                    "manual_label": "fox",
+                }
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/gallery") as user:
+                user.find(kind=ui.image, content="fox.jpg").click()
+                await user.should_see("1 / 1 · 🦊 fox · camera1")
+                await user.should_not_see("Manual:")
 
     async def test_gallery_example_applies_filter(self):
         self.write_csv(

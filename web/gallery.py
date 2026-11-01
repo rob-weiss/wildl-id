@@ -749,13 +749,27 @@ def rows_with_originals(rows, local_images):
     return merged
 
 
+def _manual_and_automatic(row):
+    manual = (row.get("manual_label") or "").strip()
+    automatic = (row.get("class") or "").strip()
+    if automatic.casefold() == "unknown":
+        automatic = ""
+    return manual, automatic
+
+
+def preferred_label(row):
+    manual, automatic = _manual_and_automatic(row)
+    label = manual or automatic
+    return display_label(label) if label else "Unlabelled"
+
+
 def annotation_labels(row):
-    labels = []
-    for title, column in (("Manual", "manual_label"), ("Automatic", "class")):
-        label = (row.get(column) or "").strip()
-        if label and (title == "Manual" or label.casefold() != "unknown"):
-            labels.append(f"{title}: {display_label(label)}")
-    return " · ".join(labels) or "Unlabelled"
+    manual, automatic = _manual_and_automatic(row)
+    if manual and automatic and normalize_text(manual) != normalize_text(automatic):
+        return (
+            f"Manual: {display_label(manual)} · Automatic: {display_label(automatic)}"
+        )
+    return preferred_label(row)
 
 
 def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=False):
@@ -792,7 +806,7 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
         image.on("click", on_click)
         with ui.card_section().classes("p-2"):
             ui.label(
-                annotation_labels(row) if detailed else display_label(row_label(row))
+                preferred_label(row) if detailed else display_label(row_label(row))
             ).classes("font-medium")
             ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
 
@@ -1005,7 +1019,9 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
         species_summary = (
             ui.label().classes("text-sm text-gray-700").mark("recent-species-summary")
         )
-        ui.link("View full gallery", "/gallery").mark("recent-full-gallery")
+        with ui.row().classes("items-center gap-4"):
+            ui.link("View full gallery", "/gallery").mark("recent-full-gallery")
+            ui.link("Review labels", "/review").mark("recent-review-labels")
         status = ui.label().classes("text-sm text-gray-600")
         grid = ui.grid(
             columns="repeat(auto-fit, minmax(min(100%, 220px), 1fr))"
