@@ -1129,7 +1129,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
 
 
 def build_gallery_page(
-    csv_path, images_dir=IMAGES_DIR, image_base_url=None, today=None
+    csv_path, images_dir=None, image_base_url=None, today=None
 ):
     ui.label("Gallery").classes("text-xl font-semibold")
     try:
@@ -1139,8 +1139,9 @@ def build_gallery_page(
         ui.label(str(error))
         return
 
-    images_dir = Path(images_dir)
+    images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
     local_images = image_paths(images_dir)
+    rows = rows_with_originals(rows, local_images)
     labels = {
         str(value).strip()
         for row in rows

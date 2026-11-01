@@ -924,6 +924,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(gallery.row_datetime(rows[0]), taken)
 
+    async def test_gallery_shows_new_photos_without_label_rows(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "labelled.jpg",
+                    "timestamp": "2026-10-01T12:00:00",
+                    "class": "fox",
+                }
+            ],
+        )
+        self.write_original_image("labelled.jpg", datetime(2026, 10, 1, 12))
+        self.write_original_image("new-arrival.jpg", datetime.now())
+        async with self.app_user("/gallery") as user:
+            await user.should_see("2 images · all images")
+            await user.should_see("Unlabelled")
+
     async def test_home_shows_photos_without_csv_and_does_not_create_labels(self):
         self.write_original_image("recent.jpg", datetime.now() - timedelta(minutes=1))
         async with self.app_user("/") as user:
