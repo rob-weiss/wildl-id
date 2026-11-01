@@ -644,48 +644,65 @@ class ReviewApp:
     async def confirm_remove_empty(self):
         if self.cleanup_dialog_open or self.auto_label_running:
             return
-        count = sum(is_confirmed_empty(row) for row in self.review.rows)
-        if not count:
-            ui.notify("No confirmed empty images to remove")
+        no_detection = sum(is_confirmed_empty(row) for row in self.review.rows)
+        human_none = sum(
+            is_confirmed_empty(row, include_false_detections=True)
+            for row in self.review.rows
+        )
+        if not human_none:
+            ui.notify("No images labelled none to remove")
             return
         with ui.dialog().props("persistent") as dialog, ui.card():
-            ui.label(f"Remove {count} confirmed empty images?").classes(
-                "text-lg font-semibold"
-            )
+            ui.label("Remove images labelled none?").classes("text-lg font-semibold")
+            ui.label(
+                f"{no_detection} have no detection (human and model: none). "
+                f"{human_none - no_detection} more are false detections "
+                "(human: none, model: an animal or no prediction yet)."
+            ).classes("max-w-md")
             ui.label(
                 "Original and annotated images will be permanently deleted. "
                 "The CSV will be backed up and deleted paths logged."
             ).classes("max-w-md")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                ui.button("Cancel", on_click=lambda: dialog.submit(None)).props(
                     "flat no-caps"
                 )
                 ui.button(
-                    "Remove empty",
+                    f"Only no detection ({no_detection})",
                     icon="delete_sweep",
                     color="negative",
-                    on_click=lambda: dialog.submit(True),
+                    on_click=lambda: dialog.submit("no-detection"),
+                ).props("outline no-caps").set_enabled(bool(no_detection))
+                ui.button(
+                    f"Also false detections ({human_none})",
+                    icon="delete_forever",
+                    color="negative",
+                    on_click=lambda: dialog.submit("false-detections"),
                 ).props("no-caps")
         self.cleanup_dialog_open = True
         try:
-            if await dialog:
+            choice = await dialog
+            if choice:
                 dialog.clear()
                 with dialog, ui.card():
                     ui.spinner()
                     ui.label("Removing empty images...")
                 dialog.open()
-                await self.remove_empty()
+                await self.remove_empty(
+                    include_false_detections=choice == "false-detections"
+                )
         finally:
             self.cleanup_dialog_open = False
             dialog.delete()
 
-    async def remove_empty(self):
+    async def remove_empty(self, include_false_detections=False):
         try:
             count = await run.io_bound(
                 remove_empty_images,
                 csv_path=self.review.csv_path,
                 annotated_dir=self.review.images_dir,
                 expected_bytes=self.review.original_bytes,
+                include_false_detections=include_false_detections,
             )
             updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
             updated_review.set_mode(self.review.mode)

@@ -1,11 +1,15 @@
-"""Delete images confirmed empty by a human (class == "none" and manual_label == "none").
+"""Delete images a human labelled empty.
+
+By default only images where the model also found nothing (class and manual_label
+are both "none") are removed. --include-false-detections also removes images a
+human labelled "none" whatever the model predicted.
 
 Removes the original image in images/<year>/<location>/, its annotated image and
 its row in the detection CSV. Deleted paths are written to logs/ and the CSV is
 backed up before it is rewritten.
 
 Usage:
-    uv run src/labelling/remove_empty_images.py [--dry-run]
+    uv run src/labelling/remove_empty_images.py [--dry-run] [--include-false-detections]
 """
 
 import argparse
@@ -47,10 +51,10 @@ except ImportError:
 EMPTY_LABEL = "none"
 
 
-def is_confirmed_empty(row):
-    return (row.get("class") or "").strip() == EMPTY_LABEL and (
-        row.get("manual_label") or ""
-    ).strip() == EMPTY_LABEL
+def is_confirmed_empty(row, include_false_detections=False):
+    if (row.get("manual_label") or "").strip() != EMPTY_LABEL:
+        return False
+    return include_false_detections or (row.get("class") or "").strip() == EMPTY_LABEL
 
 
 def annotated_paths(removed, annotated_dir=None):
@@ -74,7 +78,12 @@ def format_size(size):
 
 
 def remove_empty_images(
-    dry_run=False, *, csv_path=None, annotated_dir=None, expected_bytes=None
+    dry_run=False,
+    *,
+    csv_path=None,
+    annotated_dir=None,
+    expected_bytes=None,
+    include_false_detections=False,
 ):
     csv_path = Path(csv_path) if csv_path is not None else CSV_PATH
     if not csv_path.exists():
@@ -97,7 +106,7 @@ def remove_empty_images(
         label_data.load_rows(csv_path) if csv_path.name == "human_labels.csv" else rows
     )
     for row in review_rows:
-        if is_confirmed_empty(row):
+        if is_confirmed_empty(row, include_false_detections):
             removed.add((nfc(row["location_id"]), row["image_file"]))
     kept = [
         row
@@ -169,8 +178,15 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true", help="report planned changes only"
     )
+    parser.add_argument(
+        "--include-false-detections",
+        action="store_true",
+        help="also remove images labelled none by a human but not by the model",
+    )
     args = parser.parse_args()
-    remove_empty_images(args.dry_run)
+    remove_empty_images(
+        args.dry_run, include_false_detections=args.include_false_detections
+    )
 
 
 if __name__ == "__main__":

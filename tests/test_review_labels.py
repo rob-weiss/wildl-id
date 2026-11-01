@@ -104,6 +104,21 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertEqual([row["image_file"] for row in logged], ["empty.jpg"])
         self.assertEqual(self.default_csv.read_bytes(), b"do not change")
 
+    def test_remove_empty_can_include_false_detections(self):
+        count = empty_images_module.remove_empty_images(
+            csv_path=self.csv_path,
+            annotated_dir=self.annotated_dir,
+            include_false_detections=True,
+        )
+
+        self.assertEqual(count, 2)
+        for name, kept in zip(self.names, (False, True, False, True)):
+            self.assertEqual((self.original_dir / name).exists(), kept, name)
+        _, rows = empty_images_module.read_csv(self.csv_path)
+        self.assertEqual(
+            [row["image_file"] for row in rows], ["unseen.jpg", "animal.jpg"]
+        )
+
     def test_remove_empty_supports_human_only_csv_and_hides_deleted_predictions(self):
         data = import_module("src.labelling.label_data")
         human = self.root / "labels/human_labels.csv"
@@ -210,11 +225,15 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         app = self.build_app()
         before = self.csv_path.read_bytes()
 
-        for confirmed in (False, True):
+        for choice, expected in (
+            (None, None),
+            ("no-detection", False),
+            ("false-detections", True),
+        ):
 
             async def answer():
                 self.assertTrue(app.cleanup_dialog_open)
-                return confirmed
+                return choice
 
             async def confirm():
                 with app.remove_empty_button.parent_slot.parent:
@@ -229,10 +248,34 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
             ):
                 asyncio.run(confirm())
-                self.assertEqual(remove.await_count, int(confirmed))
+                if expected is None:
+                    remove.assert_not_awaited()
+                else:
+                    remove.assert_awaited_once_with(include_false_detections=expected)
                 self.assertFalse(app.cleanup_dialog_open)
         self.assertEqual(self.csv_path.read_bytes(), before)
         self.assertTrue((self.original_dir / "empty.jpg").exists())
+
+    def test_gui_remove_empty_offers_both_counts(self):
+        app = self.build_app()
+
+        async def answer():
+            return None
+
+        async def confirm():
+            with app.remove_empty_button.parent_slot.parent:
+                await app.confirm_remove_empty()
+
+        with patch.object(
+            review_app_module.ui.dialog,
+            "__await__",
+            lambda dialog: answer().__await__(),
+        ), patch.object(review_app_module.ui, "button", wraps=review_app_module.ui.button) as button:
+            asyncio.run(confirm())
+
+        captions = [call.args[0] for call in button.call_args_list if call.args]
+        self.assertIn("Only no detection (1)", captions)
+        self.assertIn("Also false detections (2)", captions)
 
     def test_gui_remove_empty_reports_stale_csv_without_deleting_images(self):
         app = self.build_app()

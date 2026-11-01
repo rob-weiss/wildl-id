@@ -61,8 +61,9 @@ The container can write human annotations and their `.before-review.bak` backup.
 Readers join human annotations with metadata and the latest completed model's
 predictions; missing automatic predictions never fall back to an older model.
 Original and annotated images are writable so the Review page's **Remove empty**
-action can run after explicit confirmation. It removes only human-confirmed empty
-images, backs up the annotation CSV, logs deleted paths under the writable `logs/`
+action can run after explicit confirmation. It asks whether to remove only
+images with no detection (human and model both `none`) or also false detections
+(human `none`, model an animal or no prediction yet), backs up the annotation CSV, logs deleted paths under the writable `logs/`
 mount, and records removals in `labels/deleted_images.csv` so old predictions
 do not reappear when inference refreshes image metadata.
 Model files remain read-only. The app does not mount `data/`, credentials, or the

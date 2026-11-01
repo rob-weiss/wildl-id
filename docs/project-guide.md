@@ -131,12 +131,18 @@ By default, the reviewer uses the MegaDetector V6 yolov10-e and DeepFaune labels
 
 ### Remove Confirmed-Empty Images
 
-Delete images confirmed as empty (`class` and `manual_label` both `none`):
+Delete images confirmed as empty (`class` and `manual_label` both `none`). Add
+`--include-false-detections` to also delete images a human labelled `none` when
+the model predicted an animal or has not labelled them yet:
 
 ```bash
 uv run src/labelling/remove_empty_images.py --dry-run
 uv run src/labelling/remove_empty_images.py
+uv run src/labelling/remove_empty_images.py --include-false-detections
 ```
+
+The Review page's **Remove empty** button asks which of the two to delete and
+shows how many images each choice affects.
 
 The original photos, annotated images, and CSV rows are removed. The CSV is backed up
 first; deleted paths are written to the ignored `logs/` directory.
