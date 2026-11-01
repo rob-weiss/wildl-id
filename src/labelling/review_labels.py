@@ -249,11 +249,7 @@ class LabelReview:
             if (nfc(location_id), image_file) in existing_images:
                 continue
             row = dict.fromkeys(self.columns, "")
-            row.update(
-                location_id=location_id,
-                image_file=image_file,
-                **{"class": "unknown"},
-            )
+            row.update(location_id=location_id, image_file=image_file)
             self.rows.append(row)
         self.latest_model_name, self.latest_incorrect_filenames = (
             latest_incorrect_predictions()
@@ -600,7 +596,9 @@ class LabelReview:
 
     def accept(self):
         if self.position < len(self.pending):
-            self.record(self.rows[self.pending[self.position]]["class"])
+            label = self.rows[self.pending[self.position]]["class"]
+            if label.strip():
+                self.record(label)
 
     def edit(self):
         if self.position < len(self.pending):

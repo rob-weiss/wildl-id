@@ -374,7 +374,7 @@ class LabelReviewTests(unittest.TestCase):
             row = review.rows[3]
             self.assertEqual(row["image_file"], "download.jpg")
             self.assertEqual(row["manual_label"], "")
-            self.assertEqual(row["class"], "unknown")
+            self.assertEqual(row["class"], "")
             self.assertEqual(review.original_path(row), original)
             self.assertEqual(self.csv_path.read_bytes(), before)
 
@@ -904,6 +904,20 @@ class LabelReviewTests(unittest.TestCase):
         app.accept()
 
         self.assertEqual(chosen, ["song bird"])
+
+    def test_accept_without_prediction_saves_nothing(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        app.current_index = 0
+        app.review.rows[0]["class"] = ""
+        app.review.latest_predictions = {}
+        chosen = []
+        app.choose_label = chosen.append
+
+        with patch.object(review_app_module.ui, "notify") as notify:
+            app.accept()
+
+        self.assertEqual(chosen, [])
+        notify.assert_called_once()
 
     def test_space_shortcut_accepts_current_prediction(self):
         app = review_app_module.ReviewApp(self.csv_path)

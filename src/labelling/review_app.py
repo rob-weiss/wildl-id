@@ -570,6 +570,9 @@ class ReviewApp:
             row = self.review.rows[self.current_index]
             prediction = self.prediction_for_row(row)
             label = prediction["predicted_label"] if prediction else row["class"]
+            if not label.strip():
+                ui.notify("No prediction yet; choose a label instead", type="warning")
+                return
             self.choose_label(label)
 
     def save_custom_label(self):
