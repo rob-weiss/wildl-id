@@ -233,7 +233,7 @@ class ReviewApp:
                 self.run_label = ui.label(run_name).classes("text-sm text-gray-600")
                 self.mode_select = (
                     ui.select(
-                        list(MODE_OPTIONS[:2]),
+                        list(MODE_OPTIONS[:3]),
                         value=self.review.mode,
                         label="Review mode",
                         on_change=lambda event: self.change_mode(event.value),
@@ -362,7 +362,7 @@ class ReviewApp:
         return annotated if annotated.is_file() else None
 
     def refresh(self):
-        self.run_label.set_visibility(self.review.mode == "Latest model incorrect")
+        self.run_label.set_visibility(self.review.mode.startswith("Latest model"))
         self.undo_button.set_enabled(bool(self.review.history))
         if not self.review.pending:
             self.current_index = None

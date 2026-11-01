@@ -7,18 +7,16 @@ stays frozen, which suits the small number of manual labels.
 Each run writes to models/deepfaune_finetuned_<date>_<git hash>/:
 - weights.pt          state dict plus class names, git hash, date and hyperparameters
 - metadata.json       the same metadata without the weights, plus training history
-- training_data/      the exact crops used for training and validation, with labels.csv
+- training_data/      the exact crops used for training and validation, with labels.csv;
+                      its `predicted_label` column holds the validation predictions
+                      that the web review page lists as correct or incorrect
 - confusion_matrix.svg  validation counts for the best model, with class labels
 - finetune_classifier.py and git_diff.patch (if the work tree was dirty)
-
-Validation predictions and rendered images are written to
-labels/labels_<run>/validation_predictions/.
 
 Usage:
     uv run src/labelling/finetune_classifier.py
 """
 
-import csv
 import json
 import random
 import shutil
@@ -33,7 +31,7 @@ import timm
 import torch
 from matplotlib import rc_context
 from matplotlib.figure import Figure
-from PIL import Image, ImageDraw
+from PIL import Image
 from PytorchWildlife.models.classification import DeepfauneClassifier
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -247,87 +245,15 @@ def export_training_data(df, data_dir):
     return crop_paths
 
 
-def save_validation_predictions(rows, targets, predictions, class_names, output_dir):
-    output_dir.mkdir(parents=True, exist_ok=True)
-    prediction_rows = []
-    for row, target, prediction in tqdm(
-        zip(rows.itertuples(), targets, predictions, strict=True),
-        total=len(rows),
-        desc="Saving validation images",
-    ):
-        is_correct = target == prediction
-        status = "correct" if is_correct else "incorrect"
-        color = (46, 125, 50) if is_correct else (198, 40, 40)
-        prediction_rows.append(
-            {
-                "location_id": row.location_id,
-                "image_file": row.image_file,
-                "true_label": class_names[target],
-                "predicted_label": class_names[prediction],
-                "status": status,
-            }
-        )
-        label = f"True: {class_names[target]} | Predicted: {class_names[prediction]}"
-        image_path = Path(row.image_path)
-        output_path = output_dir / status / f"{row.location_id}_{row.image_file}"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with Image.open(image_path) as source:
-            image = source.convert("RGB")
-        draw = ImageDraw.Draw(image)
-        label_bounds = draw.textbbox((0, 0), label)
-        label_width = int(label_bounds[2] - label_bounds[0])
-        label_height = int(label_bounds[3] - label_bounds[1])
-        label_left, label_top = 6, 6
-        try:
-            box = literal_eval(row.box)
-            if (
-                isinstance(box, (list, tuple))
-                and len(box) == 4
-                and all(0 <= value <= 1 for value in box)
-            ):
-                x_center, y_center, width, height = box
-                left = max(0, int((x_center - width / 2) * image.width))
-                top = max(0, int((y_center - height / 2) * image.height))
-                right = min(image.width - 1, int((x_center + width / 2) * image.width))
-                bottom = min(
-                    image.height - 1, int((y_center + height / 2) * image.height)
-                )
-                if right > left and bottom > top:
-                    draw.rectangle((left, top, right, bottom), outline=color, width=2)
-                    label_left = left
-                    label_top = max(0, top - label_height - 6)
-        except (ValueError, SyntaxError, TypeError):
-            pass
-        label_left = min(label_left, max(0, image.width - label_width - 6))
-        label_top = min(label_top, max(0, image.height - label_height - 6))
-        draw.rectangle(
-            (
-                label_left,
-                label_top,
-                label_left + label_width + 6,
-                label_top + label_height + 6,
-            ),
-            fill=color,
-        )
-        draw.text((label_left + 3, label_top + 3), label, fill="white")
-        image.save(output_path, quality=95)
-
-    with (output_dir / "predictions.csv").open(
-        "w", newline="", encoding="utf-8"
-    ) as target:
-        writer = csv.DictWriter(
-            target,
-            fieldnames=[
-                "location_id",
-                "image_file",
-                "true_label",
-                "predicted_label",
-                "status",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(prediction_rows)
+def save_validation_predictions(data_dir, predictions, class_names):
+    """Record each validation prediction in the training-data table."""
+    labels_path = data_dir / "labels.csv"
+    labels = pd.read_csv(labels_path, dtype=str, keep_default_na=False)
+    labels["predicted_label"] = ""
+    labels.loc[labels["split"] == "val", "predicted_label"] = [
+        class_names[prediction] for prediction in predictions
+    ]
+    labels.to_csv(labels_path, index=False)
 
 
 def save_confusion_matrix(targets, predictions, class_names, output_path):
@@ -533,11 +459,7 @@ def main():
     save_confusion_matrix(targets, preds, class_names, confusion_matrix_path)
     print(f"Validation confusion matrix saved to {confusion_matrix_path}")
     val_df = df[~train_mask]
-    validation_images_dir = label_data.validation_predictions_dir(REPO_DIR, run_name)
-    save_validation_predictions(
-        val_df, targets, preds, class_names, validation_images_dir
-    )
-    print(f"Validation prediction images saved to {validation_images_dir}")
+    save_validation_predictions(out_dir / "training_data", preds, class_names)
     report = classification_report(
         targets,
         preds,

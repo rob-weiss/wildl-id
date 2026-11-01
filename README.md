@@ -311,8 +311,9 @@ The dataset is separated by ownership:
   CSV does not need timestamp columns.
 - `labels/labels_<classifier-run>/predictions.csv`: automatic classes, detected
   boxes, confidence, model identity, and metadata for that model.
-- `labels/labels_<classifier-run>/validation_predictions/predictions.csv`:
-  validation-only true and predicted classes for that model.
+- `models/<classifier-run>/training_data/labels.csv`: the training and
+  validation split for that model; `predicted_label` holds its validation
+  predictions. Training no longer renders validation images.
 
 Readers join by location and filename, with human labels and reviewed boxes
 taking precedence. The app, training, reports, and email workflow automatically
@@ -393,9 +394,9 @@ Additional labels receive their own displayed shortcut.
 Each choice is saved immediately in a new `manual_label` column in the same CSV.
 The original `class` column remains unchanged: an empty manual label means unchecked,
 a matching label means confirmed, and a different label means corrected. By default,
-the reviewer shows unchecked rows. The browser mode dropdown offers **Unseen**
-and **Latest model incorrect**. The incorrect-prediction
-mode uses validation images from the newest timestamped fine-tuning run under `models/`.
+the reviewer shows unchecked rows. The browser mode dropdown offers **Unseen**,
+**Latest model incorrect**, and **Latest model correct**. The two model modes
+use the validation predictions of the newest timestamped fine-tuning run under `models/`.
 A `.csv.before-review.bak` backup is created before the first changed save;
 subsequent changed states use timestamped snapshots, sharing the five-distinct-
 backup limit above. Unchanged saves create no backup. Inference writes model

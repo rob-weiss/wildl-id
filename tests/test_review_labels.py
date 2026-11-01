@@ -600,7 +600,7 @@ class LabelReviewTests(unittest.TestCase):
                 )
                 self.assertEqual(render_overlay.call_args.args[2], prediction)
 
-    def test_browser_model_name_is_visible_only_in_latest_model_incorrect_mode(self):
+    def test_browser_model_name_is_visible_only_in_latest_model_modes(self):
         run_name = "deepfaune_finetuned_20261020-191127_latest"
         with (
             patch.object(
@@ -626,7 +626,7 @@ class LabelReviewTests(unittest.TestCase):
             for mode in (
                 "Latest model incorrect",
                 "Unseen",
-                "Latest model incorrect",
+                "Latest model correct",
                 "Unseen + errors",
                 "Seen",
                 "All",
@@ -634,7 +634,7 @@ class LabelReviewTests(unittest.TestCase):
                 with self.subTest(mode=mode):
                     app.change_mode(mode)
                     self.assertEqual(
-                        run_label.visible, mode == "Latest model incorrect"
+                        run_label.visible, mode.startswith("Latest model")
                     )
 
     def test_unseen_mode_advances_after_labeling_removes_current_row(self):
@@ -1192,57 +1192,80 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.rows[0]["manual_label"], "")
         self.assertEqual(review.rows[1]["manual_label"], "fox")
 
-    def test_validation_images_use_reviewer_box_style_and_status_colors(self):
+    def test_validation_results_are_added_to_training_data_without_images(self):
         finetune_classifier = import_module("src.labelling.finetune_classifier")
 
-        image_dir = Path(self.temp_dir.name) / "images" / "2024"
-        (image_dir / "camera1").mkdir(parents=True)
-        Image.new("RGB", (100, 100), "black").save(
-            image_dir / "camera1" / "correct.jpg"
-        )
-        Image.new("RGB", (100, 100), "black").save(
-            image_dir / "camera1" / "incorrect.jpg"
-        )
-        rows = pd.DataFrame(
+        data_dir = Path(self.temp_dir.name) / "training_data"
+        data_dir.mkdir()
+        pd.DataFrame(
             [
-                {
-                    "location_id": "camera1",
-                    "image_file": "correct.jpg",
-                    "image_path": str(image_dir / "camera1" / "correct.jpg"),
-                    "box": "[0.5, 0.5, 0.4, 0.4]",
-                },
-                {
-                    "location_id": "camera1",
-                    "image_file": "incorrect.jpg",
-                    "image_path": str(image_dir / "camera1" / "incorrect.jpg"),
-                    "box": "[0.5, 0.5, 0.4, 0.4]",
-                },
-            ]
-        )
-        output_dir = Path(self.temp_dir.name) / "validation"
+                ("camera1", "train.jpg", "fox", "train"),
+                ("camera1", "correct.jpg", "fox", "val"),
+                ("camera1", "incorrect.jpg", "hare", "val"),
+            ],
+            columns=["location_id", "image_file", "manual_label", "split"],
+        ).to_csv(data_dir / "labels.csv", index=False)
 
         finetune_classifier.save_validation_predictions(
-            rows, [0, 1], [0, 0], ["fox", "hare"], output_dir
+            data_dir, [0, 0], ["fox", "hare"]
         )
 
-        with (output_dir / "predictions.csv").open(encoding="utf-8") as source:
-            predictions = list(csv.DictReader(source))
-        self.assertEqual(predictions[1]["true_label"], "hare")
-        self.assertEqual(predictions[1]["predicted_label"], "fox")
-        self.assertEqual(predictions[1]["status"], "incorrect")
+        with (data_dir / "labels.csv").open(encoding="utf-8") as source:
+            rows = list(csv.DictReader(source))
+        self.assertEqual(
+            [row["predicted_label"] for row in rows], ["", "fox", "fox"]
+        )
+        self.assertEqual([path.name for path in data_dir.iterdir()], ["labels.csv"])
 
-        correct = Image.open(output_dir / "correct" / "camera1_correct.jpg")
-        incorrect = Image.open(output_dir / "incorrect" / "camera1_incorrect.jpg")
-        self.addCleanup(correct.close)
-        self.addCleanup(incorrect.close)
-        self.assertEqual(correct.size, (100, 100))
-        self.assertEqual(incorrect.size, (100, 100))
-        for image, expected in (
-            (correct, (46, 125, 50)),
-            (incorrect, (198, 40, 40)),
-        ):
-            actual = image.getpixel((50, 30))
-            self.assertLessEqual(max(abs(a - b) for a, b in zip(actual, expected)), 15)
+    def test_validation_results_are_read_from_training_data(self):
+        models_dir = Path(self.temp_dir.name) / "models"
+        run_dir = models_dir / "deepfaune_finetuned_20261020-191127_latest"
+        (run_dir / "training_data").mkdir(parents=True)
+        pd.DataFrame(
+            [
+                ("camera1", "train.jpg", "fox", "train", ""),
+                ("camera1", "right.jpg", "fox", "val", "fox"),
+                ("camera1", "wrong.jpg", "hare", "val", "fox"),
+            ],
+            columns=[
+                "location_id",
+                "image_file",
+                "manual_label",
+                "split",
+                "predicted_label",
+            ],
+        ).to_csv(run_dir / "training_data" / "labels.csv", index=False)
+
+        run_name, incorrect = review_module.latest_incorrect_predictions(models_dir)
+        predictions = review_module.load_validation_predictions(run_name, models_dir)
+
+        self.assertEqual(run_name, run_dir.name)
+        self.assertEqual(incorrect, {"camera1_wrong.jpg"})
+        self.assertEqual(
+            predictions["camera1_right.jpg"],
+            {
+                "location_id": "camera1",
+                "image_file": "right.jpg",
+                "true_label": "fox",
+                "predicted_label": "fox",
+                "status": "correct",
+            },
+        )
+        self.assertNotIn("camera1_train.jpg", predictions)
+
+    def test_latest_model_correct_mode_selects_correct_validation_rows(self):
+        review = LabelReview(self.csv_path)
+        review.latest_predictions = {
+            "camera1_correct.jpg": {"status": "correct"},
+            "camera1_incorrect.jpg": {"status": "incorrect"},
+        }
+
+        review.set_mode("Latest model correct")
+
+        self.assertEqual(
+            [review.rows[index]["image_file"] for index in review.pending],
+            ["correct.jpg"],
+        )
 
 
 if __name__ == "__main__":

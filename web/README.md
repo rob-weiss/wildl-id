@@ -54,7 +54,7 @@ The app uses the default dataset:
 - Automatic predictions: `labels/labels_<latest-completed-run>/predictions.csv`
 - Annotated images: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images/`
 - Original images: `images/`
-- Validation predictions: `labels/labels_<run>/validation_predictions/`
+- Validation predictions: `models/<run>/training_data/labels.csv` (`predicted_label`)
 
 The container can write human annotations and their `.before-review.bak` backup.
 Readers join human annotations with metadata and the latest completed model's
@@ -65,7 +65,8 @@ images, backs up the annotation CSV, logs deleted paths under the writable `logs
 mount, and records removals in `labels/deleted_images.csv` so old predictions
 do not reappear when inference refreshes image metadata.
 Model files remain read-only. The app does not mount `data/`, credentials, or the
-Docker socket. Browser review offers only **Unseen** and **Latest model incorrect**.
+Docker socket. Browser review offers only **Unseen**, **Latest model incorrect**, and
+**Latest model correct**.
 
 ## Run Locally
 

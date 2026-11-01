@@ -26,6 +26,7 @@ MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODE_OPTIONS = (
     "Unseen",
     "Latest model incorrect",
+    "Latest model correct",
     "Unseen + errors",
     "Seen",
     "All",
@@ -95,6 +96,30 @@ def bounding_box_color(predicted_label, manual_label=""):
     return "#2e7d32" if manual == predicted else "#c62828"
 
 
+def training_validation_rows(run_dir):
+    """Validation results from a run's training table, or None if not recorded."""
+    path = Path(run_dir) / "training_data" / "labels.csv"
+    if not path.is_file():
+        return None
+    with path.open(newline="", encoding="utf-8") as source:
+        reader = csv.DictReader(source)
+        if "predicted_label" not in (reader.fieldnames or []):
+            return None
+        return [
+            {
+                "location_id": row["location_id"],
+                "image_file": row["image_file"],
+                "true_label": row["manual_label"],
+                "predicted_label": row["predicted_label"],
+                "status": "correct"
+                if row["manual_label"] == row["predicted_label"]
+                else "incorrect",
+            }
+            for row in reader
+            if row["split"] == "val"
+        ]
+
+
 def latest_incorrect_predictions(models_dir=None):
     models_dir = Path(models_dir or MODELS_DIR)
     run_dirs = sorted(
@@ -103,6 +128,13 @@ def latest_incorrect_predictions(models_dir=None):
         reverse=True,
     )
     for run_dir in run_dirs:
+        rows = training_validation_rows(run_dir)
+        if rows is not None:
+            return run_dir.name, {
+                f"{row['location_id']}_{row['image_file']}"
+                for row in rows
+                if row["status"] == "incorrect"
+            }
         validation_dir = label_data.validation_predictions_dir(
             models_dir.parent, run_dir.name
         )
@@ -130,17 +162,17 @@ def load_validation_predictions(run_name, models_dir=None):
     if not run_name:
         return {}
     models_dir = Path(models_dir or MODELS_DIR)
-    predictions_path = (
-        label_data.validation_predictions_dir(models_dir.parent, run_name)
-        / "predictions.csv"
-    )
-    if not predictions_path.is_file():
-        return {}
-    with predictions_path.open(newline="", encoding="utf-8") as source:
-        return {
-            f"{row['location_id']}_{row['image_file']}": row
-            for row in csv.DictReader(source)
-        }
+    rows = training_validation_rows(models_dir / run_name)
+    if rows is None:
+        predictions_path = (
+            label_data.validation_predictions_dir(models_dir.parent, run_name)
+            / "predictions.csv"
+        )
+        if not predictions_path.is_file():
+            return {}
+        with predictions_path.open(newline="", encoding="utf-8") as source:
+            rows = list(csv.DictReader(source))
+    return {f"{row['location_id']}_{row['image_file']}": row for row in rows}
 
 
 def box_from_drag(start, end, image_size):
@@ -247,11 +279,16 @@ class LabelReview:
             image_name = f"{row['location_id']}_{row['image_file']}"
             is_unseen = not manual_label
             is_latest_error = image_name in self.latest_incorrect_filenames
+            is_latest_correct = (
+                self.latest_predictions.get(image_name, {}).get("status") == "correct"
+            )
             if (
                 self.mode == "Unseen"
                 and is_unseen
                 or self.mode == "Latest model incorrect"
                 and is_latest_error
+                or self.mode == "Latest model correct"
+                and is_latest_correct
                 or self.mode == "Unseen + errors"
                 and (is_unseen or is_latest_error)
                 or self.mode == "Seen"
