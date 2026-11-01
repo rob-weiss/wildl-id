@@ -184,7 +184,7 @@ images/
 labels/**
 !labels/**/
 !labels/**/*.csv
-labels/labels_*/**/predictions.csv
+labels/labels_*/validation_predictions/
 logs/
 .worktrees/
 .DS_Store
