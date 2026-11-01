@@ -278,7 +278,11 @@ class DailySummaryTests(unittest.TestCase):
         label_data.write_records(
             human,
             [
-                {"location_id": "Wendeplatte", "image_file": name, "manual_label": label}
+                {
+                    "location_id": "Wendeplatte",
+                    "image_file": name,
+                    "manual_label": label,
+                }
                 for name, label in (("boar.jpg", "wild boar"), ("fox.jpg", ""))
             ],
             label_data.HUMAN_COLUMNS,

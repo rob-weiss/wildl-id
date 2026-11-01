@@ -266,11 +266,16 @@ class RemoveEmptyImagesTests(unittest.TestCase):
             with app.remove_empty_button.parent_slot.parent:
                 await app.confirm_remove_empty()
 
-        with patch.object(
-            review_app_module.ui.dialog,
-            "__await__",
-            lambda dialog: answer().__await__(),
-        ), patch.object(review_app_module.ui, "button", wraps=review_app_module.ui.button) as button:
+        with (
+            patch.object(
+                review_app_module.ui.dialog,
+                "__await__",
+                lambda dialog: answer().__await__(),
+            ),
+            patch.object(
+                review_app_module.ui, "button", wraps=review_app_module.ui.button
+            ) as button,
+        ):
             asyncio.run(confirm())
 
         captions = [call.args[0] for call in button.call_args_list if call.args]
