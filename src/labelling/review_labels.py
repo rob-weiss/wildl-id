@@ -7,6 +7,7 @@ import math
 import os
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -175,6 +176,22 @@ def load_validation_predictions(run_name, models_dir=None):
     return {f"{row['location_id']}_{row['image_file']}": row for row in rows}
 
 
+def capture_order(rows):
+    """Map row index to its position by capture time, oldest first, undated last."""
+
+    def key(item):
+        index, row = item
+        stamp = str(row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+        try:
+            taken = datetime.fromisoformat(stamp).replace(tzinfo=None)
+        except ValueError:
+            return (1, datetime.min, "", index)
+        return (0, taken, row["image_file"], index)
+
+    ordered = sorted(enumerate(rows), key=key)
+    return {index: rank for rank, (index, _) in enumerate(ordered)}
+
+
 def box_from_drag(start, end, image_size):
     image_width, image_height = image_size
     if image_width <= 0 or image_height <= 0:
@@ -255,6 +272,7 @@ class LabelReview:
             latest_incorrect_predictions()
         )
         self.latest_predictions = load_validation_predictions(self.latest_model_name)
+        self.capture_rank = capture_order(self.rows)
         self.mode = "Unseen"
         self.pending = self.filtered_indices()
         self.position = 0
@@ -292,7 +310,7 @@ class LabelReview:
                 or self.mode == "All"
             ):
                 indices.append(index)
-        return indices
+        return sorted(indices, key=self.capture_rank.__getitem__)
 
     def set_mode(self, mode):
         if mode not in MODE_OPTIONS:
@@ -311,7 +329,7 @@ class LabelReview:
                 (
                     position
                     for position, index in enumerate(self.pending)
-                    if index > current_index
+                    if self.capture_rank[index] > self.capture_rank[current_index]
                 ),
                 0,
             )
@@ -400,7 +418,7 @@ class LabelReview:
                 (
                     position
                     for position, pending_index in enumerate(self.pending)
-                    if pending_index > index
+                    if self.capture_rank[pending_index] > self.capture_rank[index]
                 ),
                 min(old_position, len(self.pending)),
             )
@@ -421,7 +439,7 @@ class LabelReview:
         self.pending = self.filtered_indices()
         if index not in self.pending:
             self.pending.append(index)
-            self.pending.sort()
+            self.pending.sort(key=self.capture_rank.__getitem__)
         self.position = self.pending.index(index)
 
     def show(self):

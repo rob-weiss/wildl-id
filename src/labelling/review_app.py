@@ -363,6 +363,11 @@ class ReviewApp:
 
     def refresh(self):
         self.run_label.set_visibility(self.review.mode.startswith("Latest model"))
+        self.accept_button.set_text(
+            "📌 Keep manual label"
+            if self.keeps_manual_label()
+            else "✅ Accept prediction"
+        )
         self.undo_button.set_enabled(bool(self.review.history))
         if not self.review.pending:
             self.current_index = None
@@ -565,9 +570,16 @@ class ReviewApp:
             ui.notify(f"Label not saved: {error}", type="negative")
         self.refresh()
 
+    def keeps_manual_label(self):
+        return self.review.mode == "Latest model incorrect"
+
     def accept(self):
         if self.current_index is not None:
             row = self.review.rows[self.current_index]
+            manual_label = str(row.get("manual_label") or "").strip()
+            if self.keeps_manual_label() and manual_label:
+                self.choose_label(manual_label)
+                return
             prediction = self.prediction_for_row(row)
             label = prediction["predicted_label"] if prediction else row["class"]
             if not label.strip():

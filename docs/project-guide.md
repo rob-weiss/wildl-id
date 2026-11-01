@@ -98,7 +98,11 @@ This preference stays active across images; images without a valid box show in f
 Manual zoom resets for each new image. **Fit image** turns subject focus off.
 Press **Z** to toggle subject focus.
 
-Press **Space** to accept the current prediction. Press a displayed shortcut key to
+Images are reviewed in capture order, oldest first; undated images come last.
+
+Press **Space** to accept the current prediction. In **Latest model incorrect**
+mode the button and **Space** become **Keep manual label**, which confirms the
+human label; press a label's shortcut to correct it instead. Press a displayed shortcut key to
 choose a label. Press **Enter** to focus the custom-label field, then press **Enter**
 again to save it. Press **Backspace** to undo the last label.
 

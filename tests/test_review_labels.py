@@ -309,6 +309,37 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_images_are_reviewed_oldest_first_and_undated_last(self):
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=["location_id", "image_file", "timestamp_exif", "class"],
+            )
+            writer.writeheader()
+            for name, taken in (
+                ("new.jpg", "2026-11-01T10:00:00"),
+                ("undated.jpg", ""),
+                ("old.jpg", "2024-08-10T02:05:15"),
+                ("mid.jpg", "2025-06-01T12:00:00+02:00"),
+            ):
+                writer.writerow(
+                    {
+                        "location_id": "camera1",
+                        "image_file": name,
+                        "timestamp_exif": taken,
+                        "class": "fox",
+                    }
+                )
+        review = LabelReview(self.csv_path)
+
+        names = [review.rows[index]["image_file"] for index in review.pending]
+
+        self.assertEqual(names, ["old.jpg", "mid.jpg", "new.jpg", "undated.jpg"])
+        review.choose("fox")
+        self.assertEqual(
+            review.rows[review.pending[review.position]]["image_file"], "mid.jpg"
+        )
+
     def test_unknown_manual_label_is_seen(self):
         with self.csv_path.open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
@@ -904,6 +935,35 @@ class LabelReviewTests(unittest.TestCase):
         app.accept()
 
         self.assertEqual(chosen, ["song bird"])
+
+    def test_incorrect_mode_space_keeps_manual_label(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        incorrect = {
+            "true_label": "hare",
+            "predicted_label": "fox",
+            "status": "incorrect",
+        }
+        app.review.latest_predictions = {"camera1_incorrect.jpg": incorrect}
+        app.review.latest_incorrect_filenames.add("camera1_incorrect.jpg")
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+                self.addCleanup(container.delete)
+                self.assertEqual(app.accept_button.text, "✅ Accept prediction")
+                app.change_mode("Latest model incorrect")
+                self.assertEqual(app.accept_button.text, "📌 Keep manual label")
+                chosen = []
+                app.choose_label = chosen.append
+                event = SimpleNamespace(
+                    action=SimpleNamespace(keydown=True, repeat=False),
+                    key=SimpleNamespace(
+                        name=" ", space=True, backspace=False, enter=False
+                    ),
+                    modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
+                )
+                app.on_key(event)
+
+        self.assertEqual(chosen, ["hare"])
 
     def test_accept_without_prediction_saves_nothing(self):
         app = review_app_module.ReviewApp(self.csv_path)
