@@ -146,7 +146,7 @@ class CameraMapTests(unittest.TestCase):
         self.assertAlmostEqual(center[0], 48.655)
         self.assertAlmostEqual(center[1], 9.0)
         self.assertEqual(zoom, 15)
-        self.assertEqual(camera_map.initial_view([cameras[0]])[1], 16)
+        self.assertEqual(camera_map.initial_view([cameras[0]])[1], 17)
         self.assertEqual(camera_map.initial_view([]), (camera_map.DEFAULT_CENTER, 13))
 
     def test_fetch_wind_rejects_incomplete_forecast(self):
