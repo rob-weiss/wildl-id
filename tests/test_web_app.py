@@ -485,8 +485,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/map") as user:
                 await user.should_see("Camera map")
                 await user.should_see(
-                    "Three hourly arrows per camera, left to right from the selected "
-                    "time; colour indicates speed."
+                    "Each camera's arc shows where the wind blows over the selected "
+                    "hours; colour indicates the strongest wind."
                 )
                 await user.should_see("Missing coordinates")
                 await user.should_see(
@@ -499,15 +499,23 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Sat 31-10-2026 13:00 CET")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
-                self.assertEqual(kinds.count("polyline"), 3)
+                self.assertEqual(kinds.count("polyline"), 0)
+                self.assertEqual(kinds.count("polygon"), 1)
                 self.assertEqual(kinds[:2], ["tileLayer", "circleMarker"])
                 self.assertIn("World_Imagery", leaflet.layers[0].url_template)
                 self.assertEqual(
                     [camera.location_id for camera in fetch.call_args.args[0]],
                     ["North"],
                 )
+                hours = next(iter(user.find(marker="wind-hours").elements))
+                self.assertEqual(list(hours.options), list(range(1, 11)))
+                self.assertEqual(hours.value, 3)
                 slider = next(iter(user.find(marker="wind-hour").elements))
                 self.assertEqual(slider.props["max"], 21)
+                hours.set_value(5)
+                self.assertEqual(slider.props["max"], 19)
+                await user.should_see("North · 17:00: 9 km/h from N (0°), gusts 9 km/h")
+                hours.set_value(3)
                 slider.set_value(10)
                 await user.should_see(
                     "North · 23:00: 15 km/h from N (0°), gusts 9 km/h"
@@ -520,9 +528,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertEqual(
                     [layer.to_dict()["type"] for layer in leaflet.layers].count(
-                        "polyline"
+                        "polygon"
                     ),
-                    3,
+                    1,
                 )
 
     async def test_camera_map_ranks_seats_and_draws_views(self):
@@ -559,7 +567,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Best seats 13:00-16:00")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
-                self.assertEqual(kinds.count("polygon"), 2)
+                self.assertEqual(kinds.count("polygon"), 4)
+                hours = next(iter(user.find(marker="wind-hours").elements))
+                hours.set_value(5)
+                await user.should_see("Best seats 13:00-18:00")
+                hours.set_value(3)
+                await user.should_see("Best seats 13:00-16:00")
 
                 def ranking():
                     return [
@@ -578,9 +591,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(ranking()[0].startswith("1. 100% · East"))
                 self.assertEqual(
                     [layer.to_dict()["type"] for layer in leaflet.layers].count(
-                        "polyline"
+                        "polygon"
                     ),
-                    6,
+                    4,
                 )
 
     async def test_camera_map_without_coordinates_is_safe(self):

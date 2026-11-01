@@ -52,7 +52,9 @@ COMPASS = (
 _wind_cache: dict[tuple, tuple[float, dict]] = {}
 _wind_cache_lock = threading.Lock()
 RANKING_HOURS = 3
+RANKING_HOUR_OPTIONS = range(1, 11)
 WIND_SPREAD = 45.0
+WIND_ARC_PADDING = 10.0
 VIEW_RADIUS = 120.0
 
 
@@ -182,22 +184,22 @@ def _offset(point: list[float], metres: float, bearing: float) -> list[float]:
     ]
 
 
-def arrow_points(
-    latitude: float, longitude: float, speed: float, direction: float
-) -> list[list[float]]:
-    # Meteorological direction is where wind comes from; the arrow points downwind.
-    bearing = math.radians((direction + 180) % 360)
-    length = max(40.0, speed * 15)
-    start = [latitude, longitude]
-    tip = _offset(start, length, bearing)
-    head = length * 0.3
-    return [
-        start,
-        tip,
-        _offset(tip, head, bearing + math.pi - 0.45),
-        tip,
-        _offset(tip, head, bearing + math.pi + 0.45),
+def downwind_bearing(direction: float) -> float:
+    # Meteorological direction is where wind comes from.
+    return (direction + 180) % 360
+
+
+def downwind_sector(hours: list[WindHour]) -> tuple[float, float]:
+    """Centre and width of the narrowest sector holding every downwind bearing."""
+    bearings = sorted({downwind_bearing(hour.direction) for hour in hours})
+    gaps = [
+        ((bearings[(i + 1) % len(bearings)] - bearing) % 360 or 360, i)
+        for i, bearing in enumerate(bearings)
     ]
+    largest, before = max(gaps)
+    width = 360 - largest
+    start = bearings[(before + 1) % len(bearings)]
+    return (start + width / 2) % 360, min(360.0, width + 2 * WIND_ARC_PADDING)
 
 
 def wind_colour(speed: float) -> str:
@@ -270,31 +272,42 @@ def wind_match(camera: Camera, hours: list[WindHour]) -> float:
 
 
 def rank_seats(
-    cameras: list[Camera], wind: dict[str, list[WindHour]], index: int
+    cameras: list[Camera],
+    wind: dict[str, list[WindHour]],
+    index: int,
+    hours: int = RANKING_HOURS,
 ) -> list[tuple[Camera, float]]:
     ranked = [
-        (camera, wind_match(camera, hours[index : index + RANKING_HOURS]))
+        (camera, wind_match(camera, forecast[index : index + hours]))
         for camera in cameras
-        if camera.has_view and (hours := wind.get(camera.location_id))
+        if camera.has_view and (forecast := wind.get(camera.location_id))
     ]
     return sorted(ranked, key=lambda item: (-item[1], item[0].location_id))
 
 
-def view_polygon(camera: Camera) -> list[list[float]]:
-    start = [camera.latitude, camera.longitude]
-    steps = max(2, math.ceil(camera.view_angle / 10))
-    first = camera.view_direction - camera.view_angle / 2
+def sector_polygon(
+    latitude: float, longitude: float, center: float, width: float, radius: float
+) -> list[list[float]]:
+    start = [latitude, longitude]
+    steps = max(2, math.ceil(width / 10))
+    first = center - width / 2
     return [
         start,
         *(
-            _offset(
-                start,
-                VIEW_RADIUS,
-                math.radians(first + camera.view_angle * step / steps),
-            )
+            _offset(start, radius, math.radians(first + width * step / steps))
             for step in range(steps + 1)
         ),
     ]
+
+
+def view_polygon(camera: Camera) -> list[list[float]]:
+    return sector_polygon(
+        camera.latitude,
+        camera.longitude,
+        camera.view_direction,
+        camera.view_angle,
+        VIEW_RADIUS,
+    )
 
 
 def match_colour(score: float | None) -> str:
@@ -366,9 +379,18 @@ async def build_camera_map_page() -> None:
             hour_label = (
                 ui.label().classes("text-sm font-medium w-36").mark("wind-time")
             )
+            hours_select = (
+                ui.select(
+                    {hours: f"{hours} h" for hours in RANKING_HOUR_OPTIONS},
+                    value=RANKING_HOURS,
+                    label="Hours",
+                )
+                .classes("w-24")
+                .mark("wind-hours")
+            )
         ui.label(
-            "Three hourly arrows per camera, left to right from the selected "
-            "time; colour indicates speed."
+            "Each camera's arc shows where the wind blows over the selected "
+            "hours; colour indicates the strongest wind."
         ).classes("text-sm text-gray-600")
         wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
         missing = [camera.location_id for camera in cameras if not camera.located]
@@ -392,8 +414,9 @@ async def build_camera_map_page() -> None:
         state["arrows"] = []
         wind_list.clear()
         index = int(slider.value)
+        window = int(hours_select.value)
         hour_label.set_text("")
-        ranking = rank_seats(located, state["wind"], index)
+        ranking = rank_seats(located, state["wind"], index, window)
         scores = {camera.location_id: score for camera, score in ranking}
         for camera in located:
             if camera.has_view:
@@ -417,36 +440,40 @@ async def build_camera_map_page() -> None:
             hours = state["wind"].get(camera.location_id)
             if not hours:
                 continue
-            forecast = hours[index : index + RANKING_HOURS]
+            forecast = hours[index : index + window]
             if forecast:
                 hour_label.set_text(
                     forecast[0]
                     .time.tz_convert(LOCAL_TIMEZONE)
                     .strftime(f"%a {DATE_FORMAT} %H:%M %Z")
                 )
-            for hour_index, hour in enumerate(forecast):
-                offset = (hour_index - (len(forecast) - 1) / 2) * 18
-                origin = _offset(
-                    [camera.latitude, camera.longitude], offset, math.pi / 2
+            if not forecast:
+                continue
+            center, width = downwind_sector(forecast)
+            mean_speed = sum(hour.speed for hour in forecast) / len(forecast)
+            colour = wind_colour(max(hour.speed for hour in forecast))
+            state["arrows"].append(
+                leaflet.generic_layer(
+                    name="polygon",
+                    args=[
+                        sector_polygon(
+                            camera.latitude,
+                            camera.longitude,
+                            center,
+                            width,
+                            max(40.0, mean_speed * 15),
+                        ),
+                        {
+                            "color": colour,
+                            "weight": 2,
+                            "dashArray": "6 4",
+                            "fillColor": colour,
+                            "fillOpacity": 0.35,
+                            "interactive": False,
+                        },
+                    ],
                 )
-                state["arrows"].append(
-                    leaflet.generic_layer(
-                        name="polyline",
-                        args=[
-                            arrow_points(
-                                origin[0],
-                                origin[1],
-                                hour.speed,
-                                hour.direction,
-                            ),
-                            {
-                                "color": wind_colour(hour.speed),
-                                "weight": 3,
-                                "opacity": 0.95,
-                            },
-                        ],
-                    )
-                )
+            )
 
         def wind_text(camera, hour):
             time_label = hour.time.tz_convert(LOCAL_TIMEZONE).strftime("%H:%M")
@@ -458,14 +485,14 @@ async def build_camera_map_page() -> None:
 
         with wind_list:
             if ranking:
-                window = state["wind"][ranking[0][0].location_id][
-                    index : index + RANKING_HOURS
+                window_hours = state["wind"][ranking[0][0].location_id][
+                    index : index + window
                 ]
                 first, last = (
                     stamp.tz_convert(LOCAL_TIMEZONE)
                     for stamp in (
-                        window[0].time,
-                        window[-1].time + pd.Timedelta(hours=1),
+                        window_hours[0].time,
+                        window_hours[-1].time + pd.Timedelta(hours=1),
                     )
                 )
                 ui.label(
@@ -483,7 +510,7 @@ async def build_camera_map_page() -> None:
                 hours = state["wind"].get(camera.location_id)
                 if not hours:
                     continue
-                for hour in hours[index : index + RANKING_HOURS]:
+                for hour in hours[index : index + window]:
                     details = wind_text(camera, hour)
                     if not camera.has_view:
                         details += " · no view angle"
@@ -498,15 +525,23 @@ async def build_camera_map_page() -> None:
         try:
             state["wind"] = await run.io_bound(fetch_wind, located)
             status.set_text(
-                "Wind at 10 m from Open-Meteo; arrows show three hours "
-                "and point downwind"
+                "Wind at 10 m from Open-Meteo; arcs show where the wind blows "
+                "over the selected hours"
             )
         except OSError, ValueError, KeyError, TypeError:
             state["wind"] = {}
             status.set_text("Wind forecast unavailable")
         render()
 
+    def change_hours() -> None:
+        slider.props["max"] = WIND_HOURS - int(hours_select.value)
+        slider.update()
+        if slider.value > slider.props["max"]:
+            slider.set_value(slider.props["max"])
+        render()
+
     leaflet.on("init", label_markers)
     slider.on_value_change(lambda _: render())
+    hours_select.on_value_change(lambda _: change_hours())
     await refresh()
     ui.timer(WIND_CACHE_SECONDS, refresh)

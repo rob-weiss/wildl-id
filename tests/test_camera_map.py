@@ -39,13 +39,9 @@ class CameraMapTests(unittest.TestCase):
             with self.subTest(entry=entry), self.assertRaises((TypeError, ValueError)):
                 camera_map.read_camera_locations(self.write_locations([entry]))
 
-    def test_arrow_points_downwind(self):
-        start, tip, *_ = camera_map.arrow_points(48.6, 9.0, 10, 270)
-        self.assertEqual(start, [48.6, 9.0])
-        self.assertAlmostEqual(tip[0], 48.6)
-        self.assertGreater(tip[1], 9.0)
-        start, tip, *_ = camera_map.arrow_points(48.6, 9.0, 10, 0)
-        self.assertLess(tip[0], 48.6)
+    def test_downwind_bearing_is_opposite_wind_source(self):
+        self.assertEqual(camera_map.downwind_bearing(270), 90)
+        self.assertEqual(camera_map.downwind_bearing(0), 180)
 
     def test_fetch_wind_parses_open_meteo_hours(self):
         cameras = [
@@ -98,6 +94,40 @@ class CameraMapTests(unittest.TestCase):
             dict(camera_map.rank_seats([side], wind, 0))[side], 2 / 3
         )
         self.assertEqual(dict(camera_map.rank_seats([side], wind, 3))[side], 1.0)
+        self.assertEqual(
+            dict(camera_map.rank_seats([side], wind, 0, hours=2))[side], 1.0
+        )
+        self.assertAlmostEqual(
+            dict(camera_map.rank_seats([side], wind, 0, hours=6))[side], 5 / 6
+        )
+
+    def test_downwind_sector_covers_all_selected_hours(self):
+        import pandas as pd
+
+        def hours(*directions):
+            start = pd.Timestamp("2026-10-31T12:00", tz="UTC")
+            return [
+                camera_map.WindHour(start + pd.Timedelta(hours=h), 10, d, 15)
+                for h, d in enumerate(directions)
+            ]
+
+        padding = 2 * camera_map.WIND_ARC_PADDING
+        self.assertEqual(camera_map.downwind_sector(hours(270)), (90.0, padding))
+        self.assertEqual(
+            camera_map.downwind_sector(hours(270, 0, 270)), (135.0, 90 + padding)
+        )
+        self.assertEqual(
+            camera_map.downwind_sector(hours(90, 180)), (315.0, 90 + padding)
+        )
+
+    def test_wind_arc_is_a_sector_pointing_downwind(self):
+        start, first, *_, last = camera_map.sector_polygon(
+            48.6, 9.0, center=90, width=60, radius=100
+        )
+        self.assertEqual(start, [48.6, 9.0])
+        self.assertGreater(first[1], 9.0)
+        self.assertGreater(last[1], 9.0)
+        self.assertGreater(first[0], last[0])
 
     def test_view_polygon_spans_opening_angle(self):
         camera = camera_map.Camera("A", 48.6, 9.0, 90, 60)
