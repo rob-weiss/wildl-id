@@ -221,6 +221,58 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertFalse(app.undo_box_button.enabled)
         self.assertFalse(app.undo_button.enabled)
 
+    def test_remove_unknown_deletes_only_human_unknown_labels(self):
+        rows = [
+            ("camera1", "unknown.jpg", "fox", "unknown"),
+            ("camera1", "pending.jpg", "", "unknown"),
+            ("camera1", "model-unknown.jpg", "unknown", ""),
+        ]
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerows(rows)
+        for _, name, _, _ in rows:
+            (self.original_dir / name).write_bytes(b"original image")
+
+        count = empty_images_module.remove_empty_images(
+            csv_path=self.csv_path, annotated_dir=self.annotated_dir, label="unknown"
+        )
+
+        self.assertEqual(count, 2)
+        self.assertFalse((self.original_dir / "unknown.jpg").exists())
+        self.assertFalse((self.original_dir / "pending.jpg").exists())
+        self.assertTrue((self.original_dir / "model-unknown.jpg").exists())
+        self.assertTrue((self.original_dir / "empty.jpg").exists())
+
+    def test_gui_remove_unknown_requires_confirmation(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerow(["camera1", "unknown.jpg", "fox", "unknown"])
+        app = self.build_app()
+        self.assertEqual(app.remove_unknown_button.text, "🗑️ Remove unknown")
+
+        for confirmed in (False, True):
+
+            async def answer():
+                self.assertTrue(app.cleanup_dialog_open)
+                return confirmed
+
+            async def confirm():
+                with app.remove_unknown_button.parent_slot.parent:
+                    await app.confirm_remove_unknown()
+
+            with (
+                patch.object(
+                    review_app_module.ui.dialog,
+                    "__await__",
+                    lambda dialog: answer().__await__(),
+                ),
+                patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
+            ):
+                asyncio.run(confirm())
+                if confirmed:
+                    remove.assert_awaited_once_with(label="unknown")
+                else:
+                    remove.assert_not_awaited()
+                self.assertFalse(app.cleanup_dialog_open)
+
     def test_gui_remove_empty_requires_confirmation(self):
         app = self.build_app()
         before = self.csv_path.read_bytes()

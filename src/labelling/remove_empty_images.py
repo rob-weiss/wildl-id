@@ -57,6 +57,12 @@ def is_confirmed_empty(row, include_false_detections=False):
     return include_false_detections or (row.get("class") or "").strip() == EMPTY_LABEL
 
 
+def is_removable(row, label=EMPTY_LABEL, include_false_detections=False):
+    if label == EMPTY_LABEL:
+        return is_confirmed_empty(row, include_false_detections)
+    return (row.get("manual_label") or "").strip() == label
+
+
 def annotated_paths(removed, annotated_dir=None):
     annotated_dir = Path(annotated_dir) if annotated_dir is not None else ANNOTATED_DIR
     if not annotated_dir.is_dir():
@@ -84,6 +90,7 @@ def remove_empty_images(
     annotated_dir=None,
     expected_bytes=None,
     include_false_detections=False,
+    label=EMPTY_LABEL,
 ):
     csv_path = Path(csv_path) if csv_path is not None else CSV_PATH
     if not csv_path.exists():
@@ -106,7 +113,7 @@ def remove_empty_images(
         label_data.load_rows(csv_path) if csv_path.name == "human_labels.csv" else rows
     )
     for row in review_rows:
-        if is_confirmed_empty(row, include_false_detections):
+        if is_removable(row, label, include_false_detections):
             removed.add((nfc(row["location_id"]), row["image_file"]))
     kept = [
         row
@@ -120,7 +127,7 @@ def remove_empty_images(
     size = sum(path.stat().st_size for path in files + annotated)
     verb = "Would delete" if dry_run else "Deleting"
     print(
-        f"{verb} {len(removed)} confirmed empty images "
+        f"{verb} {len(removed)} images labelled {label} "
         f"({len(files)} found in {IMAGES_DIR.relative_to(REPO_DIR)}/, "
         f"{len(annotated)} annotated images)"
     )
@@ -183,9 +190,16 @@ def main():
         action="store_true",
         help="also remove images labelled none by a human but not by the model",
     )
+    parser.add_argument(
+        "--label",
+        default=EMPTY_LABEL,
+        help="human label to remove, for example unknown (default: none)",
+    )
     args = parser.parse_args()
     remove_empty_images(
-        args.dry_run, include_false_detections=args.include_false_detections
+        args.dry_run,
+        include_false_detections=args.include_false_detections,
+        label=args.label,
     )
 
 

@@ -11,7 +11,7 @@ from urllib.parse import quote
 from nicegui import events, run, ui
 from PIL import Image
 
-from .remove_empty_images import is_confirmed_empty, remove_empty_images
+from .remove_empty_images import is_confirmed_empty, is_removable, remove_empty_images
 from .review_labels import (
     DEFAULT_CSV,
     MODE_OPTIONS,
@@ -315,6 +315,15 @@ class ReviewApp:
                             .props("outline no-caps")
                             .classes("text-red-700")
                         )
+                        self.remove_unknown_button = (
+                            ui.button(
+                                "🗑️ Remove unknown",
+                                icon="help_outline",
+                                on_click=self.confirm_remove_unknown,
+                            )
+                            .props("outline no-caps")
+                            .classes("text-red-700")
+                        )
                     with ui.row().classes("w-full items-center gap-2"):
                         self.auto_label_button = ui.button(
                             "Auto-label unseen",
@@ -604,6 +613,7 @@ class ReviewApp:
         self.undo_button.set_enabled(not running and bool(self.review.history))
         self.undo_box_button.set_enabled(not running and bool(self.box_history))
         self.remove_empty_button.set_enabled(not running)
+        self.remove_unknown_button.set_enabled(not running)
         self.save_label_button.set_enabled(not running)
         self.custom_label.set_enabled(not running)
         for button in self.label_buttons:
@@ -694,7 +704,46 @@ class ReviewApp:
             self.cleanup_dialog_open = False
             dialog.delete()
 
-    async def remove_empty(self, include_false_detections=False):
+    async def confirm_remove_unknown(self):
+        if self.cleanup_dialog_open or self.auto_label_running:
+            return
+        count = sum(is_removable(row, "unknown") for row in self.review.rows)
+        if not count:
+            ui.notify("No images labelled unknown to remove")
+            return
+        with ui.dialog().props("persistent") as dialog, ui.card():
+            ui.label(f"Remove {count} images labelled unknown?").classes(
+                "text-lg font-semibold"
+            )
+            ui.label(
+                "Images a human labelled unknown are removed whatever the model "
+                "predicted. Original and annotated images will be permanently "
+                "deleted. The CSV will be backed up and deleted paths logged."
+            ).classes("max-w-md")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                    "flat no-caps"
+                )
+                ui.button(
+                    f"Remove unknown ({count})",
+                    icon="delete_forever",
+                    color="negative",
+                    on_click=lambda: dialog.submit(True),
+                ).props("no-caps")
+        self.cleanup_dialog_open = True
+        try:
+            if await dialog:
+                dialog.clear()
+                with dialog, ui.card():
+                    ui.spinner()
+                    ui.label("Removing unknown images...")
+                dialog.open()
+                await self.remove_empty(label="unknown")
+        finally:
+            self.cleanup_dialog_open = False
+            dialog.delete()
+
+    async def remove_empty(self, include_false_detections=False, label="none"):
         try:
             count = await run.io_bound(
                 remove_empty_images,
@@ -702,6 +751,7 @@ class ReviewApp:
                 annotated_dir=self.review.images_dir,
                 expected_bytes=self.review.original_bytes,
                 include_false_detections=include_false_detections,
+                label=label,
             )
             updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
             updated_review.set_mode(self.review.mode)
@@ -714,7 +764,7 @@ class ReviewApp:
         self.image_size = None
         self.undo_box_button.disable()
         self.refresh()
-        ui.notify(f"Removed {count} confirmed empty images", type="positive")
+        ui.notify(f"Removed {count} images labelled {label}", type="positive")
 
     def undo_box(self):
         if not self.box_history or self.auto_label_running:

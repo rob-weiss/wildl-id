@@ -435,7 +435,9 @@ uv run src/labelling/remove_empty_images.py --include-false-detections
 ```
 
 The Review page's **Remove empty** button asks which of the two to delete and
-shows how many images each choice affects.
+shows how many images each choice affects. **Remove unknown** deletes images a
+human labelled `unknown`, whatever the model predicted
+(`uv run src/labelling/remove_empty_images.py --label unknown`).
 
 The original photos, annotated images, and CSV rows are removed. The CSV is backed up
 first; deleted paths are written to the ignored `logs/` directory.
