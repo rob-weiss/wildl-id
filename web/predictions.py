@@ -456,10 +456,14 @@ async def build_predictions_page(csv_path: Path) -> None:
             last = (result.origin + pd.Timedelta(hours=24)).tz_convert(
                 result.local_timezone
             )
-            dates.set_text(f"{first:%d %b %H:%M %Z} to {last:%d %b %H:%M %Z}")
+            dates.set_text(
+                f"{first:{label_data.DATE_FORMAT} %H:%M %Z} to "
+                f"{last:{label_data.DATE_FORMAT} %H:%M %Z}"
+            )
             latest = result.latest_record.tz_convert(result.local_timezone)
             provenance.set_text(
-                f"Last record {latest:%d %b %Y %H:%M %Z} | Model cutoff {result.training_cutoff:%d %b %Y}"
+                f"Last record {latest:{label_data.DATE_FORMAT} %H:%M %Z} | "
+                f"Model cutoff {result.training_cutoff:{label_data.DATE_FORMAT}}"
             )
             status.set_text(
                 "Forecast ready: continuous operation assumed"

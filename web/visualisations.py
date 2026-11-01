@@ -18,6 +18,7 @@ import pytz
 from astral import LocationInfo
 from astral.sun import sun
 from nicegui import run
+from src.labelling.label_data import DATE_FORMAT
 from src.visualisation import evaluate_labels
 from web.gallery import (
     filter_rows,
@@ -246,7 +247,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     ax_main.yaxis_date()
     date_locator = mdates.AutoDateLocator(minticks=4, maxticks=8)
     ax_main.yaxis.set_major_locator(date_locator)
-    ax_main.yaxis.set_major_formatter(mdates.ConciseDateFormatter(date_locator))
+    ax_main.yaxis.set_major_formatter(mdates.DateFormatter(DATE_FORMAT))
     ax_main.grid(True, alpha=0.3)
     ax_main.legend(loc="upper right", fontsize=8)
     ax_main.invert_yaxis()
@@ -270,7 +271,7 @@ def _create_daily_yearly_figure(frame: pd.DataFrame):
     )
     figure.suptitle(
         f"{species.capitalize()} Activity Throughout Year and Day "
-        f"({start_date} to {end_date}, n={len(frame)})",
+        f"({start_date:{DATE_FORMAT}} to {end_date:{DATE_FORMAT}}, n={len(frame)})",
         fontsize=14,
         fontweight="bold",
     )
@@ -331,7 +332,8 @@ def _create_individual_timelines_figure(frame: pd.DataFrame):
     start_date = frame["timestamp"].min().date()
     end_date = frame["timestamp"].max().date()
     figure.suptitle(
-        f"Individual Species Activity Timelines ({start_date} to {end_date})",
+        "Individual Species Activity Timelines "
+        f"({start_date:{DATE_FORMAT}} to {end_date:{DATE_FORMAT}})",
         fontsize=16,
         fontweight="bold",
     )

@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 
 alerts = import_module("src.alerting.push_alerts")
+notification_log = import_module("src.alerting.notification_log")
 
 CET = timezone(timedelta(hours=1))
 NOW = datetime(2026, 10, 30, 21, 0, tzinfo=CET)
@@ -22,6 +23,10 @@ class PushAlertTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         root = Path(self.temp.name)
+        self.notification_log = root / "push_alerts.csv"
+        log_patch = patch.object(notification_log, "LOG_PATH", self.notification_log)
+        log_patch.start()
+        self.addCleanup(log_patch.stop)
         self.images = root / "images"
         self.config = root / "push-alerts.json"
         self.state = root / "state.json"
@@ -106,6 +111,14 @@ class PushAlertTests(unittest.TestCase):
             ],
         )
         self.assertEqual(self.factory_calls, 1)
+        logged = notification_log.recent_notifications(5, self.notification_log)
+        self.assertEqual(
+            [(item["title"], item["message"]) for item in logged],
+            [
+                ("Raccoon at Douglasien", "2 raccoon at 20:56 (30-10-2026)"),
+                ("Wild boar at Wendeplatte", "1 wild boar at 20:55 (30-10-2026)"),
+            ],
+        )
 
     def test_cooldown_suppresses_repeat_alerts_per_site_and_species(self):
         self.run_alerts()
@@ -188,7 +201,7 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(request.get_method(), "PUT")
         self.assertEqual(url.path, "/topic%20x")
         self.assertEqual(query["title"], ["Wild boar at Madenhäule"])
-        self.assertEqual(query["message"], ["3 wild boar at 21:00 (30.10.)"])
+        self.assertEqual(query["message"], ["3 wild boar at 21:00 (30-10-2026)"])
         self.assertEqual(query["tags"], ["boar"])
         self.assertEqual(query["filename"], ["image_0000002.jpg"])
         self.assertEqual(request.data, path.read_bytes())
@@ -198,7 +211,7 @@ class PushAlertTests(unittest.TestCase):
 
         request = alerts.ntfy_request("https://ntfy.sh", "topic", alert)
 
-        self.assertEqual(request.data, b"1 raccoon at 21:00 (30.10.)")
+        self.assertEqual(request.data, b"1 raccoon at 21:00 (30-10-2026)")
         self.assertNotIn("filename", parse_qs(urlsplit(request.full_url).query))
 
 
@@ -207,6 +220,10 @@ class DailySummaryTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         root = Path(temporary.name)
+        self.notification_log = root / "push_alerts.csv"
+        log_patch = patch.object(notification_log, "LOG_PATH", self.notification_log)
+        log_patch.start()
+        self.addCleanup(log_patch.stop)
         self.config = root / "config.json"
         self.config.write_text('{"daily_summary": true}', encoding="utf-8")
         self.state = root / "summary-state.json"
@@ -279,6 +296,16 @@ class DailySummaryTests(unittest.TestCase):
         self.assertIn("Douglasien: 1 fox", request.data.decode())
         self.assertIn("Total: 2 sightings", request.data.decode())
         self.assertIn("By species: 1 fox 1 roe deer", request.data.decode())
+        self.assertTrue(
+            request.data.decode().startswith(
+                "30-10-2026 07:00 CET - 31-10-2026 07:00 CET\n"
+            )
+        )
+        logged = notification_log.recent_notifications(5, self.notification_log)
+        self.assertEqual(
+            [(item["title"], item["message"]) for item in logged],
+            [("Wildl-ID daily summary", request.data.decode())],
+        )
         self.assertEqual(urlsplit(request.full_url).path, "/topic-x")
         self.assertEqual(
             parse_qs(urlsplit(request.full_url).query)["priority"], ["default"]

@@ -670,7 +670,9 @@ def describe_filter(gallery_filter):
     if f.excluded_locations:
         parts.append("not at " + ", ".join(sorted(f.excluded_locations)))
     if f.start or f.end:
-        parts.append(f"📅 {f.start or '…'} – {f.end or '…'}")
+        start = f.start.strftime(label_data.DATE_FORMAT) if f.start else "…"
+        end = f.end.strftime(label_data.DATE_FORMAT) if f.end else "…"
+        parts.append(f"📅 {start} – {end}")
     if f.hours is not None:
         parts.append(f"last {f.hours} hours")
     if f.months:
@@ -778,7 +780,9 @@ def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=Fals
 
 def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
     taken = row_datetime(row)
-    when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
+    when = (
+        taken.strftime(f"{label_data.DATE_FORMAT} %H:%M") if taken else "unknown date"
+    )
     with ui.card().tight().classes("w-full"):
         image = (
             boxed_image(row, source, "w-full cursor-pointer")
@@ -925,7 +929,11 @@ def build_image_viewer(items, boxes, compact=False):
             viewer_image.set_source(source)
         update_overlay()
         taken = row_datetime(row)
-        when = taken.strftime("%Y-%m-%d %H:%M") if taken else "unknown date"
+        when = (
+            taken.strftime(f"{label_data.DATE_FORMAT} %H:%M")
+            if taken
+            else "unknown date"
+        )
         labels = annotation_labels(row)
         caption.set_text(
             f"{index + 1} / {len(visible_items)} · {labels} · {row['location_id']} · {when}"

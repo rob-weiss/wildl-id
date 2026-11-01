@@ -18,9 +18,13 @@ from zoneinfo import ZoneInfo
 from PIL import Image
 
 try:
+    from ..labelling.label_data import DATE_FORMAT
     from ..labelling.organize_images import IMAGES_DIR, image_paths
     from ..labelling.species import RECENT_SPECIES
+    from . import notification_log
 except ImportError:
+    from alerting import notification_log
+    from labelling.label_data import DATE_FORMAT
     from labelling.organize_images import IMAGES_DIR, image_paths
     from labelling.species import RECENT_SPECIES
 
@@ -220,12 +224,18 @@ def _load_analyser(min_confidence):
     return analyse
 
 
-def ntfy_request(server, topic, alert):
+def alert_text(alert):
     local_time = alert.captured.astimezone(LOCAL_TIME)
     title = f"{alert.species.capitalize()} at {alert.location}"
     message = (
-        f"{alert.count} {alert.species} at {local_time:%H:%M} ({local_time:%d.%m.})"
+        f"{alert.count} {alert.species} at {local_time:%H:%M} "
+        f"({local_time:{DATE_FORMAT}})"
     )
+    return title, message
+
+
+def ntfy_request(server, topic, alert):
+    title, message = alert_text(alert)
     params = {"title": title, "priority": "high"}
     if alert.species in TAGS:
         params["tags"] = TAGS[alert.species]
@@ -319,6 +329,7 @@ def _send_species_alerts(
                 publish(config["server"], topic, alert)
                 state["last_alerts"][key] = captured.isoformat()
                 sent += 1
+                notification_log.record_notification(*alert_text(alert), now)
             state["seen"].setdefault(location, set()).add(name)
         except Exception as error:
             failures.append(f"{location}/{name}: {type(error).__name__}: {error}")
@@ -403,7 +414,7 @@ def send_daily_summary(
         total = sum(species_totals.values())
         local_start = start.astimezone(LOCAL_TIME)
         lines = [
-            f"{local_start:%d.%m.%Y %H:%M %Z} - {scheduled:%d.%m.%Y %H:%M %Z}",
+            f"{local_start:{DATE_FORMAT} %H:%M %Z} - {scheduled:{DATE_FORMAT} %H:%M %Z}",
             f"Total: {total} {'sighting' if total == 1 else 'sightings'} in the last 24 hours.",
         ]
         for label, species_counts in [
@@ -427,9 +438,10 @@ def send_daily_summary(
         if not topic:
             raise RuntimeError("ntfy topic is missing from macOS Keychain")
         params = urlencode({"title": "Wildl-ID daily summary", "priority": "default"})
+        message = "\n".join(lines)
         request = Request(
             f"{config['server']}/{quote(topic, safe='')}?{params}",
-            data="\n".join(lines).encode("utf-8"),
+            data=message.encode("utf-8"),
             method="PUT",
         )
         if publisher is not None:
@@ -437,6 +449,9 @@ def send_daily_summary(
         else:
             with urlopen(request, timeout=PUBLISH_TIMEOUT_SECONDS):
                 pass
+        notification_log.record_notification(
+            "Wildl-ID daily summary", message, local_now
+        )
         state_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = state_path.with_name(f".{state_path.name}.tmp")
         temporary.write_text(json.dumps({"last_sent": day}) + "\n", encoding="utf-8")

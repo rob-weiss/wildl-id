@@ -2,10 +2,13 @@ import csv
 import logging
 import os
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
+from src.alerting import notification_log
+from src.labelling.label_data import DATE_FORMAT
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from web.camera_map import build_camera_map_page
@@ -21,6 +24,7 @@ app = FastAPI()
 visualisation_runs = VisualisationRunStore()
 filtered_plot_runs = FilteredPlotRunStore()
 logger = logging.getLogger(__name__)
+LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
 ASSETS_DIRECTORY = Path(__file__).resolve().parent.parent / "docs" / "assets"
 app.mount("/assets", StaticFiles(directory=ASSETS_DIRECTORY), name="brand-assets")
 app.mount(
@@ -43,6 +47,10 @@ def add_navigation(current_path: str) -> None:
         body { background: #f4f6f4; }
         a:not(.q-item):not(.q-btn) { color: #53675d; }
         a:not(.q-item):not(.q-btn):hover { color: #214a3a; }
+        .q-drawer--mini .navigation-header {
+            flex-direction: column;
+            justify-content: center;
+        }
         </style>"""
     )
     with (
@@ -61,22 +69,29 @@ def add_navigation(current_path: str) -> None:
                 f"aria-expanded={str(not collapsed).lower()}"
             )
 
-        with ui.row().classes("w-full items-center gap-0 flex-nowrap"):
-            with ui.link(target="/").classes("shrink-0 p-2"):
+        # Fixed height keeps the navigation items in place when toggling.
+        with (
+            ui.element("div")
+            .classes(
+                "navigation-header w-full h-24 shrink-0 flex flex-nowrap "
+                "items-center justify-between gap-1 px-2"
+            )
+            .mark("navigation-header")
+        ):
+            with ui.link(target="/").classes("q-mini-drawer-only"):
                 ui.image("/assets/wildl-id-icon.svg").props(
                     'alt="wildl-id home"'
                 ).classes("w-8 h-8")
-            ui.image("/assets/wildl-id-logo.svg").props('alt="wildl-id logo"').classes(
-                "q-mini-drawer-hide w-40 max-w-full"
+            with ui.link(target="/").classes("q-mini-drawer-hide"):
+                ui.image("/assets/wildl-id-logo.svg").props(
+                    'alt="wildl-id home"'
+                ).classes("w-40")
+            toggle = (
+                ui.button(icon="chevron_right", on_click=toggle_navigation)
+                .props('flat round aria-label="Expand navigation" aria-expanded=false')
+                .mark("navigation-toggle")
             )
-
-        toggle = (
-            ui.button(icon="chevron_right", on_click=toggle_navigation)
-            .props('flat round aria-label="Expand navigation" aria-expanded=false')
-            .classes("self-start ml-1")
-            .mark("navigation-toggle")
-        )
-        toggle.tooltip("Toggle navigation")
+            toggle.tooltip("Toggle navigation")
         with ui.list().classes("w-full"):
             for title, target, icon, description in (
                 ("Home", "/", "home", "Recent wildlife sightings and camera activity."),
@@ -200,6 +215,32 @@ def home_page() -> None:
         build_recent_gallery(
             DEFAULT_CSV, image_base_url=os.environ.get("WILDL_ID_IMAGE_BASE_URL")
         )
+        build_recent_notifications()
+
+
+def build_recent_notifications() -> None:
+    ui.label("Latest notifications").classes("text-xl font-semibold")
+
+    @ui.refreshable
+    def notification_list() -> None:
+        notifications = notification_log.recent_notifications(5)
+        if not notifications:
+            ui.label("No notifications sent yet").classes("text-sm text-gray-600")
+            return
+        with ui.column().classes("w-full gap-2"):
+            for notification in notifications:
+                sent = notification["sent"].astimezone(LOCAL_TIMEZONE)
+                with ui.card().classes("w-full gap-1"):
+                    ui.label(notification["title"]).classes("font-medium")
+                    ui.label(notification["message"]).classes(
+                        "text-sm whitespace-pre-line"
+                    )
+                    ui.label(f"{sent:{DATE_FORMAT} %H:%M}").classes(
+                        "text-xs text-gray-600"
+                    )
+
+    notification_list()
+    ui.timer(60, notification_list.refresh, immediate=False)
 
 
 @ui.page("/review")

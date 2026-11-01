@@ -15,6 +15,7 @@ COPY src/labelling/review_app.py src/labelling/review_labels.py src/labelling/la
 COPY src/labelling/review_zoom.js ./src/labelling/
 COPY src/labelling/vendor/panzoom.es.js src/labelling/vendor/PANZOOM-LICENSE.txt ./src/labelling/vendor/
 COPY src/visualisation/evaluate_labels.py ./src/visualisation/
+COPY src/alerting/notification_log.py ./src/alerting/
 
 FROM python:3.14-slim AS runtime
 
@@ -32,6 +33,7 @@ COPY --from=builder --chown=app:app /app/.venv /app/.venv
 COPY --from=builder --chown=app:app /app/web /app/web
 COPY --from=builder --chown=app:app /app/src/labelling /app/src/labelling
 COPY --from=builder --chown=app:app /app/src/visualisation /app/src/visualisation
+COPY --from=builder --chown=app:app /app/src/alerting /app/src/alerting
 COPY --chown=app:app docs/assets /app/docs/assets
 
 USER app:app

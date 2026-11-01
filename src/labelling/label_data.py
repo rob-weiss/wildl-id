@@ -12,6 +12,7 @@ from pathlib import Path
 from unicodedata import normalize
 
 REPO_DIR = Path(__file__).resolve().parents[2]
+DATE_FORMAT = "%d-%m-%Y"
 HUMAN_COLUMNS = ("location_id", "image_file", "box", "manual_label")
 METADATA_COLUMNS = (
     "location_id",

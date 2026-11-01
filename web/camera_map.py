@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from src.labelling.label_data import DATE_FORMAT
 
 DEFAULT_LOCATIONS = (
     Path(__file__).resolve().parents[1] / "config" / "camera_locations.json"
@@ -421,7 +422,7 @@ async def build_camera_map_page() -> None:
                 hour_label.set_text(
                     forecast[0]
                     .time.tz_convert(LOCAL_TIMEZONE)
-                    .strftime("%a %d %b %H:%M %Z")
+                    .strftime(f"%a {DATE_FORMAT} %H:%M %Z")
                 )
             for hour_index, hour in enumerate(forecast):
                 offset = (hour_index - (len(forecast) - 1) / 2) * 18

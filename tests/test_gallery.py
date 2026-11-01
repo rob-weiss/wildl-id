@@ -289,7 +289,7 @@ class SmartFilterTests(unittest.TestCase):
         description = describe_filter(parse("wild boar of the last two weeks"))
 
         self.assertIn("wild boar", description)
-        self.assertIn("2026-10-16 – 2026-10-30", description)
+        self.assertIn("16-10-2026 – 30-10-2026", description)
 
 
 class ImageSourceTests(unittest.TestCase):

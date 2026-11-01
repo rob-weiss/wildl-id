@@ -230,7 +230,8 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     if len(df_valid) > 0:
         date_range = df_valid["date"].max() - df_valid["date"].min()
         print(
-            f"Date range: {df_valid['date'].min()} to {df_valid['date'].max()} ({date_range.days} days)"
+            f"Date range: {df_valid['date'].min():{label_data.DATE_FORMAT}} to "
+            f"{df_valid['date'].max():{label_data.DATE_FORMAT}} ({date_range.days} days)"
         )
         # Check for potential duplicates
         duplicates = df_valid.groupby("timestamp").size()
@@ -692,7 +693,9 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
                     fontweight="bold",
                 )
                 ax1.grid(True, alpha=0.3)
-                ax1.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+                ax1.xaxis.set_major_formatter(
+                    mdates.DateFormatter(label_data.DATE_FORMAT)
+                )
                 ax1.xaxis.set_major_locator(mdates.AutoDateLocator())
                 plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
 
@@ -1164,7 +1167,9 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
                 ax.set_ylabel("Detections", fontsize=10)
                 ax.legend(loc="upper right", fontsize=8)
                 ax.grid(True, alpha=0.3)
-                ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d"))
+                ax.xaxis.set_major_formatter(
+                    mdates.DateFormatter(label_data.DATE_FORMAT)
+                )
                 ax.xaxis.set_major_locator(mdates.AutoDateLocator())
                 ax.tick_params(axis="x", rotation=45)
 
@@ -2176,7 +2181,8 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
         "Images with Timestamps": len(df_valid),
         "Unique Species": df["class"].nunique(),
         "Unique Locations": df["location_id"].nunique(),
-        "Date Range": f"{df_valid['date'].min()} to {df_valid['date'].max()}"
+        "Date Range": f"{df_valid['date'].min():{label_data.DATE_FORMAT}} to "
+        f"{df_valid['date'].max():{label_data.DATE_FORMAT}}"
         if len(df_valid) > 0
         else "N/A",
         "Most Common Species": species_counts.index[0]

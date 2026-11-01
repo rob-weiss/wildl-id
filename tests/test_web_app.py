@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from importlib import import_module
 from pathlib import Path
 from types import SimpleNamespace
@@ -17,6 +17,7 @@ from web import app as web_app
 from web import gallery
 
 review_module = import_module("src.labelling.review_app")
+notification_log = import_module("src.alerting.notification_log")
 
 
 def call_cloud_image_url(image_path, images_root, base_url):
@@ -296,6 +297,26 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     user.find(marker="navigation-toggle").click()
                     self.assertTrue(drawer.props.get("mini"))
 
+    async def test_navigation_header_keeps_height_and_shows_one_logo_per_state(self):
+        async with self.app_user("/") as user:
+            header = next(iter(user.find(marker="navigation-header").elements))
+            self.assertIn("h-24", header.classes)
+            links = [
+                element
+                for element in header.descendants()
+                if isinstance(element, ui.link)
+            ]
+            self.assertEqual([link.props["href"] for link in links], ["/", "/"])
+            icon_link, logo_link = links
+            self.assertIn("q-mini-drawer-only", icon_link.classes)
+            self.assertIn("q-mini-drawer-hide", logo_link.classes)
+            self.assertEqual(
+                [image.source for image in logo_link.descendants()],
+                ["/assets/wildl-id-logo.svg"],
+            )
+            toggle = next(iter(user.find(marker="navigation-toggle").elements))
+            self.assertIn(toggle, header.descendants())
+
     async def test_side_navigation_uses_review_label_and_descriptive_tooltips(self):
         async with self.app_user("/review") as user:
             review_items = [
@@ -425,7 +446,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see(
                     "North · 15:00: 7 km/h from E (90°), gusts 9 km/h"
                 )
-                await user.should_see("Sat 31 Oct 13:00 CET")
+                await user.should_see("Sat 31-10-2026 13:00 CET")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
                 self.assertEqual(kinds.count("polyline"), 3)
@@ -695,7 +716,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     }
                 )
                 self.write_csv(fields, rows)
-                timer.call_args.args[1]()
+                timer.call_args_list[0].args[1]()
                 await user.should_see("4 images")
                 self.assertIn("(3)", fox.text)
                 self.assertEqual(fox.props.get("aria-pressed"), "true")
@@ -829,7 +850,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(
                     all(call.args[0] == 60 for call in timer.call_args_list)
                 )
-                refresh = timer.call_args.args[1]
+                refresh = timer.call_args_list[0].args[1]
                 rows[0]["timestamp"] = (now - timedelta(hours=25)).isoformat()
                 rows.append(
                     {
@@ -893,7 +914,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         },
                     ],
                 )
-                timer.call_args.args[1]()
+                timer.call_args_list[0].args[1]()
                 await user.should_see("1 images")
                 await user.should_see("Manual:")
                 await user.should_see("Automatic:")
@@ -909,7 +930,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 self.assertNotIn("<text", image.content)
                 self.write_original_image("new-arrival.jpg", now)
-                timer.call_args.args[1]()
+                timer.call_args_list[0].args[1]()
                 await user.should_see("2 images")
 
     def test_original_capture_time_falls_back_to_filename_after_invalid_exif(self):
@@ -941,6 +962,37 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         async with self.app_user("/gallery") as user:
             await user.should_see("2 images · all images")
             await user.should_see("Unlabelled")
+
+    async def test_home_shows_latest_five_notifications_below_images(self):
+        log_path = self.root / "push_alerts.csv"
+        start = datetime(2026, 11, 1, 6, 0, tzinfo=UTC)
+        for index in range(6):
+            notification_log.record_notification(
+                f"Alert {index}",
+                f"Message {index}",
+                start + timedelta(minutes=index),
+                log_path,
+            )
+        with patch.object(notification_log, "LOG_PATH", log_path):
+            async with self.app_user("/") as user:
+                await user.should_see("Latest notifications")
+                await user.should_see("Alert 5")
+                await user.should_see("Alert 1")
+                await user.should_not_see("Alert 0")
+                await user.should_see("01-11-2026 07:05")
+                heading = next(
+                    iter(user.find(kind=ui.label, content="Latest notifications").elements)
+                )
+                images = next(
+                    iter(user.find(kind=ui.label, content="Last 24 hours").elements)
+                )
+                self.assertGreater(heading.id, images.id)
+
+    async def test_home_shows_dates_as_day_month_year(self):
+        taken = datetime.now() - timedelta(minutes=1)
+        self.write_original_image("recent.jpg", taken)
+        async with self.app_user("/") as user:
+            await user.should_see(f"camera1 · {taken:%d-%m-%Y %H:%M}")
 
     async def test_home_shows_photos_without_csv_and_does_not_create_labels(self):
         self.write_original_image("recent.jpg", datetime.now() - timedelta(minutes=1))
@@ -1000,7 +1052,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/") as user:
                 await user.should_see("Recent images unavailable")
                 self.write_csv(["location_id", "image_file", "class"], [])
-                timer.call_args.args[1]()
+                timer.call_args_list[0].args[1]()
                 await user.should_see("No sightings in the last 24 hours")
                 await user.should_not_see("Recent images unavailable")
 
@@ -1080,7 +1132,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 ).click()
                 await user.should_see("49 / 49")
                 self.write_csv(["location_id", "image_file", "timestamp", "class"], [])
-                timer.call_args.args[1]()
+                timer.call_args_list[0].args[1]()
                 user.find(marker="recent-image-previous").click()
                 await user.should_see("48 / 49")
                 user.find(marker="recent-image-next").click()
