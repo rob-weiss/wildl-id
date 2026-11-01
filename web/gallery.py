@@ -617,12 +617,14 @@ def filter_rows(rows, gallery_filter, now=None):
         manual_label = (row.get("manual_label") or "").strip()
         if f.reviewed is not None and bool(manual_label) != f.reviewed:
             continue
-        if f.misclassified and (
-            not manual_label
-            or normalize_text(manual_label)
-            == normalize_text((row.get("class") or "").strip())
-        ):
-            continue
+        if f.misclassified:
+            predicted = normalize_text((row.get("class") or "").strip())
+            if (
+                not manual_label
+                or predicted in {"", "unknown"}
+                or normalize_text(manual_label) == predicted
+            ):
+                continue
         if (
             f.lighting
             and normalize_text((row.get("lighting") or "").strip()) != f.lighting
@@ -1302,7 +1304,11 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
             ui.notify("Filter not understood; showing all images", type="warning")
         description = describe_filter(gallery_filter)
         # Explicitly requested species override the quick filter.
-        if relevant_only.value and not gallery_filter.labels:
+        if (
+            relevant_only.value
+            and not gallery_filter.labels
+            and gallery_filter.reviewed is not False
+        ):
             gallery_filter.labels = set(RECENT_SPECIES) - gallery_filter.excluded_labels
             description = (
                 "relevant species"
