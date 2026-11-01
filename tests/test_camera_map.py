@@ -101,6 +101,16 @@ class CameraMapTests(unittest.TestCase):
             dict(camera_map.rank_seats([side], wind, 0, hours=6))[side], 5 / 6
         )
 
+    def test_arc_colour_by_clearance_from_view(self):
+        red, yellow, green = "#ef4444", "#facc15", "#22c55e"
+        # View 0 +-30 deg, arc width 40 (+-20): edges at 30 and centre-20.
+        self.assertEqual(camera_map.arc_colour(0, 60, 40, 40), red)
+        self.assertEqual(camera_map.arc_colour(0, 60, 70, 40), yellow)
+        self.assertEqual(camera_map.arc_colour(0, 60, 180, 40), green)
+        self.assertEqual(camera_map.arc_colour(0, 60, 320, 40), red)
+        # Clear by 30 on one side but only 20 on the other.
+        self.assertEqual(camera_map.arc_colour(0, 180, 235, 20), yellow)
+
     def test_downwind_sector_covers_all_selected_hours(self):
         import pandas as pd
 

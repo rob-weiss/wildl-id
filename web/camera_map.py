@@ -55,6 +55,7 @@ RANKING_HOURS = 3
 RANKING_HOUR_OPTIONS = range(1, 11)
 WIND_SPREAD = 45.0
 WIND_ARC_PADDING = 10.0
+ARC_CLEARANCE = 30.0
 VIEW_RADIUS = 120.0
 
 
@@ -259,6 +260,19 @@ def sector_overlap(
     )
 
 
+def arc_colour(
+    view_direction: float, view_angle: float, center: float, width: float
+) -> str:
+    """Red if the wind arc overlaps the view, green if clear by 30 degrees on both sides."""
+    offset = (center - view_direction) % 360
+    half_sum = (view_angle + width) / 2
+    if offset <= half_sum or 360 - offset <= half_sum:
+        return "#ef4444"
+    if offset - half_sum > ARC_CLEARANCE and 360 - offset - half_sum > ARC_CLEARANCE:
+        return "#22c55e"
+    return "#facc15"
+
+
 def wind_match(camera: Camera, hours: list[WindHour]) -> float:
     # Wind blowing from the viewed area carries the hunter's scent away from game.
     window = min(camera.view_angle, 2 * WIND_SPREAD)
@@ -390,7 +404,7 @@ async def build_camera_map_page() -> None:
             )
         ui.label(
             "Each camera's arc shows where the wind blows over the selected "
-            "hours; colour indicates the strongest wind."
+            "hours; red overlaps the view, yellow is close, green clears it by 30°."
         ).classes("text-sm text-gray-600")
         wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
         missing = [camera.location_id for camera in cameras if not camera.located]
@@ -450,8 +464,12 @@ async def build_camera_map_page() -> None:
             if not forecast:
                 continue
             center, width = downwind_sector(forecast)
-            mean_speed = sum(hour.speed for hour in forecast) / len(forecast)
-            colour = wind_colour(max(hour.speed for hour in forecast))
+            max_speed = max(hour.speed for hour in forecast)
+            colour = (
+                arc_colour(camera.view_direction, camera.view_angle, center, width)
+                if camera.has_view
+                else wind_colour(max(hour.speed for hour in forecast))
+            )
             state["arrows"].append(
                 leaflet.generic_layer(
                     name="polygon",
@@ -461,7 +479,7 @@ async def build_camera_map_page() -> None:
                             camera.longitude,
                             center,
                             width,
-                            max(40.0, mean_speed * 15),
+                            max(40.0, max_speed * 15),
                         ),
                         {
                             "color": colour,

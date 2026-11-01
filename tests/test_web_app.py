@@ -486,7 +486,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Camera map")
                 await user.should_see(
                     "Each camera's arc shows where the wind blows over the selected "
-                    "hours; colour indicates the strongest wind."
+                    "hours; red overlaps the view, yellow is close, green clears it by 30°."
                 )
                 await user.should_see("Missing coordinates")
                 await user.should_see(
