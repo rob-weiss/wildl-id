@@ -304,6 +304,7 @@ def status_page() -> None:
         with ui.card().classes("w-full gap-1"):
             ui.label("Services").classes("font-medium")
             service_details()
+        build_notification_status()
     ui.timer(5, mail_job_details.refresh)
     ui.timer(5, service_details.refresh)
 
@@ -346,6 +347,37 @@ def service_details() -> None:
         ("Web app", background.WEB_AGENT),
     ):
         ui.label(f"{title}: {background.agent_status(label)}").classes("text-sm")
+
+
+def build_notification_status() -> None:
+    ui.label("Notification status").classes("text-xl font-semibold")
+
+    @ui.refreshable
+    def notification_status() -> None:
+        status = notification_log.latest_status()
+        with ui.card().classes("w-full gap-1"):
+            if status is None:
+                ui.label("No runs recorded yet").classes("text-sm text-gray-600")
+                return
+            ui.label("Configured" if status["enabled"] else "Not configured").classes(
+                "font-medium"
+            )
+            checked = status["checked"].astimezone(LOCAL_TIMEZONE)
+            ui.label(f"Last run {checked:{DATE_FORMAT} %H:%M}").classes("text-sm")
+            ui.label(f"{status['sent']} sent").classes("text-sm")
+            failures = status["failures"]
+            if failures:
+                count = len(failures)
+                ui.label(f"{count} failure{'s' if count != 1 else ''}").classes(
+                    "text-sm"
+                )
+                for failure in failures:
+                    ui.label(failure).classes("text-sm text-gray-700")
+            else:
+                ui.label("No failures").classes("text-sm text-gray-600")
+
+    notification_status()
+    ui.timer(60, notification_status.refresh, immediate=False)
 
 
 @ui.page("/visualisations")

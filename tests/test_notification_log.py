@@ -35,11 +35,41 @@ class NotificationLogTests(unittest.TestCase):
     def test_missing_log_has_no_notifications(self):
         self.assertEqual(notification_log.recent_notifications(5, self.path), [])
 
+    def test_notification_status_is_saved_and_read(self):
+        status_path = self.path.with_name("push_alerts_status.json")
+        checked = datetime(2026, 11, 1, 12, 30, tzinfo=UTC)
+
+        notification_log.record_status(
+            True,
+            2,
+            ("RuntimeError: request failed for https://ntfy.sh/private-topic",),
+            checked,
+            status_path,
+        )
+
+        self.assertEqual(
+            notification_log.latest_status(status_path),
+            {
+                "checked": checked,
+                "enabled": True,
+                "sent": 2,
+                "failures": ["RuntimeError"],
+            },
+        )
+
     def test_unwritable_log_does_not_raise(self):
         self.path.parent.parent.joinpath("logs").write_text("not a directory")
 
         notification_log.record_notification(
             "Title", "Message", datetime.now(UTC), self.path
+        )
+
+    def test_unwritable_status_does_not_raise(self):
+        blocked_path = self.path.parent.parent / "blocked"
+        blocked_path.write_text("not a directory", encoding="utf-8")
+
+        notification_log.record_status(
+            True, 1, (), datetime.now(UTC), blocked_path / "status.json"
         )
 
 

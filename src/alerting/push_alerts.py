@@ -471,7 +471,10 @@ def send_push_alerts(
     publisher: Callable[[str, str, Alert], None] | None = None,
     now: datetime | None = None,
 ) -> AlertResult:
-    summary = send_daily_summary(config_path, keychain_reader=keychain_reader, now=now)
+    checked = now or datetime.now(UTC)
+    summary = send_daily_summary(
+        config_path, keychain_reader=keychain_reader, now=checked
+    )
     alerts = _send_species_alerts(
         config_path,
         state_path,
@@ -479,10 +482,14 @@ def send_push_alerts(
         keychain_reader=keychain_reader,
         analyser_factory=analyser_factory,
         publisher=publisher,
-        now=now,
+        now=checked,
     )
-    return AlertResult(
+    result = AlertResult(
         summary.enabled or alerts.enabled,
         summary.sent + alerts.sent,
         summary.failures + alerts.failures,
     )
+    notification_log.record_status(
+        result.enabled, result.sent, result.failures, checked
+    )
+    return result

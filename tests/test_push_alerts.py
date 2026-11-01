@@ -159,6 +159,15 @@ class PushAlertTests(unittest.TestCase):
             raise OSError("offline")
 
         failed = self.run_alerts(publisher=failing)
+        self.assertEqual(
+            notification_log.latest_status(),
+            {
+                "checked": NOW,
+                "enabled": True,
+                "sent": 0,
+                "failures": ["OSError"],
+            },
+        )
         retried = self.run_alerts()
 
         self.assertEqual(len(failed.failures), 1)

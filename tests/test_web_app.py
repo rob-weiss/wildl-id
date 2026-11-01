@@ -327,6 +327,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             switch = next(iter(user.find(marker="automatic-runs").elements))
             self.assertTrue(switch.value)
 
+    async def test_status_page_shows_notification_run_status(self):
+        log_path = self.root / "logs" / "push_alerts.csv"
+        notification_log.record_status(
+            True,
+            2,
+            ("RuntimeError: ntfy topic is missing from macOS Keychain",),
+            datetime(2026, 11, 1, 12, 30, tzinfo=UTC),
+            log_path.with_name("push_alerts_status.json"),
+        )
+        with patch.object(notification_log, "LOG_PATH", log_path):
+            async with self.app_user("/status") as user:
+                await user.should_see("Notification status")
+                await user.should_see("Configured")
+                await user.should_see("Last run 01-11-2026 13:30")
+                await user.should_see("2 sent")
+                await user.should_see("1 failure")
+                await user.should_see("Keychain topic missing")
+
     async def test_status_switch_pauses_and_resumes_automatic_runs(self):
         with patch.object(web_app.job_control, "set_paused") as set_paused:
             async with self.app_user("/status") as user:
