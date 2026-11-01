@@ -350,9 +350,7 @@ def row_datetime(row):
 
 
 def recent_rows(rows, now=None):
-    return filter_rows(
-        rows, GalleryFilter(labels=RECENT_SPECIES | {"", "unknown"}, hours=24), now=now
-    )
+    return filter_rows(rows, GalleryFilter(labels=set(RECENT_SPECIES), hours=24), now=now)
 
 
 def shift_months(day, months):
@@ -1000,8 +998,6 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     species_names = {
         species: display_label(species) for species in sorted(RECENT_SPECIES)
     }
-    species_names["unknown"] = display_label("unknown")
-    species_names["unlabelled"] = "Unlabelled"
     species_buttons = {}
     boxes = BoxToggle(True)
     with ui.column().classes("w-full gap-3"):
@@ -1033,9 +1029,7 @@ def build_recent_gallery(csv_path, images_dir=None, image_base_url=None):
     show_image, close_image_viewer = build_image_viewer(items, boxes, compact=True)
 
     def species_key(row):
-        label = normalize_text(row_label(row))
-        manual_label = (row.get("manual_label") or "").strip()
-        return "unlabelled" if not manual_label and label in {"", "unknown"} else label
+        return normalize_text(row_label(row))
 
     def update_counts():
         photos = {species: set() for species in species_names}

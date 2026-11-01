@@ -8,10 +8,11 @@ Camera map. It starts collapsed to icons; hover for a page name and summary, or
 expand it to show the navigation labels.
 
 The home page also shows a mini gallery of sightings captured in the last
-24 hours, newest first. It includes roe deer, wild boar, badger, marten, fox,
-hare, and raccoon, using manual labels when available to select species.
-Compact species buttons allow multiple selections; **All** resets the filter
-and **Unlabelled** selects pending photos. Button counts and the short summary
+24 hours, newest first. It shows only the relevant species listed in
+`config/relevant_species.json` (roe deer, wild boar, badger, marten, fox, hare,
+and raccoon), using manual labels when available to select species.
+Compact species buttons allow multiple selections; **All** resets the filter.
+Button counts and the short summary
 count each photo once per species, not each bounding box. Selections persist
 through minute refreshes. There is no search field, guide or examples on home.
 Thumbnails and enlarged photos retain their original aspect ratios.
@@ -19,12 +20,12 @@ Toggling bounding boxes changes only the overlay, not the carousel frame. Boxes
 are yellow before review, green when a human label agrees with the prediction,
 and red when it disagrees. Gallery pagination uses bounded page links, ellipses,
 and first/last controls for large datasets.
-Unclassified photos are included until their species is known, including
-originals not yet present in the labels CSV. Capture times come from the CSV
+Photos that are unlabelled, empty, unknown, or of other species stay off the
+home page; browse them in the Gallery. Capture times come from the CSV
 or the original image's EXIF metadata; supported camera filenames are a
-fallback. File modification times are not used. Available manual and automatic
-labels are both shown, even without a bounding box. Boxes appear when present,
-and photos with no annotations are marked **Unlabelled**. Click an image to
+fallback. File modification times are not used. Thumbnails show the manual
+label, or the automatic label when there is none. Boxes appear when present.
+Click an image to
 enlarge it. The viewer has previous/next controls and an image counter;
 left/right arrow keys navigate and Escape closes it. Navigation covers all
 matching images, including other thumbnail pages. An open viewer keeps its

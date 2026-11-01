@@ -677,11 +677,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(fox.visible)
                 self.assertTrue(badger.visible)
                 await user.should_not_see("roe deer (0)")
-                self.assertTrue(
-                    next(
-                        iter(user.find(marker="recent-species-unlabelled").elements)
-                    ).visible
-                )
+                await user.should_not_see(marker="recent-species-unlabelled")
                 summary = next(
                     iter(user.find(marker="recent-species-summary").elements)
                 )
@@ -689,7 +685,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     iter(user.find(marker="recent-full-gallery").elements)
                 )
                 status = next(
-                    iter(user.find(kind=ui.label, content="5 images").elements)
+                    iter(user.find(kind=ui.label, content="4 images").elements)
                 )
                 self.assertEqual(full_gallery_link.props.get("href"), "/gallery")
                 review_link = next(
@@ -706,10 +702,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("4 images")
                 user.find(marker="recent-species-fox").click()
                 await user.should_see("1 images")
-                user.find(marker="recent-species-unlabelled").click()
-                await user.should_see("2 images")
                 user.find(marker="recent-species-all").click()
-                await user.should_see("5 images")
+                await user.should_see("4 images")
                 user.find(marker="recent-species-fox").click()
                 rows.append(
                     {
@@ -725,27 +719,28 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("(3)", fox.text)
                 self.assertEqual(fox.props.get("aria-pressed"), "true")
 
-    async def test_home_distinguishes_human_unknown_from_unlabelled(self):
+    async def test_home_shows_only_relevant_species(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
         fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]
-        rows = [
-            {
-                "location_id": "camera1",
-                "image_file": "human-unknown.jpg",
-                "timestamp": now,
-                "class": "unknown",
-                "manual_label": "unknown",
-            },
-            {
-                "location_id": "camera1",
-                "image_file": "unlabelled.jpg",
-                "timestamp": now,
-                "class": "",
-                "manual_label": "",
-            },
-        ]
-        self.write_csv(fields, rows)
-
+        self.write_csv(
+            fields,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": name,
+                    "timestamp": now,
+                    "class": automatic,
+                    "manual_label": manual,
+                }
+                for name, automatic, manual in (
+                    ("human-unknown.jpg", "unknown", "unknown"),
+                    ("unlabelled.jpg", "", ""),
+                    ("empty.jpg", "none", ""),
+                    ("squirrel.jpg", "squirrel", ""),
+                    ("corrected.jpg", "squirrel", "fox"),
+                )
+            ],
+        )
         with (
             patch.dict(
                 os.environ,
@@ -754,17 +749,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             patch.object(gallery.ui, "timer"),
         ):
             async with self.app_user("/") as user:
-                unknown = next(
-                    iter(user.find(marker="recent-species-unknown").elements)
-                )
-                unlabelled = next(
-                    iter(user.find(marker="recent-species-unlabelled").elements)
-                )
-                self.assertIn("(1)", unknown.text)
-                self.assertIn("(1)", unlabelled.text)
-                user.find(marker="recent-species-unknown").click()
                 await user.should_see("1 images")
-                await user.should_see("❓ unknown")
+                await user.should_see("🦊 fox")
+                for marker in ("unknown", "unlabelled", "none", "squirrel"):
+                    await user.should_not_see(marker=f"recent-species-{marker}")
 
     async def test_home_preserves_portrait_image_ratio_in_thumbnail_and_viewer(self):
         taken = datetime.now() - timedelta(minutes=1)
@@ -772,7 +760,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         exif = Image.Exif()
         exif[0x0132] = taken.strftime("%Y:%m:%d %H:%M:%S")
         Image.new("RGB", (800, 1200), "green").save(path, exif=exif)
-        self.write_csv(["location_id", "image_file", "class"], [])
+        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "portrait.jpg", "class": "fox"}])
         async with self.app_user("/") as user:
             images = user.find(kind=ui.interactive_image)
             thumbnail = next(iter(images.elements))
@@ -875,7 +863,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(any(source.endswith("/boar.jpg") for source in sources))
                 self.assertFalse(any(source.endswith("/fox.jpg") for source in sources))
 
-    async def test_home_discovers_unlabelled_photos_and_refreshes_annotations(self):
+    async def test_home_shows_new_photos_once_labelled_and_refreshes_annotations(self):
         now = datetime.now() - timedelta(minutes=1)
         fields = [
             "location_id",
@@ -897,14 +885,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.write_original_image("future.jpg", now + timedelta(hours=1))
         with patch.object(gallery.ui, "timer") as timer:
             async with self.app_user("/") as user:
-                await user.should_see("1 images")
-                await user.should_see("Unlabelled")
-                image = next(iter(user.find(kind=ui.interactive_image).elements))
-                self.assertTrue(image.source.endswith("/camera1/recent.jpg"))
-                user.find(kind=ui.interactive_image).trigger(
-                    "loaded", {"width": 16, "height": 16}
-                )
-                self.assertEqual(image.content, "")
+                await user.should_see("No sightings in the last 24 hours")
+                await user.should_not_see(kind=ui.interactive_image)
                 self.write_csv(
                     fields,
                     [
@@ -935,7 +917,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("<text", image.content)
                 self.write_original_image("new-arrival.jpg", now)
                 timer.call_args_list[0].args[1]()
-                await user.should_see("2 images")
+                await user.should_see("1 images")
 
     def test_original_capture_time_falls_back_to_filename_after_invalid_exif(self):
         taken = datetime(2026, 10, 30, 12, 45)
@@ -999,14 +981,15 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_home_shows_dates_as_day_month_year(self):
         taken = datetime.now() - timedelta(minutes=1)
         self.write_original_image("recent.jpg", taken)
+        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "recent.jpg", "class": "fox"}])
         async with self.app_user("/") as user:
             await user.should_see(f"camera1 · {taken:%d-%m-%Y %H:%M}")
 
-    async def test_home_shows_photos_without_csv_and_does_not_create_labels(self):
+    async def test_home_hides_unlabelled_photos_and_does_not_create_labels(self):
         self.write_original_image("recent.jpg", datetime.now() - timedelta(minutes=1))
         async with self.app_user("/") as user:
-            await user.should_see("1 images")
-            await user.should_see("Unlabelled")
+            await user.should_see("No sightings in the last 24 hours")
+            await user.should_not_see("Unlabelled")
         self.assertFalse(self.csv_path.exists())
 
     async def test_home_shows_both_labels_even_without_box(self):
@@ -1031,7 +1014,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_not_see("Manual:")
                 await user.should_not_see("🦊 fox")
 
-    async def test_home_shows_box_without_inventing_labels(self):
+    async def test_home_thumbnail_box_has_no_label_text(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class", "box"],
             [
@@ -1039,7 +1022,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "location_id": "camera1",
                     "image_file": "recent.jpg",
                     "timestamp": (datetime.now() - timedelta(minutes=1)).isoformat(),
-                    "class": "",
+                    "class": "fox",
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                 }
             ],
@@ -1048,7 +1031,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
         ):
             async with self.app_user("/") as user:
-                await user.should_see("Unlabelled")
+                await user.should_see("🦊 fox")
                 image = next(iter(user.find(kind=ui.interactive_image).elements))
                 user.find(kind=ui.interactive_image).trigger(
                     "loaded", {"width": 1600, "height": 900}
@@ -1641,7 +1624,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_and_viewer_toggle_bounding_boxes(self):
         self.write_original_image("fox.jpg", datetime.now() - timedelta(minutes=1))
-        self.write_csv(["location_id", "image_file", "class"], [])
+        self.write_csv(["location_id", "image_file", "class"], [{"location_id": "camera1", "image_file": "fox.jpg", "class": "fox"}])
         async with self.app_user("/") as user:
             toggle = next(iter(user.find(marker="recent-boxes").elements))
             self.assertEqual(toggle.props.get("aria-pressed"), "true")
