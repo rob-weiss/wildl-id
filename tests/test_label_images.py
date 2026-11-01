@@ -169,6 +169,24 @@ class AutomaticLabelTests(unittest.TestCase):
         self.assertEqual(result["prediction"], "song_bird")
         self.assertGreater(result["confidence"], 0.9)
 
+    def test_owl_predictions_are_reported_as_other_bird(self):
+        self.assertEqual(label_images.map_classifier_to_wildlife("Owl"), "other bird")
+        self.assertEqual(
+            label_images.map_classifier_to_wildlife("Chouette"), "other bird"
+        )
+        classifier = label_images.SpeciesClassifier.__new__(
+            label_images.SpeciesClassifier
+        )
+        classifier.pretrained = False
+        classifier.device = "cpu"
+        classifier.class_names = ["fox", "owl"]
+        classifier.transform = Mock(return_value=torch.zeros(3, 8, 8))
+        classifier.model = Mock(return_value=torch.tensor([[0.0, 3.0]]))
+        result = classifier.single_image_classification(
+            np.zeros((8, 8, 3), dtype=np.uint8), "image.jpg"
+        )
+        self.assertEqual(result["prediction"], "other bird")
+
     def test_latest_model_uses_timestamp_and_ignores_incomplete_runs(self):
         with tempfile.TemporaryDirectory() as directory:
             models = Path(directory)

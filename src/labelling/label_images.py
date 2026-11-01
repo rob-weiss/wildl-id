@@ -147,7 +147,7 @@ WILDLIFE_SPECIES = [
     "hare",
     "squirrel",
     "jay",
-    "owl",
+    "other bird",
     "crow",
     "human",
     "none",
@@ -250,7 +250,7 @@ def map_classifier_to_wildlife(classifier_name):
         or "chouette" in classifier_name_lower
         or "hibou" in classifier_name_lower
     ):
-        return "owl"
+        return "other bird"
     elif (
         "crow" in classifier_name_lower
         or "corbeau" in classifier_name_lower
@@ -783,8 +783,10 @@ class SpeciesClassifier:
         with torch.inference_mode():
             probabilities = self.model(tensor).softmax(dim=1)[0]
             confidence, index = probabilities.max(dim=0)
+        prediction = self.class_names[index.item()]
+        # Models trained before owl was merged still output it.
         return {
-            "prediction": self.class_names[index.item()],
+            "prediction": "other bird" if prediction == "owl" else prediction,
             "confidence": confidence.item(),
         }
 

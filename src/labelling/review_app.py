@@ -37,7 +37,6 @@ LABEL_EMOJIS = {
     "human": "🧍",
     "none": "🚫",
     "unknown": "❓",
-    "owl": "🦉",
     "cat": "🐈",
     "vehicle": "🚗",
     "song bird": "🐦",

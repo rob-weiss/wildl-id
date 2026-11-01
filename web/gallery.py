@@ -68,13 +68,13 @@ FILTER_GUIDE = """### Species and locations
 
 The effective species label is `manual_label` when set; otherwise it is `class`.
 Matching ignores case and accepts simple English plurals. `deer` matches roe and
-red deer; `bird` or `vogel` matches pigeon, jay, crow, song bird, and owl. Other
+red deer; `bird` or `vogel` matches pigeon, jay, crow, song bird, and other bird. Other
 aliases include `boar`, `pig`, and `wildschwein` for wild boar; `reh`/`rehe` for
 roe deer; `fuchs`/`füchse`, `dachs`, `hase`/`hasen`, and `eichhörnchen`;
 `songbird`; `person`/`persons`, `people`, and `mensch`/`menschen` for human;
 `car`/`cars` for vehicle; and `empty` or `nothing` for none. Standard labels
 include roe deer, red deer, wild boar, pigeon, badger, marten, dog, fox, hare,
-squirrel, jay, raccoon, crow, human, none, unknown, owl, cat, vehicle, and song
+squirrel, jay, raccoon, crow, human, none, unknown, other bird, cat, vehicle, and song
 bird. Labels present in the CSV can also be used directly.
 
 Location names come from `location_id`. Matching ignores case and accents.
@@ -163,10 +163,10 @@ LABEL_ALIASES = {
     "hase": ("hare",),
     "hasen": ("hare",),
     "eichhörnchen": ("squirrel",),
-    "bird": ("pigeon", "jay", "crow", "song bird", "owl"),
-    "birds": ("pigeon", "jay", "crow", "song bird", "owl"),
-    "vogel": ("pigeon", "jay", "crow", "song bird", "owl"),
-    "vögel": ("pigeon", "jay", "crow", "song bird", "owl"),
+    "bird": ("pigeon", "jay", "crow", "song bird", "other bird"),
+    "birds": ("pigeon", "jay", "crow", "song bird", "other bird"),
+    "vogel": ("pigeon", "jay", "crow", "song bird", "other bird"),
+    "vögel": ("pigeon", "jay", "crow", "song bird", "other bird"),
     "songbird": ("song bird",),
     "songbirds": ("song bird",),
     "person": ("human",),

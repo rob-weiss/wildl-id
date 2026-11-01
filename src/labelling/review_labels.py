@@ -49,11 +49,12 @@ SHORTCUTS = {
     "a": "human",
     "n": "none",
     "u": "unknown",
-    "l": "owl",
     "t": "cat",
     "v": "vehicle",
 }
-LEGACY_REVIEW_LABELS = frozenset({"woodpecker", "buzzard", "falcon", "song bird"})
+LEGACY_REVIEW_LABELS = frozenset(
+    {"woodpecker", "buzzard", "falcon", "song bird", "owl"}
+)
 
 
 def shortcuts_for_labels(labels):

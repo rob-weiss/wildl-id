@@ -96,7 +96,7 @@ DEEPFAUNE_EQUIVALENT = {
     "jay": "bird",
     "buzzard": "bird",
     "crow": "bird",
-    "owl": "bird",
+    "other bird": "bird",
     "song_bird": "bird",
     "woodpecker": "bird",
 }

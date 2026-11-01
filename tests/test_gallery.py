@@ -200,6 +200,10 @@ class SmartFilterTests(unittest.TestCase):
         self.assertEqual(parse("boars").labels, {"wild boar"})
         self.assertEqual(parse("foxes").labels, {"fox"})
         self.assertEqual(parse("all deer").labels, {"roe deer", "red deer"})
+        self.assertEqual(
+            parse("birds").labels,
+            {"pigeon", "jay", "crow", "song bird", "other bird"},
+        )
 
     def test_negated_labels_and_locations(self):
         gallery_filter = parse("everything except foxes and badgers, not at Douglasien")

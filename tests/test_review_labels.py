@@ -553,6 +553,7 @@ class LabelReviewTests(unittest.TestCase):
                     ["camera1", "buzzard.jpg", "buzzard", "", ""],
                     ["camera1", "falcon.jpg", "falcon", "", ""],
                     ["camera1", "songbird.jpg", "song bird", "", ""],
+                    ["camera1", "owl.jpg", "owl", "", ""],
                     ["camera1", "marten.jpg", "marten", "", ""],
                     ["camera1", "otherbird.jpg", "other bird", "", ""],
                 ]
@@ -575,7 +576,13 @@ class LabelReviewTests(unittest.TestCase):
             all(
                 not any(
                     legacy in caption
-                    for legacy in ("woodpecker", "buzzard", "falcon", "song bird")
+                    for legacy in (
+                        "woodpecker",
+                        "buzzard",
+                        "falcon",
+                        "song bird",
+                        "owl",
+                    )
                 )
                 for caption in captions
             )
