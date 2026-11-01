@@ -34,11 +34,13 @@ from astral.sun import sun
 
 try:
     from ..labelling import label_data
+    from ..labelling.species import RECENT_SPECIES
 except ImportError:
     import sys
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from labelling import label_data
+    from labelling.species import RECENT_SPECIES
 
 VISUALIZATION_CLASSES = frozenset(
     {
@@ -465,37 +467,16 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
 
     fig, ax = plt.subplots(figsize=(14, 8))
 
-    # Species diversity by location
-    location_species = pd.crosstab(df["location_id"], df["class"])
-
-    # Show all locations (sorted by total count)
-    all_locations = location_counts.index
-    location_species_all = location_species.loc[all_locations]
-
-    # Group species that make up the last 10% into "other"
-    species_totals = location_species_all.sum(axis=0).sort_values(ascending=False)
-    total_sightings = species_totals.sum()
-    cumulative_pct_loc: pd.Series = (species_totals.cumsum() / total_sightings) * 100
-    threshold_idx_loc = (cumulative_pct_loc >= 90).idxmax()
-    threshold_position_loc = species_totals.index.get_loc(threshold_idx_loc)
-    threshold_pos_loc_int = (
-        int(threshold_position_loc)
-        if isinstance(threshold_position_loc, (int, np.integer))
-        else 0
+    # Relevant species only, from config/relevant_species.json
+    location_species = pd.crosstab(
+        df["location_id"], df.loc[df["class"].isin(RECENT_SPECIES), "class"]
     )
-
-    # Split into main species and "other"
-    main_species_cols = species_totals.iloc[: threshold_pos_loc_int + 1].index
-    other_species_cols = species_totals.iloc[threshold_pos_loc_int + 1 :].index
-
-    # Create new dataframe with "other" category
-    if len(other_species_cols) > 0:
-        location_species_grouped = location_species_all[main_species_cols].copy()
-        location_species_grouped["other"] = location_species_all[
-            other_species_cols
-        ].sum(axis=1)
-    else:
-        location_species_grouped = location_species_all[main_species_cols].copy()
+    location_species = location_species.loc[
+        [loc for loc in location_counts.index if loc in location_species.index]
+    ]
+    location_species_grouped = location_species[
+        location_species.sum(axis=0).sort_values(ascending=False).index
+    ]
 
     # Plot species distribution per location (stacked bar)
     location_species_grouped.plot(
