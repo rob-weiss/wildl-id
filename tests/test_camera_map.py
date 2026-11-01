@@ -76,7 +76,7 @@ class CameraMapTests(unittest.TestCase):
                 for h in range(24)
             ]
 
-        # Wind from 270 blows towards 90; the arc spans 80..100.
+        # Wind from 270 blows towards 90; the arc is exactly 90.
         upwind = camera_map.Camera("Upwind", 48.6, 9.0, 270, 60)
         side = camera_map.Camera("Side", 48.6, 9.0, 0, 90)
         downwind = camera_map.Camera("Downwind", 48.6, 9.0, 90, 60)
@@ -85,9 +85,9 @@ class CameraMapTests(unittest.TestCase):
         ranking = camera_map.rank_seats([upwind, side, blind, downwind], wind, 0)
         self.assertEqual(
             [camera.location_id for camera, _ in ranking],
-            ["Downwind", "Side", "Upwind"],
+            ["Upwind", "Side", "Downwind"],
         )
-        self.assertEqual([gap for _, gap in ranking], [0.0, 35.0, 140.0])
+        self.assertEqual([gap for _, gap in ranking], [150.0, 45.0, 0.0])
 
     def test_arc_colour_by_distance(self):
         red, yellow, green, grey = "#ef4444", "#facc15", "#22c55e", "#e5e7eb"

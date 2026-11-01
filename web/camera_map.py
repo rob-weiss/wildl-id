@@ -51,11 +51,12 @@ COMPASS = (
 
 _wind_cache: dict[tuple, tuple[float, dict]] = {}
 _wind_cache_lock = threading.Lock()
-RANKING_HOURS = 3
+RANKING_HOURS = 5
 RANKING_HOUR_OPTIONS = range(1, 11)
-WIND_ARC_PADDING = 10.0
+WIND_ARC_PADDING = 0.0
 ARC_CLEARANCE = 30.0
 WIND_ARC_COLOUR = "#9ca3af"
+WIND_ARROW_COLOUR = "#1d4ed8"
 VIEW_RADIUS = 120.0
 
 
@@ -265,7 +266,7 @@ def rank_seats(
                 camera.view_direction, camera.view_angle, center, width
             )
             ranked.append((camera, distance))
-    return sorted(ranked, key=lambda item: (item[1], item[0].location_id))
+    return sorted(ranked, key=lambda item: (-item[1], item[0].location_id))
 
 
 def sector_polygon(
@@ -281,6 +282,21 @@ def sector_polygon(
             for step in range(steps + 1)
         ),
     ]
+
+
+def wind_arrow(
+    latitude: float, longitude: float, bearing: float, length: float
+) -> tuple[list[list[float]], list[list[float]]]:
+    """Shaft line and triangular head for an arrow pointing along a compass bearing."""
+    start = [latitude, longitude]
+    tip = _offset(start, length, math.radians(bearing))
+    back = length * 0.75
+    head = [
+        tip,
+        _offset(start, back, math.radians(bearing + 12)),
+        _offset(start, back, math.radians(bearing - 12)),
+    ]
+    return [start, tip], head
 
 
 def view_polygon(camera: Camera) -> list[list[float]]:
@@ -341,7 +357,7 @@ async def build_camera_map_page() -> None:
             slider = (
                 ui.slider(
                     min=0,
-                    max=WIND_HOURS - RANKING_HOURS,
+                    max=RANKING_HOURS - 1,
                     step=1,
                     value=0,
                 )
@@ -390,7 +406,7 @@ async def build_camera_map_page() -> None:
         index = int(slider.value)
         window = int(hours_select.value)
         hour_label.set_text("")
-        ranking = rank_seats(located, state["wind"], index, window)
+        ranking = rank_seats(located, state["wind"], 0, window)
         distances = {camera.location_id: gap for camera, gap in ranking}
         for camera in located:
             if camera.has_view:
@@ -414,10 +430,10 @@ async def build_camera_map_page() -> None:
             hours = state["wind"].get(camera.location_id)
             if not hours:
                 continue
-            forecast = hours[index : index + window]
+            forecast = hours[:window]
             if forecast:
                 hour_label.set_text(
-                    forecast[0]
+                    forecast[index]
                     .time.tz_convert(LOCAL_TIMEZONE)
                     .strftime(f"%a {DATE_FORMAT} %H:%M %Z")
                 )
@@ -425,6 +441,33 @@ async def build_camera_map_page() -> None:
                 continue
             center, width = downwind_sector(forecast)
             max_speed = max(hour.speed for hour in forecast)
+            shaft, head = wind_arrow(
+                camera.latitude,
+                camera.longitude,
+                downwind_bearing(forecast[index].direction),
+                max(40.0, forecast[index].speed * 15),
+            )
+            state["arrows"].append(
+                leaflet.generic_layer(
+                    name="polyline",
+                    args=[shaft, {"color": WIND_ARROW_COLOUR, "weight": 3}],
+                )
+            )
+            state["arrows"].append(
+                leaflet.generic_layer(
+                    name="polygon",
+                    args=[
+                        head,
+                        {
+                            "color": WIND_ARROW_COLOUR,
+                            "weight": 1,
+                            "fillColor": WIND_ARROW_COLOUR,
+                            "fillOpacity": 1,
+                            "interactive": False,
+                        },
+                    ],
+                )
+            )
             state["arrows"].append(
                 leaflet.generic_layer(
                     name="polygon",
@@ -448,19 +491,9 @@ async def build_camera_map_page() -> None:
                 )
             )
 
-        def wind_text(camera, hour):
-            time_label = hour.time.tz_convert(LOCAL_TIMEZONE).strftime("%H:%M")
-            return (
-                f"{camera.location_id} · {time_label}: {hour.speed:.0f} km/h from "
-                f"{compass(hour.direction)} ({hour.direction:.0f}°), "
-                f"gusts {hour.gusts:.0f} km/h"
-            )
-
         with wind_list:
             if ranking:
-                window_hours = state["wind"][ranking[0][0].location_id][
-                    index : index + window
-                ]
+                window_hours = state["wind"][ranking[0][0].location_id][:window]
                 first, last = (
                     stamp.tz_convert(LOCAL_TIMEZONE)
                     for stamp in (
@@ -471,23 +504,46 @@ async def build_camera_map_page() -> None:
                 ui.label(
                     f"Seats {first:%H:%M}-{last:%H:%M}: gap between view and wind arc"
                 ).classes("font-medium")
-                for rank, (camera, gap) in enumerate(ranking, 1):
-                    selected_hour = state["wind"][camera.location_id][index]
-                    ui.label(
-                        f"{rank}. {gap:.0f}° · "
-                        f"{wind_text(camera, selected_hour)} "
-                        f"· view "
-                        f"{compass(camera.view_direction)} {camera.view_angle:.0f}°"
-                    ).mark("seat-rank")
-            for camera in located:
-                hours = state["wind"].get(camera.location_id)
-                if not hours:
-                    continue
-                for hour in hours[index : index + window]:
-                    details = wind_text(camera, hour)
-                    if not camera.has_view:
-                        details += " · no view angle"
-                    ui.label(details).mark("wind-forecast")
+            rows = [(camera, gap) for camera, gap in ranking]
+            rows += [
+                (camera, None)
+                for camera in located
+                if camera.location_id in state["wind"] and not camera.has_view
+            ]
+            if rows:
+                with ui.element("table").classes("text-sm border-collapse").mark(
+                    "seat-table"
+                ):
+                    with ui.element("thead"):
+                        with ui.element("tr"):
+                            for title in ("#", "Seat", "Gap", "Wind", "View"):
+                                ui.html(title, tag="th").classes("text-left px-2 py-1")
+                    with ui.element("tbody"):
+                        for rank, (camera, gap) in enumerate(rows, 1):
+                            hour = state["wind"][camera.location_id][index]
+                            colour = arc_colour(gap)
+                            view = (
+                                f"{compass(camera.view_direction)} "
+                                f"{camera.view_angle:.0f}°"
+                                if camera.has_view
+                                else "no view angle"
+                            )
+                            cells = (
+                                str(rank) if gap is not None else "",
+                                camera.location_id,
+                                f"{gap:.0f}°" if gap is not None else "",
+                                f"{hour.speed:.0f} km/h from {compass(hour.direction)}"
+                                f" ({hour.direction:.0f}°), gusts {hour.gusts:.0f}"
+                                " km/h",
+                                view,
+                            )
+                            with (
+                                ui.element("tr")
+                                .style(f"background-color: {colour}66")
+                                .mark("seat-rank")
+                            ):
+                                for cell in cells:
+                                    ui.html(html.escape(cell), tag="td").classes("px-2 py-1")
 
     async def refresh() -> None:
         if not located:
@@ -507,7 +563,7 @@ async def build_camera_map_page() -> None:
         render()
 
     def change_hours() -> None:
-        slider.props["max"] = WIND_HOURS - int(hours_select.value)
+        slider.props["max"] = int(hours_select.value) - 1
         slider.update()
         if slider.value > slider.props["max"]:
             slider.set_value(slider.props["max"])

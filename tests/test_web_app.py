@@ -490,18 +490,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "within 30°, green when further away."
                 )
                 await user.should_see("Missing coordinates")
-                await user.should_see(
-                    "North · 13:00: 5 km/h from W (270°), gusts 9 km/h"
-                )
-                await user.should_see("North · 14:00: 6 km/h from N (0°), gusts 9 km/h")
-                await user.should_see(
-                    "North · 15:00: 7 km/h from E (90°), gusts 9 km/h"
-                )
                 await user.should_see("Sat 31-10-2026 13:00 CET")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
-                self.assertEqual(kinds.count("polyline"), 0)
-                self.assertEqual(kinds.count("polygon"), 1)
+                self.assertEqual(kinds.count("polyline"), 1)
+                self.assertEqual(kinds.count("polygon"), 2)
                 self.assertEqual(kinds[:2], ["tileLayer", "circleMarker"])
                 self.assertIn("World_Imagery", leaflet.layers[0].url_template)
                 self.assertEqual(
@@ -510,29 +503,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 hours = next(iter(user.find(marker="wind-hours").elements))
                 self.assertEqual(list(hours.options), list(range(1, 11)))
-                self.assertEqual(hours.value, 3)
+                self.assertEqual(hours.value, 5)
                 slider = next(iter(user.find(marker="wind-hour").elements))
-                self.assertEqual(slider.props["max"], 21)
-                hours.set_value(5)
-                self.assertEqual(slider.props["max"], 19)
-                await user.should_see("North · 17:00: 9 km/h from N (0°), gusts 9 km/h")
+                self.assertEqual(slider.props["max"], 4)
                 hours.set_value(3)
-                slider.set_value(10)
-                await user.should_see(
-                    "North · 23:00: 15 km/h from N (0°), gusts 9 km/h"
-                )
-                await user.should_see(
-                    "North · 00:00: 16 km/h from E (90°), gusts 9 km/h"
-                )
-                await user.should_see(
-                    "North · 01:00: 17 km/h from W (270°), gusts 9 km/h"
-                )
-                self.assertEqual(
-                    [layer.to_dict()["type"] for layer in leaflet.layers].count(
-                        "polygon"
-                    ),
-                    1,
-                )
+                self.assertEqual(slider.props["max"], 2)
+                slider.set_value(2)
+                await user.should_see("Sat 31-10-2026 15:00 CET")
+                self.assertEqual(len(user.find(marker="seat-rank").elements), 1)
 
     async def test_camera_map_ranks_seats_and_draws_views(self):
         import pandas as pd
@@ -565,37 +543,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             patch.object(camera_map, "fetch_wind", return_value=wind),
         ):
             async with self.app_user("/map") as user:
-                await user.should_see("Seats 13:00-16:00")
+                await user.should_see("Seats 13:00-18:00")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
-                self.assertEqual(kinds.count("polygon"), 4)
+                self.assertEqual(kinds.count("polygon"), 6)
                 hours = next(iter(user.find(marker="wind-hours").elements))
-                hours.set_value(5)
-                await user.should_see("Seats 13:00-18:00")
                 hours.set_value(3)
                 await user.should_see("Seats 13:00-16:00")
 
-                def ranking():
-                    return [
-                        label.text
-                        for label in sorted(
-                            user.find(marker="seat-rank").elements,
-                            key=lambda label: label.id,
-                        )
-                    ]
-
-                self.assertTrue(ranking()[0].startswith("1. 0° · East"))
-                slider = next(iter(user.find(marker="wind-hour").elements))
-                self.assertEqual(slider.props["max"], 21)
-                slider.set_value(5)
-                await user.should_see("Seats 18:00-21:00")
-                self.assertTrue(ranking()[0].startswith("1. 0° · West"))
-                self.assertEqual(
-                    [layer.to_dict()["type"] for layer in leaflet.layers].count(
-                        "polygon"
-                    ),
-                    4,
+                rows = sorted(
+                    user.find(marker="seat-rank").elements, key=lambda row: row.id
                 )
+                self.assertEqual(len(rows), 2)
+                self.assertIn("#22c55e", rows[0]._style["background-color"])
+                self.assertIn("#ef4444", rows[1]._style["background-color"])
+                slider = next(iter(user.find(marker="wind-hour").elements))
+                self.assertEqual(slider.props["max"], 2)
+                slider.set_value(2)
+                await user.should_see("Sat 31-10-2026 15:00 CET")
 
     async def test_camera_map_without_coordinates_is_safe(self):
         from web import camera_map
