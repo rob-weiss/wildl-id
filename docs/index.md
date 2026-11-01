@@ -16,7 +16,6 @@ Read the [Getting Started guide](getting-started.md) for installation and usage 
 
 ## Documentation
 
-- [Visualisations](visualisations.md)
 - [Getting Started](getting-started.md)
 - [Full project guide](project-guide.md)
 - [Contributing](development.md)

@@ -22,8 +22,6 @@ uv run wildl_id.py
 
 The menu can organise images, detect and classify wildlife, generate visualisations, or run the full pipeline. Original camera photographs are not included.
 
-See the [visualisations](visualisations.md) page for example analyses.
-
 For manual workflows, reviewer controls, configuration, and other details, see the
 [full project guide](project-guide.md).
 
