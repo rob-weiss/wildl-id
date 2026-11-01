@@ -312,10 +312,7 @@ class LabelDataTests(unittest.TestCase):
     def test_model_predictions_are_stored_under_labels(self):
         self.assertEqual(
             label_data.predictions_path(self.root),
-            self.root
-            / "labels"
-            / f"labels_{self.model.name}"
-            / "predictions.csv",
+            self.root / "labels" / f"labels_{self.model.name}" / "predictions.csv",
         )
 
     def test_validation_predictions_are_stored_under_labels(self):
