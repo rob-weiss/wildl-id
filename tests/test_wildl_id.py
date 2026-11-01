@@ -19,6 +19,55 @@ class WildlifeCommandLineTests(unittest.TestCase):
         )
         patcher.start()
         self.addCleanup(patcher.stop)
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.lock_path = Path(temporary.name) / "mail-job.lock"
+        self.pause_path = Path(temporary.name) / "mail-job.paused"
+        for name, value in (
+            ("MAIL_LOCK_PATH", self.lock_path),
+            ("MAIL_PAUSE_PATH", self.pause_path),
+        ):
+            path_patch = patch.object(wildl_id, name, value)
+            path_patch.start()
+            self.addCleanup(path_patch.stop)
+
+    def test_paused_scheduled_run_skips_download(self):
+        self.pause_path.touch()
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--notify"]),
+            patch.object(wildl_id, "download_images") as download,
+            patch.object(wildl_id, "send_alerts") as alerts,
+            redirect_stdout(StringIO()) as output,
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_not_called()
+        alerts.assert_not_called()
+        self.assertIn("paused", output.getvalue())
+
+    def test_manual_run_ignores_pause(self):
+        self.pause_path.touch()
+        with (
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--manual"]),
+            patch.object(wildl_id, "download_images", return_value=True) as download,
+            redirect_stdout(StringIO()),
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_called_once_with(organize=True)
+
+    def test_download_skips_while_another_run_holds_lock(self):
+        job_control = import_module("src.background.job_control")
+        with (
+            job_control.exclusive_run(self.lock_path),
+            patch.object(sys, "argv", ["wildl_id.py", "--download", "--manual"]),
+            patch.object(wildl_id, "download_images") as download,
+            redirect_stdout(StringIO()) as output,
+        ):
+            self.assertEqual(wildl_id.main(), 0)
+
+        download.assert_not_called()
+        self.assertIn("already running", output.getvalue())
 
     def test_download_option_is_accepted(self):
         with patch.object(sys, "argv", ["wildl_id.py", "--download"]):

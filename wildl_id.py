@@ -40,6 +40,9 @@ from labelling.organize_images import image_paths, nfc
 from labelling.organize_images import organize_images as organize_main
 from labelling.review_labels import DEFAULT_CSV
 from visualisation.evaluate_labels import main as visualisation_main
+from background.job_control import LOCK_PATH as MAIL_LOCK_PATH
+from background.job_control import PAUSE_PATH as MAIL_PAUSE_PATH
+from background.job_control import exclusive_run, is_paused
 
 # Keeps each scheduled mail run short; older backlog continues on later runs.
 MAX_LABELS_PER_RUN = 100
@@ -348,12 +351,64 @@ Examples:
     )
 
     parser.add_argument(
+        "--manual",
+        action="store_true",
+        help="Run the mail job even while automatic runs are paused",
+    )
+
+    parser.add_argument(
         "--force",
         action="store_true",
         help="When labelling, rerun every image while preserving manual labels",
     )
 
     return parser.parse_args()
+
+
+def run_actions(args):
+    """Run the requested command-line actions and return the exit status."""
+    if args.all:
+        download_success = True
+        if args.download:
+            download_success = download_images(organize=False)
+        pipeline_success = run_all(
+            camera=args.camera,
+            reprocess_missing=args.reprocess_missing,
+            force=args.force,
+        )
+        success = pipeline_success and download_success
+        if args.notify:
+            success = send_alerts() and success
+    else:
+        success = True
+        # Run individual steps as specified
+        if args.download:
+            success = download_images(organize=not args.organize)
+
+        if args.organize:
+            organization_success = organize_images()
+            success = organization_success and success
+
+        if args.label:
+            success = (
+                label_images(
+                    camera=args.camera,
+                    reprocess_missing=args.reprocess_missing,
+                    force=args.force,
+                )
+                and success
+            )
+        elif args.download:
+            success = label_new_images(camera=args.camera) and success
+
+        if args.notify:
+            success = send_alerts() and success
+
+        if args.visualize:
+            success = generate_visualizations() and success
+
+    print()
+    return 0 if success else 1
 
 
 def main():
@@ -374,48 +429,16 @@ def main():
         # Command-line mode: run specified actions
         print_header()
 
-        if args.all:
-            download_success = True
-            if args.download:
-                download_success = download_images(organize=False)
-            pipeline_success = run_all(
-                camera=args.camera,
-                reprocess_missing=args.reprocess_missing,
-                force=args.force,
-            )
-            success = pipeline_success and download_success
-            if args.notify:
-                success = send_alerts() and success
-        else:
-            success = True
-            # Run individual steps as specified
-            if args.download:
-                success = download_images(organize=not args.organize)
-
-            if args.organize:
-                organization_success = organize_images()
-                success = organization_success and success
-
-            if args.label:
-                success = (
-                    label_images(
-                        camera=args.camera,
-                        reprocess_missing=args.reprocess_missing,
-                        force=args.force,
-                    )
-                    and success
-                )
-            elif args.download:
-                success = label_new_images(camera=args.camera) and success
-
-            if args.notify:
-                success = send_alerts() and success
-
-            if args.visualize:
-                success = generate_visualizations() and success
-
-        print()
-        return 0 if success else 1
+        if not args.download:
+            return run_actions(args)
+        if is_paused(MAIL_PAUSE_PATH) and not args.manual:
+            print("Automatic mail job is paused; skipping this run.")
+            return 0
+        with exclusive_run(MAIL_LOCK_PATH) as acquired:
+            if not acquired:
+                print("Mail job already running; skipping this run.")
+                return 0
+            return run_actions(args)
     else:
         # Interactive menu mode
         print_header()
