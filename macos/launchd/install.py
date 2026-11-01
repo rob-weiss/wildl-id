@@ -1,4 +1,4 @@
-"""Install or uninstall the per-user email download LaunchAgent."""
+"""Install or uninstall the per-user mail downloader and web app LaunchAgents."""
 
 import argparse
 import os
@@ -9,8 +9,10 @@ from collections.abc import Callable
 from pathlib import Path
 
 LABEL = "com.robinweiss.wildl-id-mail-downloader"
+WEB_LABEL = "com.robinweiss.wildl-id-web"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_PATH = Path(__file__).with_name(f"{LABEL}.plist.template")
+WEB_TEMPLATE_PATH = Path(__file__).with_name(f"{WEB_LABEL}.plist.template")
 LAUNCH_AGENTS_DIR = Path.home() / "Library/LaunchAgents"
 LOG_DIR = Path.home() / "Library/Logs/wildl-id"
 
@@ -53,7 +55,46 @@ def install_agent(
     ]:
         raise ValueError("LaunchAgent template has unexpected program arguments")
 
-    launch_agents_dir.mkdir(parents=True, exist_ok=True)
+    return _load_agent(plist, plist_path, log_dir, launchctl_runner)
+
+
+def install_web_agent(
+    *,
+    project_root: Path | None = None,
+    interpreter: str | None = None,
+    launch_agents_dir: Path | None = None,
+    log_dir: Path | None = None,
+    launchctl_runner: Callable | None = None,
+):
+    project_root = Path(project_root or PROJECT_ROOT).resolve()
+    interpreter = str(
+        Path(interpreter or project_root / "web/.venv/bin/python").absolute()
+    )
+    launch_agents_dir = Path(launch_agents_dir or LAUNCH_AGENTS_DIR).expanduser()
+    log_dir = Path(log_dir or LOG_DIR).expanduser()
+    if not (project_root / "web" / "app.py").is_file():
+        raise FileNotFoundError(f"web app not found under {project_root}")
+
+    template = plistlib.loads(WEB_TEMPLATE_PATH.read_bytes())
+    plist = _replace_placeholders(
+        template,
+        {
+            "__PYTHON__": interpreter,
+            "__WEB_DIR__": str(project_root / "web"),
+            "__SRC_DIR__": str(project_root / "src"),
+            "__PROJECT_ROOT__": str(project_root),
+            "__STDOUT__": str(log_dir / "web-stdout.log"),
+            "__STDERR__": str(log_dir / "web-stderr.log"),
+        },
+    )
+    if plist.get("Label") != WEB_LABEL:
+        raise ValueError("LaunchAgent template has an unexpected label")
+    plist_path = launch_agents_dir / f"{WEB_LABEL}.plist"
+    return _load_agent(plist, plist_path, log_dir, launchctl_runner)
+
+
+def _load_agent(plist, plist_path, log_dir, launchctl_runner):
+    plist_path.parent.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
     temporary = plist_path.with_name(f".{plist_path.name}.tmp")
     try:
@@ -88,11 +129,12 @@ def install_agent(
 
 def uninstall_agent(
     *,
+    label: str = LABEL,
     launch_agents_dir: Path | None = None,
     launchctl_runner: Callable | None = None,
 ):
     plist_path = (
-        Path(launch_agents_dir or LAUNCH_AGENTS_DIR).expanduser() / f"{LABEL}.plist"
+        Path(launch_agents_dir or LAUNCH_AGENTS_DIR).expanduser() / f"{label}.plist"
     )
     runner = launchctl_runner or subprocess.run
     runner(
@@ -121,16 +163,16 @@ def _replace_placeholders(value, replacements):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="action", required=True)
-    subparsers.add_parser("install", help="install and load the LaunchAgent")
-    subparsers.add_parser("uninstall", help="unload and remove the LaunchAgent")
+    subparsers.add_parser("install", help="install and load both LaunchAgents")
+    subparsers.add_parser("uninstall", help="unload and remove both LaunchAgents")
     args = parser.parse_args(argv)
     try:
         if args.action == "install":
-            path = install_agent()
-            print(f"Installed LaunchAgent: {path}")
+            for path in (install_agent(), install_web_agent()):
+                print(f"Installed LaunchAgent: {path}")
         else:
-            path = uninstall_agent()
-            print(f"Removed LaunchAgent: {path}")
+            for label in (LABEL, WEB_LABEL):
+                print(f"Removed LaunchAgent: {uninstall_agent(label=label)}")
     except (OSError, RuntimeError, ValueError) as error:
         parser.exit(1, f"{parser.prog}: error: {error}\n")
     return 0

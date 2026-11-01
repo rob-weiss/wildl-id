@@ -88,6 +88,69 @@ class LaunchAgentInstallerTests(unittest.TestCase):
         self.assertFalse(plist_path.exists())
         self.assertEqual(self.calls[0][0:2], ["/bin/launchctl", "bootout"])
 
+    def install_web(self):
+        return installer.install_web_agent(
+            project_root=self.project_root,
+            interpreter="/web-env/bin/python",
+            launch_agents_dir=self.launch_agents_dir,
+            log_dir=self.logs_dir,
+            launchctl_runner=self.launchctl,
+        )
+
+    def test_web_agent_starts_at_login_and_restarts_after_exit(self):
+        (self.project_root / "web").mkdir()
+        (self.project_root / "web" / "app.py").write_text("", encoding="utf-8")
+
+        plist_path = self.install_web()
+        with plist_path.open("rb") as source:
+            plist = plistlib.load(source)
+
+        root = self.project_root.resolve()
+        self.assertEqual(plist["Label"], installer.WEB_LABEL)
+        self.assertEqual(
+            plist["ProgramArguments"],
+            [
+                "/web-env/bin/python",
+                "-m",
+                "uvicorn",
+                "web.app:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+                "--reload",
+                "--reload-dir",
+                str(root / "web"),
+                "--reload-dir",
+                str(root / "src"),
+            ],
+        )
+        self.assertEqual(plist["WorkingDirectory"], str(root))
+        self.assertIs(plist["RunAtLoad"], True)
+        self.assertIs(plist["KeepAlive"], True)
+        self.assertNotIn("StartInterval", plist)
+        self.assertEqual(
+            plist["StandardOutPath"], str(self.logs_dir / "web-stdout.log")
+        )
+        self.assertEqual(
+            plist["StandardErrorPath"], str(self.logs_dir / "web-stderr.log")
+        )
+        self.assertEqual(self.calls[-1][0:2], ["/bin/launchctl", "bootstrap"])
+
+    def test_web_agent_can_be_uninstalled(self):
+        (self.project_root / "web").mkdir()
+        (self.project_root / "web" / "app.py").write_text("", encoding="utf-8")
+        plist_path = self.install_web()
+
+        removed = installer.uninstall_agent(
+            label=installer.WEB_LABEL,
+            launch_agents_dir=self.launch_agents_dir,
+            launchctl_runner=self.launchctl,
+        )
+
+        self.assertEqual(removed, plist_path)
+        self.assertFalse(plist_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

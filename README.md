@@ -131,14 +131,19 @@ mail job before push alerts; labelling failures return a non-zero exit status
 and pending images are retried on the next run. Existing manual labels are
 preserved, including edits saved while inference is running.
 
-To check automatically at login and every minute, install the versioned
-LaunchAgent after configuring IMAP and Keychain:
+To check automatically at login and every minute, and to keep the web app
+running at <http://127.0.0.1:8000>, install the versioned LaunchAgents after
+configuring IMAP and Keychain:
 
 ```bash
 uv run --locked python macos/launchd/install.py install
 ```
 
-Remove it with:
+The web app agent starts at login and launchd restarts it whenever it exits.
+It reloads automatically when files under `web/` or `src/` change. Logs are in
+`~/Library/Logs/wildl-id/web-stderr.log`.
+
+Remove both agents with:
 
 ```bash
 uv run --locked python macos/launchd/install.py uninstall
@@ -202,8 +207,8 @@ no reinstall is needed if the job already passes `--notify`.
 The digest covers the 24 elapsed hours ending at the scheduled 07:00, even
 when the Mac wakes later. It reports total sightings, totals per species, and
 species counts at each camera location for `summary_species`, which defaults
-to the landing page's relevant species: roe deer, wild boar, badger, marten,
-fox, hare, and raccoon.
+to the relevant species in `config/relevant_species.json`: roe deer, wild
+boar, badger, marten, fox, hare, and raccoon.
 It uses the active review CSV and prefers manual
 labels. Each unique photo counts as one sighting, not one unique animal.
 For example, `Total: 4 sightings`, `By species: 3 wild boar 1 roe deer`, and
@@ -220,12 +225,12 @@ Both notification species lists live in `~/.config/wildl-id/push-alerts.json`:
 ```json
 {
   "daily_summary": true,
-  "species": ["wild boar", "raccoon"],
-  "summary_species": ["roe deer", "wild boar", "badger", "marten", "fox", "hare", "raccoon"]
+  "species": ["wild boar", "raccoon"]
 }
 ```
 
-`species` controls immediate alerts; `summary_species` controls the daily digest.
+`species` controls immediate alerts; the daily digest uses
+`config/relevant_species.json` unless `summary_species` overrides it.
 Each must be a non-empty list of species names. Use lower-case names matching
 the labels. Changes take effect on the next job run; no restart is needed.
 The ntfy topic stays in Keychain, not in this config file.
