@@ -433,7 +433,6 @@ Edit [src/labelling/label_images.py](src/labelling/label_images.py) to configure
 - Species classification on/off
 - OCR enabled/disabled
 - Reprocess incomplete entries
-- Save annotated images
 
 ### Visualisation Configuration
 

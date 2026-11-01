@@ -153,7 +153,6 @@ Edit [the image labelling configuration](https://github.com/rob-weiss/wildl-id/b
 - Species classification on/off
 - OCR enabled/disabled
 - Reprocess incomplete entries
-- Save annotated images
 
 ### Visualisation Configuration
 

@@ -423,7 +423,6 @@ class LabelDataTests(unittest.TestCase):
             patch.object(label_images, "repo_dir", self.root),
             patch.object(label_images, "image_paths", return_value=paths),
             patch.object(label_images, "enable_ocr", False),
-            patch.object(label_images, "save_annotated_images", False),
             patch.object(
                 label_images, "load_species_classifier", return_value=classifier
             ),

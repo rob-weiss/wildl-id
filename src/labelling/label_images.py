@@ -54,12 +54,9 @@ os.environ["YOLO_VERBOSE"] = "False"
 logging.getLogger("ultralytics").setLevel(logging.ERROR)
 
 import cv2
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-from matplotlib.patches import Rectangle
 from PIL import Image
 from PytorchWildlife.models import classification as pw_classification
 from PytorchWildlife.models import detection as pw_detection
@@ -68,11 +65,9 @@ from tqdm import tqdm
 try:
     from . import label_data
     from .organize_images import image_paths, nfc
-    from .review_labels import bounding_box_color
 except ImportError:
     import label_data
     from organize_images import image_paths, nfc
-    from review_labels import bounding_box_color
 
 # Configuration (must be defined before OCR framework checks)
 repo_dir = Path(__file__).resolve().parents[2]
@@ -84,9 +79,6 @@ model_name = "MDV6-yolov10-e"  # Best accuracy
 # Enable species classification (uses DeepFaune classifier for European wildlife)
 use_classification = True
 classification_threshold = 0.1  # Minimum confidence for classification
-
-# Save annotated images (disable to reduce memory usage and speed up processing)
-save_annotated_images = True
 
 # Enable OCR for timestamp/temperature extraction (disable to save memory)
 enable_ocr = False
@@ -754,89 +746,6 @@ def detect_lighting(img_input, dim=10, thresh=0.5):
         return "dark", brightness
 
 
-def show_image_with_detection(
-    image_path,
-    image_file,
-    img_class,
-    box=None,
-    save_path=None,
-    classification_info=None,
-    metadata=None,
-    lighting=None,
-):
-    """Display an image with its predicted class and bounding box.
-
-    Parameters
-    ----------
-    image_path : Path
-        Path to the image file.
-    image_file : str
-        Name of the image file.
-    img_class : str
-        Predicted class of the animal.
-    box : list, optional
-        Bounding box in YOLO format [x_center, y_center, width, height].
-    save_path : Path, optional
-        Path to save the annotated image.
-    classification_info : dict, optional
-        Additional classification information to display.
-    metadata : dict, optional
-        OCR metadata (timestamp, temperature) to display.
-    lighting : str, optional
-        Lighting classification ('bright' or 'dark') to display.
-    """
-    img = mpimg.imread(str(image_path))
-    fig, ax = plt.subplots(figsize=(10, 8))
-    ax.imshow(img)
-    ax.axis("off")
-
-    # Build title with classification details
-    title = f"{image_file}\nclass: {img_class}"
-    if classification_info:
-        species = classification_info.get("species")
-        conf = classification_info.get("confidence")
-        if species and conf is not None:
-            title += f"\nclassified as: {species} ({conf:.2%})"
-
-    # Add lighting info
-    if lighting:
-        title += f"\nlighting: {lighting}"
-
-    # Add metadata info
-    if metadata:
-        if metadata.get("timestamp"):
-            title += f"\ntimestamp: {metadata['timestamp']}"
-        if metadata.get("temperature_celsius") is not None:
-            title += f"\ntemp: {metadata['temperature_celsius']}°C"
-
-    ax.set_title(title)
-
-    # Draw bounding box if present
-    if box is not None and isinstance(box, list) and len(box) == 4:
-        x_center, y_center, width, height = box
-        img_h, img_w = img.shape[:2]
-        x = (x_center - width / 2) * img_w
-        y = (y_center - height / 2) * img_h
-        w = width * img_w
-        h = height * img_h
-        rect = Rectangle(
-            (x, y),
-            w,
-            h,
-            linewidth=2,
-            edgecolor=bounding_box_color(img_class),
-            facecolor="none",
-        )
-        ax.add_patch(rect)
-
-    if save_path:
-        plt.savefig(save_path, bbox_inches="tight", dpi=150)
-    else:
-        plt.show()
-    # Always close the figure to free memory
-    plt.close(fig)
-
-
 def latest_classifier_weights(models_dir=None):
     models_dir = Path(models_dir) if models_dir is not None else repo_dir / "models"
     return label_data.latest_weights(models_dir)
@@ -990,8 +899,6 @@ def process_images_with_pytorch_wildlife(
         repo_dir / "labels" / f"labels_{model_version}_{model_name}{classifier_suffix}"
     )
     labels_dir.mkdir(parents=True, exist_ok=True)
-    images_output_dir = labels_dir / "images"
-    images_output_dir.mkdir(exist_ok=True)
 
     # Initialize OCR failures log file in labels_dir
     ocr_failures_log = labels_dir / "ocr_failures.txt"
@@ -1334,29 +1241,6 @@ def process_images_with_pytorch_wildlife(
             import objc
 
             objc.recycleAutoreleasePool()
-
-        # Save annotated image (only if enabled)
-        if save_annotated_images:
-            label_save_path = images_output_dir / f"{location_id}_{image_file}"
-
-            # Prepare classification info for display
-            classification_info = None
-            if classified_species and classification_confidence is not None:
-                classification_info = {
-                    "species": classified_species,
-                    "confidence": classification_confidence,
-                }
-
-            show_image_with_detection(
-                image_path,
-                image_file,
-                img_class,
-                box=box,
-                save_path=label_save_path,
-                classification_info=classification_info,
-                metadata=metadata,
-                lighting=lighting,
-            )
 
     # Print statistics
     end_time = time.time()
