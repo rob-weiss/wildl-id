@@ -13,6 +13,7 @@ import httpx
 from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
+
 from web import app as web_app
 from web import background, gallery
 
@@ -234,13 +235,25 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewer.current_image_path, local_image)
         self.assertEqual(reviewer.image_size, (16, 16))
 
-    async def test_review_page_shows_two_modes_and_remove_empty(self):
+    async def test_review_page_shows_two_modes_and_one_emoji_cleanup(self):
         self.write_valid_review_data()
 
         async with self.app_user("/review") as user:
             await user.should_see("Wildlife label review")
             await user.should_see("fox")
-            await user.should_see("Remove empty")
+            await user.should_see("Remove irrelevant")
+            buttons = user.find(kind=ui.button).elements
+            self.assertTrue(all(not button.props.get("icon") for button in buttons))
+            captions = {button.text for button in buttons}
+            self.assertNotIn("🗑️ Remove empty", captions)
+            self.assertNotIn("🗑️ Remove unknown", captions)
+            toggle = next(iter(user.find(marker="navigation-toggle").elements))
+            self.assertEqual(toggle.text, "➡️")
+            user.find(marker="navigation-toggle").click()
+            self.assertEqual(toggle.text, "⬅️")
+            self.assertIsNone(toggle.props.get("icon"))
+            user.find(marker="navigation-toggle").click()
+            self.assertEqual(toggle.text, "➡️")
             mode = next(iter(user.find(kind=ui.select, content="Review mode").elements))
             self.assertEqual(mode.options, ["Unseen", "Latest model incorrect"])
 
@@ -425,6 +438,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_predictions_page_plots_all_landing_page_species(self):
         import pandas as pd
+
         from web import predictions
 
         origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)
@@ -472,6 +486,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_camera_map_shows_satellite_cameras_and_wind_slider(self):
         import pandas as pd
+
         from web import camera_map
 
         locations = self.root / "camera_locations.json"
@@ -529,6 +544,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_camera_map_ranks_seats_and_draws_views(self):
         import pandas as pd
+
         from web import camera_map
 
         locations = self.root / "camera_locations.json"
@@ -612,6 +628,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         from dataclasses import replace
 
         import pandas as pd
+
         from web import predictions
 
         origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)

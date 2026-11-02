@@ -66,7 +66,7 @@ def is_removable(row, label=EMPTY_LABEL, include_false_detections=False):
 
 
 def non_game_images(rows, keep_species):
-    keep_species = {normalize_species(label) for label in keep_species} | {"", "bird"}
+    keep_species = {normalize_species(label) for label in keep_species} | {""}
     candidates = {}
     protected = set()
     for row in rows:

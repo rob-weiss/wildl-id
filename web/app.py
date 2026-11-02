@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
+
 from src.alerting import notification_log
 from src.background import job_control
 from src.labelling.label_data import DATE_FORMAT
@@ -70,10 +71,13 @@ def add_navigation(current_path: str) -> None:
             drawer.props["mini"] = collapsed
             drawer.update()
             toggle.props(
-                f"icon={'chevron_right' if collapsed else 'chevron_left'} "
                 f'aria-label="{"Expand" if collapsed else "Collapse"} navigation" '
                 f"aria-expanded={str(not collapsed).lower()}"
             )
+            if current_path == "/review":
+                toggle.set_text("➡️" if collapsed else "⬅️")
+            else:
+                toggle.props(f"icon={'chevron_right' if collapsed else 'chevron_left'}")
 
         # Fixed height keeps the navigation items in place when toggling.
         with (
@@ -93,7 +97,11 @@ def add_navigation(current_path: str) -> None:
                     'alt="wildl-id home"'
                 ).classes("w-40")
             toggle = (
-                ui.button(icon="chevron_right", on_click=toggle_navigation)
+                ui.button(
+                    "➡️" if current_path == "/review" else "",
+                    icon=None if current_path == "/review" else "chevron_right",
+                    on_click=toggle_navigation,
+                )
                 .props('flat round aria-label="Expand navigation" aria-expanded=false')
                 .mark("navigation-toggle")
             )

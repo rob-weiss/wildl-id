@@ -14,8 +14,6 @@ from PIL import Image
 
 from .label_data import needs_model_review
 from .remove_empty_images import (
-    is_confirmed_empty,
-    is_removable,
     non_game_images,
     remove_empty_images,
 )
@@ -221,23 +219,23 @@ class ReviewApp:
                 with ui.column().classes("grow min-w-0").style("flex-basis: 600px"):
                     with ui.row().classes("w-full items-center gap-1"):
                         ui.button(
-                            icon="zoom_in",
+                            "🔎",
                             on_click=lambda: self.viewer.run_method("zoomIn"),
                         ).props("flat round dense aria-label='Zoom in'").tooltip(
                             "🔎 Zoom in"
                         )
                         ui.button(
-                            icon="zoom_out",
+                            "➖",
                             on_click=lambda: self.viewer.run_method("zoomOut"),
                         ).props("flat round dense aria-label='Zoom out'").tooltip(
                             "➖ Zoom out"
                         )
-                        ui.button(icon="fit_screen", on_click=self.fit_image).props(
+                        ui.button("🖼️", on_click=self.fit_image).props(
                             "flat round dense aria-label='Fit image'"
                         ).tooltip("🖼️ Fit image")
                         self.subject_zoom_button = (
                             ui.button(
-                                icon="center_focus_strong",
+                                "🎯",
                                 on_click=self.toggle_subject_focus,
                             )
                             .props(
@@ -273,45 +271,25 @@ class ReviewApp:
                     self.prediction = ui.label().classes("text-gray-700")
                     with ui.row().classes("w-full gap-2"):
                         self.accept_button = ui.button(
-                            "✅ Accept prediction", icon="check", on_click=self.accept
+                            "✅ Accept prediction", on_click=self.accept
                         ).props("no-caps")
                         self.keep_manual_button = ui.button(
                             "📌 Keep manual label",
-                            icon="push_pin",
                             on_click=self.keep_manual_label,
                         ).props("no-caps")
                         self.keep_manual_button.set_visibility(False)
                     with ui.row().classes("w-full gap-2"):
                         self.undo_button = ui.button(
-                            "↩️ Undo label", icon="undo", on_click=self.undo_label
+                            "↩️ Undo label", on_click=self.undo_label
                         ).props("no-caps")
                         self.undo_box_button = ui.button(
-                            "↩️ Undo box", icon="crop_free", on_click=self.undo_box
+                            "↩️ Undo box", on_click=self.undo_box
                         ).props("no-caps")
                     with ui.row().classes("w-full gap-2"):
-                        self.remove_empty_button = (
+                        self.remove_irrelevant_button = (
                             ui.button(
-                                "🗑️ Remove empty",
-                                icon="delete_sweep",
-                                on_click=self.confirm_remove_empty,
-                            )
-                            .props("outline no-caps")
-                            .classes("text-red-700")
-                        )
-                        self.remove_unknown_button = (
-                            ui.button(
-                                "🗑️ Remove unknown",
-                                icon="help_outline",
-                                on_click=self.confirm_remove_unknown,
-                            )
-                            .props("outline no-caps")
-                            .classes("text-red-700")
-                        )
-                        self.keep_game_button = (
-                            ui.button(
-                                "Keep German game species",
-                                icon="delete_sweep",
-                                on_click=self.confirm_keep_game_species,
+                                "🗑️ Remove irrelevant",
+                                on_click=self.confirm_remove_irrelevant,
                             )
                             .props("outline no-caps")
                             .classes("text-red-700")
@@ -336,7 +314,7 @@ class ReviewApp:
                         "keydown.enter", lambda event: self.save_custom_label()
                     )
                     self.save_label_button = ui.button(
-                        "💾 Save label", icon="save", on_click=self.save_custom_label
+                        "💾 Save label", on_click=self.save_custom_label
                     ).props("no-caps")
         self.undo_box_button.disable()
         self.refresh()
@@ -606,112 +584,19 @@ class ReviewApp:
             ui.notify(f"Label undo failed: {error}", type="negative")
         self.refresh()
 
-    async def confirm_remove_empty(self):
-        if self.cleanup_dialog_open:
-            return
-        no_detection = sum(is_confirmed_empty(row) for row in self.review.rows)
-        human_none = sum(
-            is_confirmed_empty(row, include_false_detections=True)
-            for row in self.review.rows
-        )
-        if not human_none:
-            ui.notify("No images labelled none to remove")
-            return
-        with ui.dialog().props("persistent") as dialog, ui.card():
-            ui.label("Remove images labelled none?").classes("text-lg font-semibold")
-            ui.label(
-                f"{no_detection} have no detection (human and model: none). "
-                f"{human_none - no_detection} more are false detections "
-                "(human: none, model: an animal or no prediction yet)."
-            ).classes("max-w-md")
-            ui.label(
-                "Original and annotated images will be permanently deleted. "
-                "The CSV will be backed up and deleted paths logged."
-            ).classes("max-w-md")
-            with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=lambda: dialog.submit(None)).props(
-                    "flat no-caps"
-                )
-                ui.button(
-                    f"Only no detection ({no_detection})",
-                    icon="delete_sweep",
-                    color="negative",
-                    on_click=lambda: dialog.submit("no-detection"),
-                ).props("outline no-caps").set_enabled(bool(no_detection))
-                ui.button(
-                    f"Also false detections ({human_none})",
-                    icon="delete_forever",
-                    color="negative",
-                    on_click=lambda: dialog.submit("false-detections"),
-                ).props("no-caps")
-        self.cleanup_dialog_open = True
-        try:
-            choice = await dialog
-            if choice:
-                dialog.clear()
-                with dialog, ui.card():
-                    ui.spinner()
-                    ui.label("Removing empty images...")
-                dialog.open()
-                await self.remove_empty(
-                    include_false_detections=choice == "false-detections"
-                )
-        finally:
-            self.cleanup_dialog_open = False
-            dialog.delete()
-
-    async def confirm_remove_unknown(self):
-        if self.cleanup_dialog_open:
-            return
-        count = sum(is_removable(row, "unknown") for row in self.review.rows)
-        if not count:
-            ui.notify("No images labelled unknown to remove")
-            return
-        with ui.dialog().props("persistent") as dialog, ui.card():
-            ui.label(f"Remove {count} images labelled unknown?").classes(
-                "text-lg font-semibold"
-            )
-            ui.label(
-                "Images a human labelled unknown are removed whatever the model "
-                "predicted. Original and annotated images will be permanently "
-                "deleted. The CSV will be backed up and deleted paths logged."
-            ).classes("max-w-md")
-            with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
-                    "flat no-caps"
-                )
-                ui.button(
-                    f"Remove unknown ({count})",
-                    icon="delete_forever",
-                    color="negative",
-                    on_click=lambda: dialog.submit(True),
-                ).props("no-caps")
-        self.cleanup_dialog_open = True
-        try:
-            if await dialog:
-                dialog.clear()
-                with dialog, ui.card():
-                    ui.spinner()
-                    ui.label("Removing unknown images...")
-                dialog.open()
-                await self.remove_empty(label="unknown")
-        finally:
-            self.cleanup_dialog_open = False
-            dialog.delete()
-
-    async def confirm_keep_game_species(self):
+    async def confirm_remove_irrelevant(self):
         if self.cleanup_dialog_open:
             return
         candidates = non_game_images(self.review.rows, GAME_SPECIES)
         if not candidates:
-            ui.notify("No human-labelled images outside the keep list")
+            ui.notify("No irrelevant human-labelled images to remove")
             return
         counts = Counter(candidates.values())
         with (
             ui.dialog().props("persistent") as dialog,
             ui.card().classes("w-full max-w-xl"),
         ):
-            ui.label("Remove non-game images?").classes("text-lg font-semibold")
+            ui.label("Remove irrelevant images?").classes("text-lg font-semibold")
             ui.table(
                 columns=[
                     {
@@ -727,21 +612,21 @@ class ReviewApp:
                     for label, count in sorted(counts.items())
                 ],
                 row_key="class",
-            ).props("dense flat").classes("w-full max-h-80 overflow-auto")
-            ui.label("Unlabelled images and generic bird labels are kept.").classes(
-                "max-w-md"
-            )
+                pagination={"rowsPerPage": 0},
+            ).props("dense flat hide-bottom").classes("w-full max-h-80 overflow-auto")
+            ui.label(
+                "Unlabelled images are kept. Bird, unknown and none labels are included."
+            ).classes("max-w-md")
             ui.label(
                 f"{len(candidates)} original images and their annotations will be permanently deleted. "
                 "Matching CSV rows will be removed after backups are saved. Deleted paths will be logged."
             ).classes("max-w-md")
             with ui.row().classes("w-full justify-end"):
-                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                ui.button("❌ Cancel", on_click=lambda: dialog.submit(False)).props(
                     "flat no-caps"
                 )
                 ui.button(
-                    f"Delete {len(candidates)} images",
-                    icon="delete_forever",
+                    f"🗑️ Delete {len(candidates)} images",
                     color="negative",
                     on_click=lambda: dialog.submit(True),
                 ).props("no-caps")
@@ -751,7 +636,7 @@ class ReviewApp:
                 dialog.clear()
                 with dialog, ui.card():
                     ui.spinner()
-                    ui.label("Removing non-game images...")
+                    ui.label("Removing irrelevant images...")
                 dialog.open()
                 await self.remove_empty(keep_species=GAME_SPECIES)
         finally:

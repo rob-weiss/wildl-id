@@ -119,6 +119,8 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 ("unseen.jpg", "cat", ""),
                 ("bird.jpg", "cat", "bird"),
                 ("legacy-bird.jpg", "cat", "owl"),
+                ("unknown.jpg", "fox", "unknown"),
+                ("empty.jpg", "fox", "none"),
                 ("mixed.jpg", "fox", "cat"),
                 ("mixed.jpg", "cat", "fox"),
                 ("squirrel.jpg", "fox", "squirrel"),
@@ -126,7 +128,14 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         ]
         self.assertEqual(
             empty_images_module.non_game_images(rows, {"fox"}),
-            {("camera1", "cat.jpg"): "cat", ("camera1", "squirrel.jpg"): "squirrel"},
+            {
+                ("camera1", "cat.jpg"): "cat",
+                ("camera1", "bird.jpg"): "bird",
+                ("camera1", "legacy-bird.jpg"): "bird",
+                ("camera1", "unknown.jpg"): "unknown",
+                ("camera1", "empty.jpg"): "none",
+                ("camera1", "squirrel.jpg"): "squirrel",
+            },
         )
 
     def test_game_cleanup_removes_related_csv_rows_but_not_training_archives(self):
@@ -244,6 +253,8 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                     ["camera1", "cat.jpg", "fox", "cat"],
                     ["camera1", "dog.jpg", "fox", "dog"],
                     ["camera1", "dog.jpg", "fox", "dog"],
+                    ["camera1", "bird.jpg", "fox", "bird"],
+                    ["camera1", "unknown.jpg", "fox", "unknown"],
                 ]
             )
         app = self.build_app()
@@ -255,8 +266,8 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 return confirmed
 
             async def confirm():
-                with app.keep_game_button.parent_slot.parent:
-                    await app.confirm_keep_game_species()
+                with app.remove_irrelevant_button.parent_slot.parent:
+                    await app.confirm_remove_irrelevant()
 
             with (
                 patch.object(
@@ -267,16 +278,31 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 patch.object(
                     review_app_module.ui, "table", wraps=review_app_module.ui.table
                 ) as table,
+                patch.object(
+                    review_app_module.ui, "button", wraps=review_app_module.ui.button
+                ) as buttons,
                 patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
             ):
                 asyncio.run(confirm())
                 self.assertEqual(
                     table.call_args.kwargs["rows"],
                     [
+                        {"class": "bird", "images": 1},
                         {"class": "cat", "images": 1},
                         {"class": "dog", "images": 1},
                         {"class": "none", "images": 2},
+                        {"class": "unknown", "images": 1},
                     ],
+                )
+                self.assertEqual(
+                    table.call_args.kwargs["pagination"], {"rowsPerPage": 0}
+                )
+                self.assertEqual(
+                    {call.args[0] for call in buttons.call_args_list},
+                    {"❌ Cancel", "🗑️ Delete 6 images"},
+                )
+                self.assertTrue(
+                    all(not call.kwargs.get("icon") for call in buttons.call_args_list)
                 )
                 if confirmed:
                     remove.assert_awaited_once_with(
@@ -287,6 +313,18 @@ class RemoveEmptyImagesTests(unittest.TestCase):
             self.assertFalse(app.cleanup_dialog_open)
         self.assertEqual(self.csv_path.read_bytes(), before)
         self.assertTrue(all((self.original_dir / name).exists() for name in self.names))
+
+    def test_review_buttons_use_emojis_and_one_cleanup_control(self):
+        with patch.object(
+            review_app_module.ui, "button", wraps=review_app_module.ui.button
+        ) as button:
+            app = self.build_app()
+        self.assertEqual(app.remove_irrelevant_button.text, "🗑️ Remove irrelevant")
+        self.assertFalse(hasattr(app, "remove_empty_button"))
+        self.assertFalse(hasattr(app, "remove_unknown_button"))
+        self.assertTrue(button.call_args_list)
+        for call in button.call_args_list:
+            self.assertIsNone(call.kwargs.get("icon"))
 
     def test_gui_game_cleanup_reloads_rows_and_resets_undo(self):
         app = self.build_app()
@@ -387,24 +425,6 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertTrue((self.original_dir / "empty.jpg").exists())
         self.assertTrue((self.annotated_dir / "camera1_empty.jpg").exists())
 
-    def test_gui_remove_empty_reloads_active_csv_and_clears_undo(self):
-        app = self.build_app()
-        app.change_mode("All")
-        app.review.history.append((0, "none"))
-        app.box_history.append((0, ""))
-        self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
-
-        with patch.object(review_app_module.ui, "notify"):
-            asyncio.run(app.remove_empty())
-
-        self.assertEqual(app.review.mode, "All")
-        self.assertEqual([row["image_file"] for row in app.review.rows], self.names[1:])
-        self.assertEqual(app.review.original_bytes, self.csv_path.read_bytes())
-        self.assertEqual(app.review.history, [])
-        self.assertEqual(app.box_history, [])
-        self.assertFalse(app.undo_box_button.enabled)
-        self.assertFalse(app.undo_button.enabled)
-
     def test_remove_unknown_deletes_only_human_unknown_labels(self):
         rows = [
             ("camera1", "unknown.jpg", "fox", "unknown"),
@@ -426,104 +446,12 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertTrue((self.original_dir / "model-unknown.jpg").exists())
         self.assertTrue((self.original_dir / "empty.jpg").exists())
 
-    def test_gui_remove_unknown_requires_confirmation(self):
-        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
-            csv.writer(target).writerow(["camera1", "unknown.jpg", "fox", "unknown"])
-        app = self.build_app()
-        self.assertEqual(app.remove_unknown_button.text, "🗑️ Remove unknown")
-
-        for confirmed in (False, True):
-
-            async def answer():
-                self.assertTrue(app.cleanup_dialog_open)
-                return confirmed
-
-            async def confirm():
-                with app.remove_unknown_button.parent_slot.parent:
-                    await app.confirm_remove_unknown()
-
-            with (
-                patch.object(
-                    review_app_module.ui.dialog,
-                    "__await__",
-                    lambda dialog: answer().__await__(),
-                ),
-                patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
-            ):
-                asyncio.run(confirm())
-                if confirmed:
-                    remove.assert_awaited_once_with(label="unknown")
-                else:
-                    remove.assert_not_awaited()
-                self.assertFalse(app.cleanup_dialog_open)
-
-    def test_gui_remove_empty_requires_confirmation(self):
-        app = self.build_app()
-        before = self.csv_path.read_bytes()
-
-        for choice, expected in (
-            (None, None),
-            ("no-detection", False),
-            ("false-detections", True),
-        ):
-
-            async def answer():
-                self.assertTrue(app.cleanup_dialog_open)
-                return choice
-
-            async def confirm():
-                with app.remove_empty_button.parent_slot.parent:
-                    await app.confirm_remove_empty()
-
-            with (
-                patch.object(
-                    review_app_module.ui.dialog,
-                    "__await__",
-                    lambda dialog: answer().__await__(),
-                ),
-                patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
-            ):
-                asyncio.run(confirm())
-                if expected is None:
-                    remove.assert_not_awaited()
-                else:
-                    remove.assert_awaited_once_with(include_false_detections=expected)
-                self.assertFalse(app.cleanup_dialog_open)
-        self.assertEqual(self.csv_path.read_bytes(), before)
-        self.assertTrue((self.original_dir / "empty.jpg").exists())
-
-    def test_gui_remove_empty_offers_both_counts(self):
-        app = self.build_app()
-
-        async def answer():
-            return None
-
-        async def confirm():
-            with app.remove_empty_button.parent_slot.parent:
-                await app.confirm_remove_empty()
-
-        with (
-            patch.object(
-                review_app_module.ui.dialog,
-                "__await__",
-                lambda dialog: answer().__await__(),
-            ),
-            patch.object(
-                review_app_module.ui, "button", wraps=review_app_module.ui.button
-            ) as button,
-        ):
-            asyncio.run(confirm())
-
-        captions = [call.args[0] for call in button.call_args_list if call.args]
-        self.assertIn("Only no detection (1)", captions)
-        self.assertIn("Also false detections (2)", captions)
-
-    def test_gui_remove_empty_reports_stale_csv_without_deleting_images(self):
+    def test_gui_remove_irrelevant_reports_stale_csv_without_deleting_images(self):
         app = self.build_app()
         self.csv_path.write_bytes(self.csv_path.read_bytes() + b"\n")
 
         with patch.object(review_app_module.ui, "notify") as notify:
-            asyncio.run(app.remove_empty())
+            asyncio.run(app.remove_empty(keep_species=review_app_module.GAME_SPECIES))
 
         self.assertIn("CSV changed", notify.call_args.args[0])
         self.assertEqual(notify.call_args.kwargs["type"], "negative")
@@ -1151,11 +1079,7 @@ class LabelReviewTests(unittest.TestCase):
             app.undo_button.parent_slot.parent,
             app.undo_box_button.parent_slot.parent,
         )
-        self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
-        self.assertIs(
-            app.remove_empty_button.parent_slot.parent,
-            app.remove_unknown_button.parent_slot.parent,
-        )
+        self.assertEqual(app.remove_irrelevant_button.text, "🗑️ Remove irrelevant")
         self.assertEqual(app.save_label_button.text, "💾 Save label")
 
     def test_browser_label_buttons_hide_legacy_birds_and_shortcut_all_choices(self):
