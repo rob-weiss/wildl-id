@@ -455,7 +455,7 @@ class LabelReviewTests(unittest.TestCase):
         filename = "camera1_incorrect.jpg"
         review.latest_incorrect_filenames.add(filename)
         review.latest_predictions[filename] = {
-            "true_label": "other bird",
+            "true_label": "bird",
             "predicted_label": "hare",
             "status": "incorrect",
         }
@@ -999,7 +999,7 @@ class LabelReviewTests(unittest.TestCase):
             all(" [" in caption and caption.endswith("]") for caption in captions)
         )
         shortcuts = [caption.rsplit("[", 1)[1][:-1] for caption in captions]
-        self.assertIn("🐦 other bird [g]", captions)
+        self.assertIn("🐦 bird [g]", captions)
         self.assertIn("🦦 marten [m]", captions)
         self.assertTrue(
             all(
@@ -1027,7 +1027,7 @@ class LabelReviewTests(unittest.TestCase):
         )
         app.on_key(event)
 
-        self.assertEqual(chosen, ["other bird"])
+        self.assertEqual(chosen, ["bird"])
 
     def test_unseen_image_omits_prediction_prefix_in_overlay_and_sidebar(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -1080,7 +1080,7 @@ class LabelReviewTests(unittest.TestCase):
         filename = "camera1_unchecked.jpg"
         prediction = {
             "true_label": "hare",
-            "predicted_label": "song bird",
+            "predicted_label": "bird",
             "status": "incorrect",
         }
         app.review.latest_predictions[filename] = prediction
@@ -1106,7 +1106,7 @@ class LabelReviewTests(unittest.TestCase):
 
                 self.assertEqual(
                     app.prediction.text,
-                    "🏷️ True: 🐇 hare | Predicted: 🐦 song bird",
+                    "🏷️ True: 🐇 hare | Predicted: 🐦 bird",
                 )
                 self.assertEqual(render_overlay.call_args.args[2], prediction)
 
@@ -1304,8 +1304,8 @@ class LabelReviewTests(unittest.TestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "incorrect.jpg",
-                    "true_label": "other bird",
-                    "predicted_label": "song bird",
+                    "true_label": "crow",
+                    "predicted_label": "bird",
                     "status": "incorrect",
                 }
             )
@@ -1315,25 +1315,25 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(
             review.latest_predictions["camera1_incorrect.jpg"]["predicted_label"],
-            "song bird",
+            "bird",
         )
 
     def test_box_overlay_displays_latest_finetuned_prediction(self):
         row = {
-            "class": "other bird",
-            "manual_label": "other bird",
+            "class": "bird",
+            "manual_label": "bird",
             "box": "[0.5, 0.5, 0.4, 0.4]",
         }
         prediction = {
-            "true_label": "other bird",
-            "predicted_label": "song bird",
+            "true_label": "bird",
+            "predicted_label": "pigeon",
             "status": "incorrect",
         }
 
         overlay = review_app_module.box_overlay_svg(row, (4000, 3000), prediction)
 
-        self.assertIn("🏷️ True: 🐦 other bird | Predicted: 🐦 song bird", overlay)
-        self.assertNotIn("🏷️ True: 🐦 other bird | Predicted: 🐦 other bird", overlay)
+        self.assertIn("🏷️ True: 🐦 bird | Predicted: 🐦 pigeon", overlay)
+        self.assertNotIn("🏷️ True: 🐦 bird | Predicted: 🐦 bird", overlay)
         self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
         self.assertIn('font-size="16"', overlay)
@@ -1392,7 +1392,7 @@ class LabelReviewTests(unittest.TestCase):
 
     def test_box_overlay_wraps_long_annotation_without_shrinking_text(self):
         row = {
-            "class": "other bird",
+            "class": "fallow deer",
             "manual_label": "pigeon",
             "box": "[0.5, 0.5, 0.4, 0.4]",
         }
@@ -1407,7 +1407,7 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(annotation.find("rect").get("height"), "72")
         self.assertEqual(
             " ".join(text.itertext()),
-            "🏷️ True: 🐦 pigeon | Predicted: 🐦 other bird",
+            "🏷️ True: 🐦 pigeon | Predicted: 🐾 fallow deer",
         )
 
     def test_accept_prediction_uses_latest_finetuned_class(self):
@@ -1416,7 +1416,7 @@ class LabelReviewTests(unittest.TestCase):
         app.review.latest_predictions = {
             "camera1_unchecked.jpg": {
                 "true_label": "fox",
-                "predicted_label": "song bird",
+                "predicted_label": "bird",
                 "status": "incorrect",
             }
         }
@@ -1425,7 +1425,7 @@ class LabelReviewTests(unittest.TestCase):
 
         app.accept()
 
-        self.assertEqual(chosen, ["song bird"])
+        self.assertEqual(chosen, ["bird"])
 
     def test_incorrect_mode_shows_separate_accept_and_keep_manual_actions(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -1480,7 +1480,7 @@ class LabelReviewTests(unittest.TestCase):
         app.review.latest_predictions = {
             "camera1_unchecked.jpg": {
                 "true_label": "fox",
-                "predicted_label": "song bird",
+                "predicted_label": "bird",
                 "status": "incorrect",
             }
         }
@@ -1494,7 +1494,7 @@ class LabelReviewTests(unittest.TestCase):
 
         app.on_key(event)
 
-        self.assertEqual(chosen, ["song bird"])
+        self.assertEqual(chosen, ["bird"])
 
     def test_held_space_reaches_client_guard_without_accepting_again(self):
         app = review_app_module.ReviewApp(self.csv_path)

@@ -2,13 +2,41 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pandas as pd
+import torch
 from src.labelling import finetune_classifier
 
 
 class FinetuneLabelTests(unittest.TestCase):
+    def test_build_model_seeds_all_native_classes_and_bird_subclasses(self):
+        native_names = finetune_classifier.DeepfauneClassifier.CLASS_NAMES["en"]
+        model = torch.nn.Module()
+        model.head = torch.nn.Linear(2, len(native_names))
+        model.blocks = torch.nn.ModuleList([torch.nn.Identity()] * 2)
+        model.norm = torch.nn.Identity()
+        model.fc_norm = torch.nn.Identity()
+        old_head = model.head
+        class_names = [
+            finetune_classifier.normalize_species(name) for name in native_names
+        ] + ["crow", "pigeon"]
+        pretrained = SimpleNamespace(
+            predictor=model, CLASS_NAMES=dict(enumerate(native_names))
+        )
+        with patch.object(
+            finetune_classifier, "DeepfauneClassifier", return_value=pretrained
+        ):
+            result = finetune_classifier.build_model(class_names, "cpu")
+        expected_indices = list(range(len(native_names))) + [
+            native_names.index("bird")
+        ] * 2
+        torch.testing.assert_close(
+            result.head.weight, old_head.weight[expected_indices]
+        )
+        torch.testing.assert_close(result.head.bias, old_head.bias[expected_indices])
+
     def test_save_confusion_matrix_exports_labelled_counts(self):
         cases = [
             ([0, 0, 1], [0, 1, 1], ["badger", "fox", "wild boar"], 3, 6),
@@ -39,7 +67,21 @@ class FinetuneLabelTests(unittest.TestCase):
                     self.assertEqual(counts, ["2"])
 
     def test_load_labelled_rows_strips_manual_labels_before_counting(self):
-        labels = ["pigeon", "pigeon", "pigeon", "pigeon", "pigeon ", "human ", "cat"]
+        labels = [
+            "pigeon",
+            "pigeon",
+            "pigeon",
+            "pigeon",
+            "pigeon ",
+            "human ",
+            "cat",
+            "crow",
+            "other bird",
+            "jay",
+            "owl",
+            "equid",
+            "micromammal",
+        ]
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             csv_path = temp_path / "labels.csv"
@@ -66,7 +108,10 @@ class FinetuneLabelTests(unittest.TestCase):
             ):
                 rows = finetune_classifier.load_labelled_rows()
 
-        self.assertEqual(rows["manual_label"].tolist(), ["pigeon"] * 5)
+        self.assertEqual(
+            rows["manual_label"].tolist(),
+            ["pigeon"] * 5 + ["cat", "crow", "bird", "bird", "bird", "horse", "mouse"],
+        )
 
 
 if __name__ == "__main__":

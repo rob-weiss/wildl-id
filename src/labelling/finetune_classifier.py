@@ -49,9 +49,11 @@ from tqdm import tqdm
 try:
     from . import label_data
     from .organize_images import image_paths, nfc
+    from .species import normalize_species
 except ImportError:
     import label_data
     from organize_images import image_paths, nfc
+    from species import normalize_species
 
 REPO_DIR = Path(__file__).resolve().parent.parent.parent
 LABELS_DIR = REPO_DIR / "labels"
@@ -60,7 +62,7 @@ MODELS_DIR = REPO_DIR / "models"
 
 # The classifier only sees MegaDetector "animal" crops, so these labels are not trained
 EXCLUDED_LABELS = {"", "none", "unknown", "human", "vehicle"}
-MIN_SAMPLES_PER_CLASS = 5
+MIN_SAMPLES_PER_CLASS = 1
 
 NUM_UNFROZEN_BLOCKS = 2
 EPOCHS = 15
@@ -81,23 +83,12 @@ NORM_STD = [0.229, 0.224, 0.225]
 
 # Warm-start new head rows from the closest DeepFaune class
 DEEPFAUNE_EQUIVALENT = {
-    "badger": "badger",
-    "fox": "fox",
-    "wild boar": "wild boar",
-    "roe deer": "roe deer",
-    "dog": "dog",
-    "cat": "cat",
-    "squirrel": "squirrel",
+    "horse": "equid",
     "hare": "lagomorph",
+    "mouse": "micromammal",
     "marten": "mustelid",
-    "racoon": "raccoon",
-    "raccoon": "raccoon",
     "pigeon": "bird",
-    "other bird": "bird",
-    "buzzard": "bird",
     "crow": "bird",
-    "song_bird": "bird",
-    "woodpecker": "bird",
 }
 
 TRAIN_TRANSFORM = transforms.Compose(
@@ -164,7 +155,7 @@ def load_labelled_rows():
         if Path(CSV_PATH).name == "human_labels.csv"
         else pd.read_csv(CSV_PATH, keep_default_na=False)
     )
-    df["manual_label"] = df["manual_label"].str.strip()
+    df["manual_label"] = df["manual_label"].map(normalize_species)
     df = df[(df["box"] != "") & ~df["manual_label"].isin(EXCLUDED_LABELS)].copy()
 
     counts = df["manual_label"].value_counts()
@@ -285,7 +276,7 @@ def build_model(class_names, device):
     new_head = nn.Linear(old_head.in_features, len(class_names))
     with torch.no_grad():
         for i, name in enumerate(class_names):
-            equivalent = DEEPFAUNE_EQUIVALENT.get(name)
+            equivalent = DEEPFAUNE_EQUIVALENT.get(name, name)
             if equivalent in deepfaune_names:
                 j = deepfaune_names.index(equivalent)
                 new_head.weight[i] = old_head.weight[j]

@@ -18,9 +18,11 @@ from PIL import Image
 try:
     from . import label_data
     from .organize_images import image_paths, nfc
+    from .species import normalize_species
 except ImportError:
     import label_data
     from organize_images import image_paths, nfc
+    from species import normalize_species
 
 DEFAULT_CSV = label_data.DEFAULT_HUMAN_CSV
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
@@ -34,7 +36,7 @@ MODE_OPTIONS = (
 SHORTCUTS = {
     "r": "roe deer",
     "w": "wild boar",
-    "g": "other bird",
+    "g": "bird",
     "p": "pigeon",
     "b": "badger",
     "m": "marten",
@@ -50,9 +52,6 @@ SHORTCUTS = {
     "t": "cat",
     "v": "vehicle",
 }
-LEGACY_REVIEW_LABELS = frozenset(
-    {"woodpecker", "buzzard", "falcon", "song bird", "owl"}
-)
 
 
 def shortcuts_for_labels(labels):
@@ -64,12 +63,8 @@ def shortcuts_for_labels(labels):
     ]
     assigned_labels = set(shortcuts.values())
     for label in labels:
-        label = str(label or "").strip()
-        if (
-            not label
-            or label.casefold() in LEGACY_REVIEW_LABELS
-            or label in assigned_labels
-        ):
+        label = normalize_species(label or "")
+        if not label or label in assigned_labels:
             continue
         preferred_key = label.casefold()[0]
         if preferred_key in available_keys:

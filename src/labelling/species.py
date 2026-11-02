@@ -22,14 +22,34 @@ LABEL_EMOJIS = {
     "unknown": "❓",
     "cat": "🐈",
     "vehicle": "🚗",
-    "song bird": "🐦",
-    "other bird": "🐦",
+    "bird": "🐦",
     "marten": "🦦",
 }
 
 
+def normalize_species(label):
+    label = str(label).strip().lower()
+    if label.replace("_", " ") in {
+        "other bird",
+        "song bird",
+        "songbird",
+        "woodpecker",
+        "buzzard",
+        "falcon",
+        "owl",
+        "jay",
+    }:
+        return "bird"
+    return {
+        "equid": "horse",
+        "lagomorph": "hare",
+        "micromammal": "mouse",
+        "mustelid": "marten",
+    }.get(label, label)
+
+
 def species_emoji(label):
-    return LABEL_EMOJIS.get(str(label).strip().casefold(), "🐾")
+    return LABEL_EMOJIS.get(normalize_species(label), "🐾")
 
 
 def pluralize_species(label, count):

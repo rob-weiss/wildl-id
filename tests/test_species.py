@@ -6,6 +6,24 @@ species = import_module("src.labelling.species")
 
 
 class RelevantSpeciesTests(unittest.TestCase):
+    def test_normalize_species_keeps_crows_and_pigeons_separate_from_birds(self):
+        for label in (
+            "bird",
+            "other bird",
+            "jay",
+            "owl",
+            "song_bird",
+            "song bird",
+            "woodpecker",
+            "buzzard",
+            "falcon",
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(species.normalize_species(label), "bird")
+        for label in ("crow", "pigeon", "squirrel"):
+            with self.subTest(label=label):
+                self.assertEqual(species.normalize_species(label), label)
+
     def test_relevant_species_come_from_config_file(self):
         configured = json.loads(species.CONFIG_PATH.read_text(encoding="utf-8"))
 

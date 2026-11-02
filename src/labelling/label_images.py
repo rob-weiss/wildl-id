@@ -65,9 +65,11 @@ from tqdm import tqdm
 try:
     from . import label_data
     from .organize_images import image_paths, nfc
+    from .species import normalize_species
 except ImportError:
     import label_data
     from organize_images import image_paths, nfc
+    from species import normalize_species
 
 # Configuration (must be defined before OCR framework checks)
 repo_dir = Path(__file__).resolve().parents[2]
@@ -135,25 +137,6 @@ MEGADETECTOR_CLASS_NAMES = {
     2: "vehicle",
 }
 
-# German wildlife species we want to detect (matching labelling.py)
-WILDLIFE_SPECIES = [
-    "roe deer",
-    "wild boar",
-    "pigeon",
-    "badger",
-    "marten",
-    "dog",
-    "fox",
-    "hare",
-    "squirrel",
-    "other bird",
-    "crow",
-    "human",
-    "none",
-    "unknown",
-]
-
-
 def crop_detection(img_pil, bbox):
     """Crop a detected animal from the image for classification.
 
@@ -206,39 +189,7 @@ def map_classifier_to_wildlife(classifier_name):
     str
         Mapped wildlife category matching labelling.py classes.
     """
-    classifier_name_lower = classifier_name.lower()
-    for species in (
-        "roe deer",
-        "wild boar",
-        "badger",
-        "marten",
-        "dog",
-        "fox",
-        "raccoon",
-        "hare",
-        "squirrel",
-        "crow",
-        "pigeon",
-        "human",
-        "cat",
-    ):
-        if species in classifier_name_lower:
-            return species
-    aliases = {
-        "mustelid": "marten",
-        "lagomorph": "hare",
-        "jay": "other bird",
-        "owl": "other bird",
-        "raven": "crow",
-        "dove": "pigeon",
-        "person": "human",
-        "bird": "other bird",
-        "deer": "roe deer",
-    }
-    for alias, species in aliases.items():
-        if alias in classifier_name_lower:
-            return species
-    return "unknown"
+    return normalize_species(classifier_name)
 
 
 def extract_text_from_image(image_path):
@@ -742,9 +693,8 @@ class SpeciesClassifier:
             probabilities = self.model(tensor).softmax(dim=1)[0]
             confidence, index = probabilities.max(dim=0)
         prediction = self.class_names[index.item()]
-        # Models trained before owl was merged still output it.
         return {
-            "prediction": "other bird" if prediction == "owl" else prediction,
+            "prediction": normalize_species(prediction),
             "confidence": confidence.item(),
         }
 

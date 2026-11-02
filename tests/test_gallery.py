@@ -14,7 +14,7 @@ from web.gallery import (
 )
 
 TODAY = date(2026, 10, 30)
-LABELS = {"wild boar", "fox", "badger", "roe deer", "red deer", "other bird"}
+LABELS = {"wild boar", "fox", "badger", "roe deer", "red deer", "bird"}
 LOCATIONS = {"Douglasien", "Madenhäule", "Sauloch hinten", "Sauloch vorne"}
 
 
@@ -248,7 +248,7 @@ class SmartFilterTests(unittest.TestCase):
         self.assertEqual(parse("all deer").labels, {"roe deer", "red deer"})
         self.assertEqual(
             parse("birds").labels,
-            {"pigeon", "crow", "song bird", "other bird"},
+            {"bird", "pigeon", "crow"},
         )
 
     def test_negated_labels_and_locations(self):

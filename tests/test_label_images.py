@@ -180,7 +180,7 @@ class AutomaticLabelTests(unittest.TestCase):
         )
 
     def test_classifier_does_not_alias_rabbit_to_hare(self):
-        self.assertEqual(label_images.map_classifier_to_wildlife("rabbit"), "unknown")
+        self.assertEqual(label_images.map_classifier_to_wildlife("rabbit"), "rabbit")
 
     def test_pretrained_classifier_maps_supported_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
@@ -189,30 +189,29 @@ class AutomaticLabelTests(unittest.TestCase):
         classifier.pretrained = True
         classifier.model = Mock()
         image = np.zeros((8, 8, 3), dtype=np.uint8)
-        expected_labels = {
-            "badger": "badger",
-            "fox": "fox",
-            "wild boar": "wild boar",
-            "roe deer": "roe deer",
-            "dog": "dog",
-            "cat": "cat",
-            "squirrel": "squirrel",
-            "raccoon": "raccoon",
+        renames = {
+            "equid": "horse",
             "lagomorph": "hare",
+            "micromammal": "mouse",
             "mustelid": "marten",
-            "bird": "other bird",
         }
-        for native_label, expected_label in expected_labels.items():
+        native_labels = label_images.pw_classification.DeepfauneClassifier.CLASS_NAMES[
+            "en"
+        ]
+        self.assertEqual(len(native_labels), 34)
+        for native_label in native_labels:
             with self.subTest(native_label=native_label):
                 classifier.model.single_image_classification.return_value = {
                     "prediction": native_label,
                     "confidence": 0.9,
                 }
                 result = classifier.single_image_classification(image, "image.jpg")
-                self.assertEqual(result["prediction"], expected_label)
+                self.assertEqual(
+                    result["prediction"], renames.get(native_label, native_label)
+                )
                 self.assertEqual(result["confidence"], 0.9)
 
-    def test_french_classifier_labels_are_unknown(self):
+    def test_classifier_preserves_unmapped_labels(self):
         for label in (
             "chevreuil", "cerf", "sanglier", "blaireau", "martre", "fouine",
             "chien", "renard", "lièvre", "lievre", "lapin", "écureuil", "ecureuil",
@@ -220,7 +219,7 @@ class AutomaticLabelTests(unittest.TestCase):
             "chat",
         ):
             with self.subTest(label=label):
-                self.assertEqual(label_images.map_classifier_to_wildlife(label), "unknown")
+                self.assertEqual(label_images.map_classifier_to_wildlife(label), label)
 
     def test_finetuned_classifier_keeps_native_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
@@ -228,17 +227,21 @@ class AutomaticLabelTests(unittest.TestCase):
         )
         classifier.pretrained = False
         classifier.device = "cpu"
-        classifier.class_names = ["fox", "song_bird"]
+        classifier.class_names = ["fox", "crow", "pigeon"]
         classifier.transform = Mock(return_value=torch.zeros(3, 8, 8))
-        classifier.model = Mock(return_value=torch.tensor([[0.0, 3.0]]))
-        result = classifier.single_image_classification(
-            np.zeros((8, 8, 3), dtype=np.uint8), "image.jpg"
-        )
-        self.assertEqual(result["prediction"], "song_bird")
-        self.assertGreater(result["confidence"], 0.9)
+        for index, label in enumerate(classifier.class_names):
+            with self.subTest(label=label):
+                logits = torch.zeros(1, len(classifier.class_names))
+                logits[0, index] = 5.0
+                classifier.model = Mock(return_value=logits)
+                result = classifier.single_image_classification(
+                    np.zeros((8, 8, 3), dtype=np.uint8), "image.jpg"
+                )
+                self.assertEqual(result["prediction"], label)
+                self.assertGreater(result["confidence"], 0.9)
 
-    def test_owl_predictions_are_reported_as_other_bird(self):
-        self.assertEqual(label_images.map_classifier_to_wildlife("Owl"), "other bird")
+    def test_legacy_bird_predictions_are_reported_as_bird(self):
+        self.assertEqual(label_images.map_classifier_to_wildlife("bird"), "bird")
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
         )
@@ -250,7 +253,7 @@ class AutomaticLabelTests(unittest.TestCase):
         result = classifier.single_image_classification(
             np.zeros((8, 8, 3), dtype=np.uint8), "image.jpg"
         )
-        self.assertEqual(result["prediction"], "other bird")
+        self.assertEqual(result["prediction"], "bird")
 
     def test_latest_model_uses_timestamp_and_ignores_incomplete_runs(self):
         with tempfile.TemporaryDirectory() as directory:
