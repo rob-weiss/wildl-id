@@ -217,7 +217,9 @@ def save_prediction_reviews(path, statuses):
     for key, reviewed in statuses.items():
         if key not in seen and reviewed:
             location, name = key
-            rows.append({"location_id": location, "image_file": name, "reviewed": "true"})
+            rows.append(
+                {"location_id": location, "image_file": name, "reviewed": "true"}
+            )
             changed = True
     if changed:
         if path.exists():

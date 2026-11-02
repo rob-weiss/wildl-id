@@ -564,13 +564,20 @@ class LabelReviewTests(unittest.TestCase):
         label_data = review_module.label_data
         label_data.write_records(
             human_csv,
-            [{"location_id": "camera1", "image_file": "incorrect.jpg", "manual_label": "hare"}],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "incorrect.jpg",
+                    "manual_label": "hare",
+                }
+            ],
             label_data.HUMAN_COLUMNS,
         )
         with (
             patch.object(review_module, "image_paths", return_value={}),
             patch.object(
-                review_module, "latest_incorrect_predictions",
+                review_module,
+                "latest_incorrect_predictions",
                 return_value=("deepfaune_finetuned_test", {"camera1_incorrect.jpg"}),
             ),
             patch.object(review_module, "load_validation_predictions", return_value={}),
@@ -579,8 +586,12 @@ class LabelReviewTests(unittest.TestCase):
         review.set_mode("Latest model incorrect")
         original = human_csv.read_bytes()
         with (
-            patch.object(label_data, "save_prediction_reviews", side_effect=OSError("disk full")),
-            patch.object(Path, "write_bytes", side_effect=AssertionError("non-atomic rollback")),
+            patch.object(
+                label_data, "save_prediction_reviews", side_effect=OSError("disk full")
+            ),
+            patch.object(
+                Path, "write_bytes", side_effect=AssertionError("non-atomic rollback")
+            ),
         ):
             with self.assertRaisesRegex(OSError, "disk full"):
                 review.choose("fox")

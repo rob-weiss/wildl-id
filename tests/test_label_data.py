@@ -187,8 +187,15 @@ class LabelDataTests(unittest.TestCase):
         prediction = label_data.predictions_path(self.root)
         self.write(
             prediction,
-            [{"location_id": "camera", "image_file": "photo.jpg", "class": "cat",
-              "box": "automatic box", "custom_field": "keep"}],
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "class": "cat",
+                    "box": "automatic box",
+                    "custom_field": "keep",
+                }
+            ],
         )
         original_human = self.human.read_bytes()
         original_prediction = prediction.read_bytes()
@@ -197,7 +204,10 @@ class LabelDataTests(unittest.TestCase):
 
         self.assertEqual(
             label_data.read_records(self.human),
-            [{column: row[column] for column in label_data.HUMAN_COLUMNS} for row in humans],
+            [
+                {column: row[column] for column in label_data.HUMAN_COLUMNS}
+                for row in humans
+            ],
         )
         saved = label_data.read_records(prediction)
         self.assertEqual(saved[0]["reviewed"], "true")
@@ -205,8 +215,12 @@ class LabelDataTests(unittest.TestCase):
         self.assertEqual(saved[0]["box"], "automatic box")
         self.assertEqual(saved[0]["custom_field"], "keep")
         self.assertEqual(label_data.load_rows(self.human)[0]["reviewed"], "true")
-        self.assertEqual(label_data._csv_backups(self.human)[0].read_bytes(), original_human)
-        self.assertEqual(label_data._csv_backups(prediction)[0].read_bytes(), original_prediction)
+        self.assertEqual(
+            label_data._csv_backups(self.human)[0].read_bytes(), original_human
+        )
+        self.assertEqual(
+            label_data._csv_backups(prediction)[0].read_bytes(), original_prediction
+        )
         snapshots = self.human.read_bytes(), prediction.read_bytes()
         label_data.migrate_review_status(self.root)
         self.assertEqual((self.human.read_bytes(), prediction.read_bytes()), snapshots)
@@ -215,31 +229,51 @@ class LabelDataTests(unittest.TestCase):
         older_run = "deepfaune_finetuned_20261028-120000_old"
         self.write(
             self.human,
-            [{"location_id": "camera", "image_file": "photo.jpg", "box": "",
-              "manual_label": "fox", "reviewed_model": older_run}],
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                    "reviewed_model": older_run,
+                }
+            ],
         )
 
         label_data.migrate_human_labels(self.root)
 
         old_predictions = label_data.predictions_path(self.root, older_run)
-        self.assertEqual(label_data.read_records(old_predictions)[0]["reviewed"], "true")
+        self.assertEqual(
+            label_data.read_records(old_predictions)[0]["reviewed"], "true"
+        )
         self.assertFalse(label_data.predictions_path(self.root).exists())
         self.assertEqual(label_data.load_rows(self.human)[0]["reviewed"], "")
 
     def test_failed_review_migration_retains_legacy_flags_for_retry(self):
         self.write(
             self.human,
-            [{"location_id": "camera", "image_file": "photo.jpg", "box": "",
-              "manual_label": "fox", "reviewed_model": self.model.name}],
+            [
+                {
+                    "location_id": "camera",
+                    "image_file": "photo.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                    "reviewed_model": self.model.name,
+                }
+            ],
         )
         original = self.human.read_bytes()
-        with patch.object(label_data, "save_prediction_reviews", side_effect=OSError("disk full")):
+        with patch.object(
+            label_data, "save_prediction_reviews", side_effect=OSError("disk full")
+        ):
             with self.assertRaisesRegex(OSError, "disk full"):
                 label_data.migrate_review_status(self.root)
         self.assertEqual(self.human.read_bytes(), original)
         label_data.migrate_review_status(self.root)
         self.assertEqual(
-            label_data.read_records(label_data.predictions_path(self.root))[0]["reviewed"],
+            label_data.read_records(label_data.predictions_path(self.root))[0][
+                "reviewed"
+            ],
             "true",
         )
 
@@ -583,9 +617,12 @@ class LabelDataTests(unittest.TestCase):
             )
             self.assertEqual(self.human.read_bytes(), original)
             self.assertTrue(
-                all(not row.get("reviewed") for row in label_data.read_records(
-                    label_data.predictions_path(self.root)
-                ))
+                all(
+                    not row.get("reviewed")
+                    for row in label_data.read_records(
+                        label_data.predictions_path(self.root)
+                    )
+                )
             )
 
 
