@@ -242,12 +242,14 @@ def map_classifier_to_wildlife(classifier_name):
         or "ecureuil" in classifier_name_lower
     ):
         return "squirrel"
-    elif "jay" in classifier_name_lower or "geai" in classifier_name_lower:
-        return "other bird"
     elif (
-        "owl" in classifier_name_lower
-        or "chouette" in classifier_name_lower
-        or "hibou" in classifier_name_lower
+        "jay" in classifier_name_lower
+        or "geai" in classifier_name_lower
+        or (
+            "owl" in classifier_name_lower
+            or "chouette" in classifier_name_lower
+            or "hibou" in classifier_name_lower
+        )
     ):
         return "other bird"
     elif (
