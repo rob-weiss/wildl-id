@@ -56,15 +56,6 @@ def cloud_image_url(
     return f"{base_url.rstrip('/')}/{quote(relative_path.as_posix(), safe='/')}"
 
 
-def run_automatic_labelling(csv_path):
-    from .label_images import process_images_with_pytorch_wildlife
-
-    process_images_with_pytorch_wildlife(
-        unlabelled_only=True,
-        output_csv_path=csv_path,
-    )
-
-
 def parse_box(value):
     try:
         box = ast.literal_eval(value or "")
@@ -164,7 +155,6 @@ class ReviewApp:
         self.box_history = []
         self.label_buttons = []
         self.cleanup_dialog_open = False
-        self.auto_label_running = False
         self.focus_subject = False
         self.image_mode = "box"
 
@@ -210,7 +200,7 @@ class ReviewApp:
                 self.run_label = ui.label(run_name).classes("text-sm text-gray-600")
                 self.mode_select = (
                     ui.select(
-                        list(MODE_OPTIONS[:3]),
+                        list(MODE_OPTIONS[:2]),
                         value=self.review.mode,
                         label="Review mode",
                         on_change=lambda event: self.change_mode(event.value),
@@ -277,13 +267,20 @@ class ReviewApp:
                         self.accept_button = ui.button(
                             "✅ Accept prediction", icon="check", on_click=self.accept
                         ).props("no-caps")
+                        self.keep_manual_button = ui.button(
+                            "📌 Keep manual label",
+                            icon="push_pin",
+                            on_click=self.keep_manual_label,
+                        ).props("no-caps")
+                        self.keep_manual_button.set_visibility(False)
+                    with ui.row().classes("w-full gap-2"):
                         self.undo_button = ui.button(
                             "↩️ Undo label", icon="undo", on_click=self.undo_label
                         ).props("no-caps")
-                    with ui.row().classes("w-full gap-2"):
                         self.undo_box_button = ui.button(
                             "↩️ Undo box", icon="crop_free", on_click=self.undo_box
                         ).props("no-caps")
+                    with ui.row().classes("w-full gap-2"):
                         self.remove_empty_button = (
                             ui.button(
                                 "🗑️ Remove empty",
@@ -301,17 +298,6 @@ class ReviewApp:
                             )
                             .props("outline no-caps")
                             .classes("text-red-700")
-                        )
-                    with ui.row().classes("w-full items-center gap-2"):
-                        self.auto_label_button = ui.button(
-                            "Auto-label unseen",
-                            icon="auto_awesome",
-                            on_click=self.auto_label_unseen,
-                        ).props("outline no-caps")
-                        self.auto_label_spinner = ui.spinner(size="sm")
-                        self.auto_label_spinner.set_visibility(False)
-                        self.auto_label_status = ui.label().classes(
-                            "text-sm text-gray-600"
                         )
                     ui.label("🏷️ Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
@@ -347,10 +333,8 @@ class ReviewApp:
 
     def refresh(self):
         self.run_label.set_visibility(self.review.mode.startswith("Latest model"))
-        self.accept_button.set_text(
-            "📌 Keep manual label"
-            if self.keeps_manual_label()
-            else "✅ Accept prediction"
+        self.keep_manual_button.set_visibility(
+            self.review.mode == "Latest model incorrect"
         )
         self.undo_button.set_enabled(bool(self.review.history))
         if not self.review.pending:
@@ -364,6 +348,7 @@ class ReviewApp:
             self.image_name.set_text("")
             self.prediction.set_text("")
             self.accept_button.disable()
+            self.keep_manual_button.disable()
             for button in self.label_buttons:
                 button.disable()
             return
@@ -378,6 +363,7 @@ class ReviewApp:
             self.image_name.set_text("")
             self.prediction.set_text("")
             self.accept_button.disable()
+            self.keep_manual_button.disable()
             for button in self.label_buttons:
                 button.disable()
             return
@@ -443,6 +429,10 @@ class ReviewApp:
                 self.viewer.set_visibility(False)
             self.viewer.update()
         self.accept_button.enable()
+        self.keep_manual_button.set_enabled(
+            self.review.mode == "Latest model incorrect"
+            and bool(self.manual_label_for_row(row))
+        )
         for button in self.label_buttons:
             button.enable()
 
@@ -491,7 +481,6 @@ class ReviewApp:
         if (
             self.image_mode != "box"
             or self.cleanup_dialog_open
-            or self.auto_label_running
         ):
             return
         if self.current_index is None or self.image_size is None:
@@ -526,7 +515,7 @@ class ReviewApp:
         self.refresh()
 
     def on_key(self, event: events.KeyEventArguments):
-        if self.cleanup_dialog_open or self.auto_label_running:
+        if self.cleanup_dialog_open:
             return
         if not event.action.keydown or event.action.repeat:
             return
@@ -546,24 +535,15 @@ class ReviewApp:
                 self.choose_label(label)
 
     def choose_label(self, label):
-        if self.auto_label_running:
-            return
         try:
             self.review.choose(label)
         except (OSError, RuntimeError) as error:
             ui.notify(f"Label not saved: {error}", type="negative")
         self.refresh()
 
-    def keeps_manual_label(self):
-        return self.review.mode == "Latest model incorrect"
-
     def accept(self):
         if self.current_index is not None:
             row = self.review.rows[self.current_index]
-            manual_label = str(row.get("manual_label") or "").strip()
-            if self.keeps_manual_label() and manual_label:
-                self.choose_label(manual_label)
-                return
             prediction = self.prediction_for_row(row)
             label = prediction["predicted_label"] if prediction else row["class"]
             if not label.strip():
@@ -571,65 +551,35 @@ class ReviewApp:
                 return
             self.choose_label(label)
 
+    def manual_label_for_row(self, row):
+        manual_label = str(row.get("manual_label") or "").strip()
+        if manual_label:
+            return manual_label
+        prediction = self.prediction_for_row(row)
+        return str(prediction.get("true_label") or "").strip() if prediction else ""
+
+    def keep_manual_label(self):
+        if self.current_index is None:
+            return
+        label = self.manual_label_for_row(self.review.rows[self.current_index])
+        if not label:
+            ui.notify("No manual label to keep", type="warning")
+            return
+        self.choose_label(label)
+
     def save_custom_label(self):
         self.choose_label(self.custom_label.value or "")
         self.custom_label.value = ""
 
     def undo_label(self):
-        if self.auto_label_running:
-            return
         try:
             self.review.undo()
         except (OSError, RuntimeError) as error:
             ui.notify(f"Label undo failed: {error}", type="negative")
         self.refresh()
 
-    def set_labelling_state(self, running):
-        self.auto_label_running = running
-        self.auto_label_button.set_enabled(not running)
-        self.accept_button.set_enabled(not running)
-        self.undo_button.set_enabled(not running and bool(self.review.history))
-        self.undo_box_button.set_enabled(not running and bool(self.box_history))
-        self.remove_empty_button.set_enabled(not running)
-        self.remove_unknown_button.set_enabled(not running)
-        self.save_label_button.set_enabled(not running)
-        self.custom_label.set_enabled(not running)
-        for button in self.label_buttons:
-            button.set_enabled(not running)
-        self.auto_label_spinner.set_visibility(running)
-        self.auto_label_status.set_text(
-            "Labelling unlabelled images..." if running else ""
-        )
-
-    async def auto_label_unseen(self):
-        if self.auto_label_running:
-            return
-        count = sum(
-            not str(row.get("manual_label") or "").strip() for row in self.review.rows
-        )
-        if not count:
-            ui.notify("No unlabelled images to process")
-            return
-        self.set_labelling_state(True)
-        try:
-            await run.io_bound(run_automatic_labelling, self.review.csv_path)
-            updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
-            updated_review.set_mode(self.review.mode)
-        except Exception as error:  # noqa: BLE001
-            ui.notify(f"Automatic labelling failed: {error}", type="negative")
-            return
-        finally:
-            self.set_labelling_state(False)
-        self.review = updated_review
-        self.box_history.clear()
-        self.drag_start = None
-        self.image_size = None
-        self.undo_box_button.disable()
-        self.refresh()
-        ui.notify("Automatic labelling complete", type="positive")
-
     async def confirm_remove_empty(self):
-        if self.cleanup_dialog_open or self.auto_label_running:
+        if self.cleanup_dialog_open:
             return
         no_detection = sum(is_confirmed_empty(row) for row in self.review.rows)
         human_none = sum(
@@ -683,7 +633,7 @@ class ReviewApp:
             dialog.delete()
 
     async def confirm_remove_unknown(self):
-        if self.cleanup_dialog_open or self.auto_label_running:
+        if self.cleanup_dialog_open:
             return
         count = sum(is_removable(row, "unknown") for row in self.review.rows)
         if not count:
@@ -745,7 +695,7 @@ class ReviewApp:
         ui.notify(f"Removed {count} images labelled {label}", type="positive")
 
     def undo_box(self):
-        if not self.box_history or self.auto_label_running:
+        if not self.box_history:
             return
         index, previous_box = self.box_history[-1]
         row = self.review.rows[index]

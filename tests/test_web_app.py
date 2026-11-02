@@ -234,7 +234,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(reviewer.current_image_path, local_image)
         self.assertEqual(reviewer.image_size, (16, 16))
 
-    async def test_review_page_shows_only_three_modes_and_remove_empty(self):
+    async def test_review_page_shows_two_modes_and_remove_empty(self):
         self.write_valid_review_data()
 
         async with self.app_user("/review") as user:
@@ -242,10 +242,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("fox")
             await user.should_see("Remove empty")
             mode = next(iter(user.find(kind=ui.select, content="Review mode").elements))
-            self.assertEqual(
-                mode.options,
-                ["Unseen", "Latest model incorrect", "Latest model correct"],
-            )
+            self.assertEqual(mode.options, ["Unseen", "Latest model incorrect"])
 
     async def test_page_shows_missing_csv_error(self):
         async with self.app_user("/review") as user:

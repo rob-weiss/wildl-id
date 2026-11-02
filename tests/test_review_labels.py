@@ -409,6 +409,60 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_latest_incorrect_deduplicates_resolved_images_until_undo(self):
+        with self.csv_path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            fieldnames = reader.fieldnames
+            rows = list(reader)
+        rows.append(rows[2].copy())
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+        run_name = "deepfaune_finetuned_test"
+        with (
+            patch.object(review_module, "image_paths", return_value={}),
+            patch.object(
+                review_module,
+                "latest_incorrect_predictions",
+                return_value=(run_name, {"camera1_incorrect.jpg"}),
+            ),
+            patch.object(review_module, "load_validation_predictions", return_value={}),
+        ):
+            review = LabelReview(self.csv_path)
+        review.set_mode("Latest model incorrect")
+
+        self.assertEqual(
+            [review.rows[index]["image_file"] for index in review.pending],
+            ["incorrect.jpg"],
+        )
+        review.choose("hare")
+        self.assertEqual(review.pending, [])
+        review.set_mode("Unseen")
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(review.pending, [])
+
+        review.undo()
+
+        self.assertEqual(
+            [review.rows[index]["image_file"] for index in review.pending],
+            ["incorrect.jpg"],
+        )
+
+    def test_auto_label_unseen_button_is_not_rendered(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            app.build()
+        self.addCleanup(container.delete)
+
+        self.assertFalse(
+            any(
+                getattr(element, "text", None) == "Auto-label unseen"
+                for element in container.descendants()
+            )
+        )
+
     def test_images_are_reviewed_oldest_first_and_undated_last(self):
         with self.csv_path.open("w", newline="", encoding="utf-8") as target:
             writer = csv.DictWriter(
@@ -464,29 +518,6 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.pending, [0])
         review.set_mode("Seen")
         self.assertEqual(review.pending, [1, 2, 3])
-
-    def test_auto_label_button_runs_background_job_and_reloads_review(self):
-        app = review_app_module.ReviewApp(self.csv_path)
-        with review_app_module.ui.column() as container:
-            app.build()
-        self.addCleanup(container.delete)
-        app.review.mode = "All"
-
-        with (
-            patch.object(
-                review_app_module.run, "io_bound", new_callable=AsyncMock
-            ) as io_bound,
-            patch.object(review_app_module.ui, "notify"),
-        ):
-            asyncio.run(app.auto_label_unseen())
-
-        io_bound.assert_awaited_once_with(
-            review_app_module.run_automatic_labelling, self.csv_path
-        )
-        self.assertEqual(app.review.mode, "All")
-        self.assertEqual(app.review.original_bytes, self.csv_path.read_bytes())
-        self.assertFalse(app.auto_label_running)
-        self.assertTrue(app.auto_label_button.enabled)
 
     def test_downloads_without_predictions_are_unseen_and_can_be_reviewed(self):
         original = Path(self.temp_dir.name) / "download.jpg"
@@ -597,9 +628,23 @@ class LabelReviewTests(unittest.TestCase):
         self.assertTrue(all(caption.strip() for caption in captions))
         self.assertNotIn(" red deer ", captions)
         self.assertEqual(app.accept_button.text, "✅ Accept prediction")
+        self.assertIsNotNone(getattr(app, "keep_manual_button", None))
+        self.assertIs(
+            app.accept_button.parent_slot.parent,
+            app.keep_manual_button.parent_slot.parent,
+        )
+        self.assertFalse(app.keep_manual_button.visible)
         self.assertEqual(app.undo_button.text, "↩️ Undo label")
         self.assertEqual(app.undo_box_button.text, "↩️ Undo box")
+        self.assertIs(
+            app.undo_button.parent_slot.parent,
+            app.undo_box_button.parent_slot.parent,
+        )
         self.assertEqual(app.remove_empty_button.text, "🗑️ Remove empty")
+        self.assertIs(
+            app.remove_empty_button.parent_slot.parent,
+            app.remove_unknown_button.parent_slot.parent,
+        )
         self.assertEqual(app.save_label_button.text, "💾 Save label")
 
     def test_browser_label_buttons_hide_legacy_birds_and_shortcut_all_choices(self):
@@ -764,7 +809,6 @@ class LabelReviewTests(unittest.TestCase):
             for mode in (
                 "Latest model incorrect",
                 "Unseen",
-                "Latest model correct",
                 "Unseen + errors",
                 "Seen",
                 "All",
@@ -1041,7 +1085,7 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(chosen, ["song bird"])
 
-    def test_incorrect_mode_space_keeps_manual_label(self):
+    def test_incorrect_mode_shows_separate_accept_and_keep_manual_actions(self):
         app = review_app_module.ReviewApp(self.csv_path)
         incorrect = {
             "true_label": "hare",
@@ -1056,19 +1100,15 @@ class LabelReviewTests(unittest.TestCase):
                 self.addCleanup(container.delete)
                 self.assertEqual(app.accept_button.text, "✅ Accept prediction")
                 app.change_mode("Latest model incorrect")
-                self.assertEqual(app.accept_button.text, "📌 Keep manual label")
+                self.assertEqual(app.accept_button.text, "✅ Accept prediction")
+                self.assertIsNotNone(getattr(app, "keep_manual_button", None))
+                self.assertTrue(app.keep_manual_button.visible)
                 chosen = []
                 app.choose_label = chosen.append
-                event = SimpleNamespace(
-                    action=SimpleNamespace(keydown=True, repeat=False),
-                    key=SimpleNamespace(
-                        name=" ", space=True, backspace=False, enter=False
-                    ),
-                    modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
-                )
-                app.on_key(event)
+                app.accept()
+                app.keep_manual_label()
 
-        self.assertEqual(chosen, ["hare"])
+        self.assertEqual(chosen, ["fox", "hare"])
 
     def test_accept_without_prediction_saves_nothing(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -1426,19 +1466,11 @@ class LabelReviewTests(unittest.TestCase):
         )
         self.assertNotIn("camera1_train.jpg", predictions)
 
-    def test_latest_model_correct_mode_selects_correct_validation_rows(self):
+    def test_latest_model_correct_mode_is_removed(self):
         review = LabelReview(self.csv_path)
-        review.latest_predictions = {
-            "camera1_correct.jpg": {"status": "correct"},
-            "camera1_incorrect.jpg": {"status": "incorrect"},
-        }
-
-        review.set_mode("Latest model correct")
-
-        self.assertEqual(
-            [review.rows[index]["image_file"] for index in review.pending],
-            ["correct.jpg"],
-        )
+        self.assertNotIn("Latest model correct", review_module.MODE_OPTIONS)
+        with self.assertRaises(ValueError):
+            review.set_mode("Latest model correct")
 
 
 if __name__ == "__main__":

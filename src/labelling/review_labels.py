@@ -27,7 +27,6 @@ MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 MODE_OPTIONS = (
     "Unseen",
     "Latest model incorrect",
-    "Latest model correct",
     "Unseen + errors",
     "Seen",
     "All",
@@ -274,6 +273,7 @@ class LabelReview:
         )
         self.latest_predictions = load_validation_predictions(self.latest_model_name)
         self.capture_rank = capture_order(self.rows)
+        self.resolved_incorrect = set()
         self.mode = "Unseen"
         self.pending = self.filtered_indices()
         self.position = 0
@@ -289,21 +289,25 @@ class LabelReview:
 
     def filtered_indices(self):
         indices = []
+        seen_latest_errors = set()
         for index, row in enumerate(self.rows):
             manual_label = str(row.get("manual_label") or "").strip()
             image_name = f"{row['location_id']}_{row['image_file']}"
             is_unseen = not manual_label
-            is_latest_error = image_name in self.latest_incorrect_filenames
-            is_latest_correct = (
-                self.latest_predictions.get(image_name, {}).get("status") == "correct"
+            is_latest_error = (
+                image_name in self.latest_incorrect_filenames
+                and image_name not in self.resolved_incorrect
             )
+            if self.mode == "Latest model incorrect":
+                if is_latest_error and image_name not in seen_latest_errors:
+                    indices.append(index)
+                    seen_latest_errors.add(image_name)
+                continue
             if (
                 self.mode == "Unseen"
                 and is_unseen
                 or self.mode == "Latest model incorrect"
                 and is_latest_error
-                or self.mode == "Latest model correct"
-                and is_latest_correct
                 or self.mode == "Unseen + errors"
                 and (is_unseen or is_latest_error)
                 or self.mode == "Seen"
@@ -404,13 +408,20 @@ class LabelReview:
         index = self.pending[self.position]
         old_position = self.position
         previous = self.rows[index]["manual_label"]
+        image_name = f"{self.rows[index]['location_id']}_{self.rows[index]['image_file']}"
+        was_resolved = image_name in self.resolved_incorrect
         self.rows[index]["manual_label"] = label
         try:
             self.save()
         except Exception:
             self.rows[index]["manual_label"] = previous
             raise
-        self.history.append((index, previous))
+        self.history.append((index, previous, was_resolved))
+        if (
+            self.mode == "Latest model incorrect"
+            and image_name in self.latest_incorrect_filenames
+        ):
+            self.resolved_incorrect.add(image_name)
         self.pending = self.filtered_indices()
         if index in self.pending:
             self.position = self.pending.index(index) + 1
@@ -427,8 +438,11 @@ class LabelReview:
     def undo(self):
         if not self.history:
             return
-        index, previous = self.history[-1]
+        entry = self.history[-1]
+        index, previous = entry[:2]
+        was_resolved = entry[2] if len(entry) > 2 else None
         row = self.rows[index]
+        image_name = f"{row['location_id']}_{row['image_file']}"
         current = row["manual_label"]
         row["manual_label"] = previous
         try:
@@ -437,6 +451,11 @@ class LabelReview:
             row["manual_label"] = current
             raise
         self.history.pop()
+        if was_resolved is not None:
+            if was_resolved:
+                self.resolved_incorrect.add(image_name)
+            else:
+                self.resolved_incorrect.discard(image_name)
         self.pending = self.filtered_indices()
         if index not in self.pending:
             self.pending.append(index)
