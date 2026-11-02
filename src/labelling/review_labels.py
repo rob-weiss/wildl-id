@@ -235,15 +235,10 @@ class LabelReview:
             else self.csv_path.parent / "images"
         )
         if self.human_only:
+            label_data.migrate_review_status(repo_dir)
             self._human_rows = label_data.read_records(self.csv_path)
             self.rows = label_data.load_rows(self.csv_path)
-            self.columns = list(
-                (
-                    *label_data.PREDICTION_COLUMNS,
-                    "manual_label",
-                    label_data.REVIEWED_MODEL_COLUMN,
-                )
-            )
+            self.columns = [*label_data.PREDICTION_COLUMNS, "manual_label"]
         else:
             with self.csv_path.open(newline="", encoding="utf-8") as source:
                 reader = csv.DictReader(source)
@@ -257,8 +252,6 @@ class LabelReview:
             self.columns.append("manual_label")
         for row in self.rows:
             row.setdefault("manual_label", "")
-            if self.human_only:
-                row.setdefault(label_data.REVIEWED_MODEL_COLUMN, "")
         self.shortcuts = shortcuts_for_labels(
             [
                 *SHORTCUTS.values(),
@@ -281,13 +274,26 @@ class LabelReview:
         )
         self.latest_predictions = load_validation_predictions(self.latest_model_name)
         self.capture_rank = capture_order(self.rows)
+        self.review_predictions_path = (
+            label_data.predictions_path(repo_dir, self.latest_model_name)
+            if self.human_only and self.latest_model_name
+            else None
+        )
+        self.original_prediction_bytes = (
+            self.review_predictions_path.read_bytes()
+            if self.review_predictions_path and self.review_predictions_path.exists()
+            else None
+        )
         self.resolved_incorrect = {
             f"{row['location_id']}_{row['image_file']}"
-            for row in self.rows
-            if self.human_only
-            and self.latest_model_name
-            and row.get(label_data.REVIEWED_MODEL_COLUMN) == self.latest_model_name
+            for row in (
+                label_data.read_records(self.review_predictions_path)
+                if self.review_predictions_path
+                else []
+            )
+            if row.get("reviewed", "").strip().lower() == "true"
         }
+        self._saved_resolved = self.resolved_incorrect.copy()
         self.mode = "Unseen"
         self.pending = self.filtered_indices()
         self.position = 0
@@ -320,11 +326,6 @@ class LabelReview:
             is_latest_error = (
                 image_name in self.latest_incorrect_filenames
                 and image_name not in self.resolved_incorrect
-                and (
-                    not self.human_only
-                    or row.get(label_data.REVIEWED_MODEL_COLUMN)
-                    != self.latest_model_name
-                )
                 and not is_correct_now
             )
             if self.mode == "Latest model incorrect":
@@ -398,22 +399,62 @@ class LabelReview:
                 {column: row.get(column, "") for column in label_data.HUMAN_COLUMNS}
                 for row in annotations
             ]
-            existing = [
-                {
-                    **row,
-                    label_data.REVIEWED_MODEL_COLUMN: row.get(
-                        label_data.REVIEWED_MODEL_COLUMN, ""
-                    ),
-                }
-                for row in label_data.read_records(self.csv_path)
-            ]
-            if projected == existing:
+            existing = label_data.read_records(self.csv_path)
+            human_changed = projected != existing
+            reviews_changed = self.resolved_incorrect != self._saved_resolved
+            if not human_changed and not reviews_changed:
                 return
-            label_data.backup_csv(self.csv_path, "review")
-            label_data.write_records(
-                self.csv_path, annotations, label_data.HUMAN_COLUMNS
-            )
+            if reviews_changed and self.review_predictions_path:
+                current = (
+                    self.review_predictions_path.read_bytes()
+                    if self.review_predictions_path.exists()
+                    else None
+                )
+                if current != self.original_prediction_bytes:
+                    raise RuntimeError(
+                        "Predictions changed outside this reviewer. "
+                        "Close and reopen it before saving."
+                    )
+            if human_changed:
+                label_data.backup_csv(self.csv_path, "review")
+                label_data.write_records(
+                    self.csv_path, annotations, label_data.HUMAN_COLUMNS
+                )
+            try:
+                if reviews_changed and self.review_predictions_path:
+                    changed = self.resolved_incorrect ^ self._saved_resolved
+                    statuses = {
+                        label_data.image_key(row): (
+                            f"{row['location_id']}_{row['image_file']}"
+                            in self.resolved_incorrect
+                        )
+                        for row in self.rows
+                        if f"{row['location_id']}_{row['image_file']}" in changed
+                    }
+                    label_data.save_prediction_reviews(
+                        self.review_predictions_path, statuses
+                    )
+                    self.original_prediction_bytes = (
+                        self.review_predictions_path.read_bytes()
+                    )
+            except Exception:
+                if human_changed:
+                    temporary_path = None
+                    try:
+                        with tempfile.NamedTemporaryFile(
+                            mode="wb", dir=self.csv_path.parent, delete=False
+                        ) as target:
+                            temporary_path = Path(target.name)
+                            target.write(self.original_bytes)
+                            target.flush()
+                            os.fsync(target.fileno())
+                        os.replace(temporary_path, self.csv_path)
+                    finally:
+                        if temporary_path is not None:
+                            temporary_path.unlink(missing_ok=True)
+                raise
             self.original_bytes = self.csv_path.read_bytes()
+            self._saved_resolved = self.resolved_incorrect.copy()
             return
         if self.rows == label_data.read_records(self.csv_path):
             return
@@ -449,29 +490,22 @@ class LabelReview:
         previous = row["manual_label"]
         image_name = f"{row['location_id']}_{row['image_file']}"
         was_resolved = image_name in self.resolved_incorrect
-        previous_reviewed_model = (
-            row.get(label_data.REVIEWED_MODEL_COLUMN) if self.human_only else None
-        )
         row["manual_label"] = label
         if (
             self.mode == "Latest model incorrect"
             and image_name in self.latest_incorrect_filenames
         ):
             self.resolved_incorrect.add(image_name)
-            if self.human_only:
-                row[label_data.REVIEWED_MODEL_COLUMN] = self.latest_model_name or ""
         try:
             self.save()
         except Exception:
             row["manual_label"] = previous
-            if self.human_only:
-                row[label_data.REVIEWED_MODEL_COLUMN] = previous_reviewed_model
             if was_resolved:
                 self.resolved_incorrect.add(image_name)
             else:
                 self.resolved_incorrect.discard(image_name)
             raise
-        self.history.append((index, previous, was_resolved, previous_reviewed_model))
+        self.history.append((index, previous, was_resolved))
         self.pending = self.filtered_indices()
         if index in self.pending:
             self.position = self.pending.index(index) + 1
@@ -491,27 +525,26 @@ class LabelReview:
         entry = self.history[-1]
         index, previous = entry[:2]
         was_resolved = entry[2] if len(entry) > 2 else None
-        previous_reviewed_model = entry[3] if len(entry) > 3 else None
         row = self.rows[index]
         image_name = f"{row['location_id']}_{row['image_file']}"
         current = row["manual_label"]
-        current_reviewed_model = row.get(label_data.REVIEWED_MODEL_COLUMN)
+        resolved_before_undo = image_name in self.resolved_incorrect
         row["manual_label"] = previous
-        if self.human_only and previous_reviewed_model is not None:
-            row[label_data.REVIEWED_MODEL_COLUMN] = previous_reviewed_model
-        try:
-            self.save()
-        except Exception:
-            row["manual_label"] = current
-            if self.human_only:
-                row[label_data.REVIEWED_MODEL_COLUMN] = current_reviewed_model
-            raise
-        self.history.pop()
         if was_resolved is not None:
             if was_resolved:
                 self.resolved_incorrect.add(image_name)
             else:
                 self.resolved_incorrect.discard(image_name)
+        try:
+            self.save()
+        except Exception:
+            row["manual_label"] = current
+            if resolved_before_undo:
+                self.resolved_incorrect.add(image_name)
+            else:
+                self.resolved_incorrect.discard(image_name)
+            raise
+        self.history.pop()
         self.pending = self.filtered_indices()
         if index not in self.pending:
             self.pending.append(index)

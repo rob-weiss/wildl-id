@@ -148,8 +148,8 @@ class LabelDataTests(unittest.TestCase):
 
         self.assertEqual(
             path.read_text(encoding="utf-8"),
-            "location_id,image_file,box,manual_label,reviewed_model\n"
-            'camera,photo.jpg,"[0.5, 0.5, 0.2, 0.2]",fox ,\n',
+            "location_id,image_file,box,manual_label\n"
+            'camera,photo.jpg,"[0.5, 0.5, 0.2, 0.2]",fox \n',
         )
         self.assertEqual(label_data.read_records(path)[0]["manual_label"], "fox ")
 
@@ -169,7 +169,79 @@ class LabelDataTests(unittest.TestCase):
         rows = label_data.load_rows(self.human)
 
         self.assertEqual(rows[0]["manual_label"], "fox")
-        self.assertEqual(rows[0]["reviewed_model"], "")
+        self.assertNotIn("reviewed_model", rows[0])
+        self.assertEqual(rows[0]["reviewed"], "")
+
+    def test_review_status_migration_preserves_annotations_and_model_fields(self):
+        humans = [
+            {
+                "location_id": "camera",
+                "image_file": "photo.jpg",
+                "box": "manual box",
+                "manual_label": label,
+                "reviewed_model": self.model.name,
+            }
+            for label in ("fox ", "hare")
+        ]
+        self.write(self.human, humans)
+        prediction = label_data.predictions_path(self.root)
+        self.write(
+            prediction,
+            [{"location_id": "camera", "image_file": "photo.jpg", "class": "cat",
+              "box": "automatic box", "custom_field": "keep"}],
+        )
+        original_human = self.human.read_bytes()
+        original_prediction = prediction.read_bytes()
+
+        label_data.migrate_review_status(self.root)
+
+        self.assertEqual(
+            label_data.read_records(self.human),
+            [{column: row[column] for column in label_data.HUMAN_COLUMNS} for row in humans],
+        )
+        saved = label_data.read_records(prediction)
+        self.assertEqual(saved[0]["reviewed"], "true")
+        self.assertEqual(saved[0]["class"], "cat")
+        self.assertEqual(saved[0]["box"], "automatic box")
+        self.assertEqual(saved[0]["custom_field"], "keep")
+        self.assertEqual(label_data.load_rows(self.human)[0]["reviewed"], "true")
+        self.assertEqual(label_data._csv_backups(self.human)[0].read_bytes(), original_human)
+        self.assertEqual(label_data._csv_backups(prediction)[0].read_bytes(), original_prediction)
+        snapshots = self.human.read_bytes(), prediction.read_bytes()
+        label_data.migrate_review_status(self.root)
+        self.assertEqual((self.human.read_bytes(), prediction.read_bytes()), snapshots)
+
+    def test_review_migration_keeps_flags_in_their_original_runs(self):
+        older_run = "deepfaune_finetuned_20261028-120000_old"
+        self.write(
+            self.human,
+            [{"location_id": "camera", "image_file": "photo.jpg", "box": "",
+              "manual_label": "fox", "reviewed_model": older_run}],
+        )
+
+        label_data.migrate_human_labels(self.root)
+
+        old_predictions = label_data.predictions_path(self.root, older_run)
+        self.assertEqual(label_data.read_records(old_predictions)[0]["reviewed"], "true")
+        self.assertFalse(label_data.predictions_path(self.root).exists())
+        self.assertEqual(label_data.load_rows(self.human)[0]["reviewed"], "")
+
+    def test_failed_review_migration_retains_legacy_flags_for_retry(self):
+        self.write(
+            self.human,
+            [{"location_id": "camera", "image_file": "photo.jpg", "box": "",
+              "manual_label": "fox", "reviewed_model": self.model.name}],
+        )
+        original = self.human.read_bytes()
+        with patch.object(label_data, "save_prediction_reviews", side_effect=OSError("disk full")):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                label_data.migrate_review_status(self.root)
+        self.assertEqual(self.human.read_bytes(), original)
+        label_data.migrate_review_status(self.root)
+        self.assertEqual(
+            label_data.read_records(label_data.predictions_path(self.root))[0]["reviewed"],
+            "true",
+        )
 
     def test_reviewer_skips_unchanged_saves_and_bounds_its_backups(self):
         from src.labelling.review_labels import LabelReview
@@ -484,6 +556,15 @@ class LabelDataTests(unittest.TestCase):
             self.assertEqual(len(saved), 2)
             self.assertNotIn("manual_label", saved[0])
             self.assertEqual(saved[0]["classifier_model"], self.model.name)
+            label_data.save_prediction_reviews(
+                saved_path, {("camera", "reviewed.jpg"): True}
+            )
+            label_images.process_images_with_pytorch_wildlife(force=True)
+            saved = {
+                row["image_file"]: row for row in label_data.read_records(saved_path)
+            }
+            self.assertEqual(saved["reviewed.jpg"]["reviewed"], "true")
+            self.assertEqual(saved["new.jpg"]["reviewed"], "")
             detector.reset_mock()
             label_images.process_images_with_pytorch_wildlife(
                 output_csv_path=self.human
@@ -501,6 +582,11 @@ class LabelDataTests(unittest.TestCase):
                 2,
             )
             self.assertEqual(self.human.read_bytes(), original)
+            self.assertTrue(
+                all(not row.get("reviewed") for row in label_data.read_records(
+                    label_data.predictions_path(self.root)
+                ))
+            )
 
 
 if __name__ == "__main__":

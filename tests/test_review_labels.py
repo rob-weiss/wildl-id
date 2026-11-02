@@ -491,6 +491,15 @@ class LabelReviewTests(unittest.TestCase):
         }
 
         def open_review(run_name):
+            predictions = review_module.label_data.predictions_path(
+                human_csv.parent.parent, run_name
+            )
+            if not predictions.exists():
+                review_module.label_data.write_records(
+                    predictions,
+                    [{"location_id": "camera1", "image_file": "incorrect.jpg"}],
+                    review_module.label_data.PREDICTION_COLUMNS,
+                )
             with (
                 patch.object(review_module, "image_paths", return_value={}),
                 patch.object(
@@ -510,11 +519,20 @@ class LabelReviewTests(unittest.TestCase):
         review = open_review(first_run)
         review.set_mode("Latest model incorrect")
         self.assertEqual(review.pending, [0])
-        review.choose("badger")
+        human_before_review = human_csv.read_bytes()
+        review.choose("hare")
+        self.assertEqual(human_csv.read_bytes(), human_before_review)
 
         saved = review_module.label_data.read_records(human_csv)
-        self.assertEqual(saved[0]["reviewed_model"], first_run)
+        self.assertNotIn("reviewed_model", saved[0])
         self.assertEqual(tuple(saved[0]), review_module.label_data.HUMAN_COLUMNS)
+        first_predictions = review_module.label_data.predictions_path(
+            human_csv.parent.parent, first_run
+        )
+        self.assertEqual(
+            review_module.label_data.read_records(first_predictions)[0]["reviewed"],
+            "true",
+        )
 
         reopened = open_review(first_run)
         reopened.set_mode("Latest model incorrect")
@@ -528,7 +546,62 @@ class LabelReviewTests(unittest.TestCase):
         fresh_review.undo()
         self.assertEqual(fresh_review.pending, [0])
         saved = review_module.label_data.read_records(human_csv)
-        self.assertEqual(saved[0]["reviewed_model"], first_run)
+        self.assertNotIn("reviewed_model", saved[0])
+        second_predictions = review_module.label_data.predictions_path(
+            human_csv.parent.parent, second_run
+        )
+        self.assertEqual(
+            review_module.label_data.read_records(second_predictions)[0]["reviewed"],
+            "",
+        )
+        self.assertEqual(
+            review_module.label_data.read_records(first_predictions)[0]["reviewed"],
+            "true",
+        )
+
+    def test_prediction_review_save_failure_keeps_human_annotation_and_queue(self):
+        human_csv = Path(self.temp_dir.name) / "labels/human_labels.csv"
+        label_data = review_module.label_data
+        label_data.write_records(
+            human_csv,
+            [{"location_id": "camera1", "image_file": "incorrect.jpg", "manual_label": "hare"}],
+            label_data.HUMAN_COLUMNS,
+        )
+        with (
+            patch.object(review_module, "image_paths", return_value={}),
+            patch.object(
+                review_module, "latest_incorrect_predictions",
+                return_value=("deepfaune_finetuned_test", {"camera1_incorrect.jpg"}),
+            ),
+            patch.object(review_module, "load_validation_predictions", return_value={}),
+        ):
+            review = LabelReview(human_csv)
+        review.set_mode("Latest model incorrect")
+        original = human_csv.read_bytes()
+        with (
+            patch.object(label_data, "save_prediction_reviews", side_effect=OSError("disk full")),
+            patch.object(Path, "write_bytes", side_effect=AssertionError("non-atomic rollback")),
+        ):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                review.choose("fox")
+        self.assertEqual(human_csv.read_bytes(), original)
+        self.assertEqual(review.rows[0]["manual_label"], "hare")
+        self.assertEqual(review.pending, [0])
+        self.assertEqual(review.resolved_incorrect, set())
+        self.assertEqual(review.history, [])
+
+        prediction = review.review_predictions_path
+        label_data.write_records(
+            prediction,
+            [{"location_id": "camera1", "image_file": "incorrect.jpg", "class": "cat"}],
+            label_data.PREDICTION_COLUMNS,
+        )
+        external = prediction.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "Predictions changed outside"):
+            review.choose("fox")
+        self.assertEqual(human_csv.read_bytes(), original)
+        self.assertEqual(prediction.read_bytes(), external)
+        self.assertEqual(review.rows[0]["manual_label"], "hare")
 
     def test_auto_label_unseen_button_is_not_rendered(self):
         app = review_app_module.ReviewApp(self.csv_path)

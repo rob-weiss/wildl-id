@@ -15,7 +15,8 @@ REPO_DIR = Path(__file__).resolve().parents[2]
 DATE_FORMAT = "%d-%m-%Y"
 LEGACY_HUMAN_COLUMNS = ("location_id", "image_file", "box", "manual_label")
 REVIEWED_MODEL_COLUMN = "reviewed_model"
-HUMAN_COLUMNS = (*LEGACY_HUMAN_COLUMNS, REVIEWED_MODEL_COLUMN)
+HUMAN_COLUMNS = LEGACY_HUMAN_COLUMNS
+REVIEWED_HUMAN_COLUMNS = (*HUMAN_COLUMNS, REVIEWED_MODEL_COLUMN)
 METADATA_COLUMNS = (
     "location_id",
     "image_file",
@@ -36,6 +37,7 @@ PREDICTION_COLUMNS = (
     "timestamp_exif",
     "lighting",
     "temperature_celsius",
+    "reviewed",
 )
 LEGACY_RELATIVE_PATH = (
     "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/"
@@ -193,6 +195,62 @@ def save_image_metadata(repo_dir, rows):
     write_records(path, indexed.values(), METADATA_COLUMNS, quoting=csv.QUOTE_ALL)
 
 
+def save_prediction_reviews(path, statuses):
+    path = Path(path)
+    rows = read_records(path)
+    if path.exists():
+        with path.open(newline="", encoding="utf-8") as source:
+            columns = csv.DictReader(source).fieldnames or list(PREDICTION_COLUMNS)
+    else:
+        columns = list(PREDICTION_COLUMNS)
+    if "reviewed" not in columns:
+        columns.append("reviewed")
+    seen = set()
+    changed = False
+    for row in rows:
+        key = image_key(row)
+        seen.add(key)
+        if key in statuses:
+            value = "true" if statuses[key] else ""
+            changed |= row.get("reviewed", "") != value
+            row["reviewed"] = value
+    for key, reviewed in statuses.items():
+        if key not in seen and reviewed:
+            location, name = key
+            rows.append({"location_id": location, "image_file": name, "reviewed": "true"})
+            changed = True
+    if changed:
+        if path.exists():
+            backup_csv(path, "review")
+        write_records(path, rows, columns)
+
+
+def migrate_review_status(repo_dir=REPO_DIR):
+    repo_dir = Path(repo_dir)
+    human_path = repo_dir / "labels/human_labels.csv"
+    if not human_path.exists():
+        return
+    original = human_path.read_bytes()
+    reader = csv.DictReader(io.StringIO(original.decode("utf-8")))
+    if reader.fieldnames != list(REVIEWED_HUMAN_COLUMNS):
+        return
+    humans = list(reader)
+    by_run = {}
+    for row in humans:
+        run_name = row.get(REVIEWED_MODEL_COLUMN, "").strip()
+        if not run_name:
+            continue
+        if Path(run_name).name != run_name or run_name in {".", ".."}:
+            raise ValueError(f"Invalid reviewed model name: {run_name}")
+        by_run.setdefault(run_name, {})[image_key(row)] = True
+    backup_csv(human_path, "review")
+    for run_name, statuses in by_run.items():
+        save_prediction_reviews(predictions_path(repo_dir, run_name), statuses)
+    if human_path.read_bytes() != original:
+        raise RuntimeError("Human labels changed during review-state migration; retry")
+    write_records(human_path, humans, HUMAN_COLUMNS)
+
+
 def migrate_human_labels(repo_dir=REPO_DIR):
     repo_dir = Path(repo_dir)
     human_path = repo_dir / "labels/human_labels.csv"
@@ -202,9 +260,10 @@ def migrate_human_labels(repo_dir=REPO_DIR):
         with human_path.open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
             if reader.fieldnames in (
-                list(LEGACY_HUMAN_COLUMNS),
                 list(HUMAN_COLUMNS),
+                list(REVIEWED_HUMAN_COLUMNS),
             ):
+                migrate_review_status(repo_dir)
                 return human_path
             if not {*LEGACY_HUMAN_COLUMNS, "class", "classifier_model"}.issubset(
                 reader.fieldnames or []
@@ -254,7 +313,7 @@ def load_rows(csv_path):
         return read_records(csv_path)
     with csv_path.open(newline="", encoding="utf-8") as source:
         fieldnames = csv.DictReader(source).fieldnames
-        if fieldnames not in (list(LEGACY_HUMAN_COLUMNS), list(HUMAN_COLUMNS)):
+        if fieldnames not in (list(HUMAN_COLUMNS), list(REVIEWED_HUMAN_COLUMNS)):
             raise ValueError("Human-label CSV must use the current or legacy schema")
     repo_dir = csv_path.parent.parent
     humans = read_records(csv_path)
@@ -273,9 +332,7 @@ def load_rows(csv_path):
     for human in humans:
         key = image_key(human)
         prediction = predictions.get(key, {})
-        row = dict.fromkeys(
-            (*PREDICTION_COLUMNS, "manual_label", REVIEWED_MODEL_COLUMN), ""
-        )
+        row = dict.fromkeys((*PREDICTION_COLUMNS, "manual_label"), "")
         row.update(metadata.get(key, {}))
         row.update(
             {column: value for column, value in prediction.items() if value != ""}

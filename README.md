@@ -315,17 +315,19 @@ falling back to a different model.
 
 The dataset is separated by ownership:
 
-- `labels/human_labels.csv`: `location_id`, `image_file`, `box`, `manual_label`,
-  and `reviewed_model`. These annotations are the source of truth. Duplicate
-  human annotations are preserved, including conflicting labels. `reviewed_model`
-  records which fine-tuned run's incorrect predictions have been reviewed; a new
-  run starts a fresh review queue. Existing four-column files gain this column
-  on their first review save.
+- `labels/human_labels.csv`: `location_id`, `image_file`, `box`, `manual_label`.
+  These model-independent annotations are the source of truth. Duplicate human
+  annotations are preserved, including conflicting labels.
 - `labels/image_metadata.csv`: timestamps, lighting, and temperature. Training
   uses the retained timestamps to keep image bursts in the same split; the human
   CSV does not need timestamp columns.
 - `labels/labels_<classifier-run>/predictions.csv`: automatic classes, detected
-  boxes, confidence, model identity, and metadata for that model.
+  boxes, confidence, model identity, and metadata for that model. A `reviewed`
+  flag of `true` records resolved items in **Latest model incorrect** mode.
+  Flags survive prediction regeneration for the same run; a new run starts a
+  fresh review queue. The reviewer migrates any legacy `reviewed_model` values
+  from human labels into the matching run's predictions, backing up affected
+  CSVs before removing the old column.
 - `models/<classifier-run>/training_data/labels.csv`: the training and
   validation split for that model; `predicted_label` holds its validation
   predictions. Training no longer renders validation images.
