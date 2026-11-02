@@ -179,6 +179,9 @@ class AutomaticLabelTests(unittest.TestCase):
             [image["name"] for image in selected], ["unreviewed.jpg", "new.jpg"]
         )
 
+    def test_classifier_does_not_alias_rabbit_to_hare(self):
+        self.assertEqual(label_images.map_classifier_to_wildlife("rabbit"), "unknown")
+
     def test_pretrained_classifier_maps_supported_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
