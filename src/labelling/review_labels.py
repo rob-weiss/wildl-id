@@ -309,6 +309,7 @@ class LabelReview:
         }
         self._saved_resolved = self.resolved_incorrect.copy()
         self.mode = "Unseen"
+        self.excluded_true_labels = set()
         self.pending = self.filtered_indices()
         self.position = 0
         self.history = []
@@ -320,6 +321,28 @@ class LabelReview:
         if self._image_paths is None:
             self._image_paths = image_paths()
         return self._image_paths.get((nfc(row["location_id"]), row["image_file"]))
+
+    def true_label_for_row(self, row):
+        manual = str(row.get("manual_label") or "").strip()
+        image_name = f"{row['location_id']}_{row['image_file']}"
+        validation = self.latest_predictions.get(image_name, {})
+        return normalize_species(manual or validation.get("true_label") or "")
+
+    @property
+    def true_labels(self):
+        return sorted(
+            {
+                label
+                for row in self.rows
+                if (label := self.true_label_for_row(row))
+            }
+        )
+
+    def set_excluded_true_labels(self, labels):
+        self.excluded_true_labels = {
+            normalize_species(label) for label in labels or [] if str(label).strip()
+        }
+        self.set_mode(self.mode)
 
     def filtered_indices(self):
         indices = []
@@ -334,6 +357,8 @@ class LabelReview:
                 and label_data.needs_model_review(row, validation)
             )
             if self.mode == "Latest model incorrect":
+                if self.true_label_for_row(row) in self.excluded_true_labels:
+                    continue
                 if is_latest_error and image_name not in seen_latest_errors:
                     indices.append(index)
                     seen_latest_errors.add(image_name)
@@ -555,6 +580,12 @@ class LabelReview:
         self.history.pop()
         self.pending = self.filtered_indices()
         if index not in self.pending:
+            if (
+                self.mode == "Latest model incorrect"
+                and self.true_label_for_row(row) in self.excluded_true_labels
+            ):
+                self.position = min(self.position, max(0, len(self.pending) - 1))
+                return
             self.pending.append(index)
             self.pending.sort(key=self.capture_rank.__getitem__)
         self.position = self.pending.index(index)

@@ -521,6 +521,111 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.mode, "Unseen")
         self.assertEqual(review.pending, [0])
 
+    def test_latest_incorrect_excludes_true_labels_with_manual_precedence(self):
+        review = LabelReview(self.csv_path)
+        review.latest_predictions.update(
+            {
+                "camera1_unchecked.jpg": {
+                    "true_label": "bird",
+                    "predicted_label": "crow",
+                    "status": "incorrect",
+                },
+                "camera1_incorrect.jpg": {
+                    "true_label": "bird",
+                    "predicted_label": "fox",
+                    "status": "incorrect",
+                },
+            }
+        )
+        original = self.csv_path.read_bytes()
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(set(review.pending), {0, 2})
+        self.assertEqual(review.true_labels, ["bird", "fox", "hare"])
+
+        review.set_excluded_true_labels([" HARE "])
+        self.assertEqual(review.excluded_true_labels, {"hare"})
+        self.assertEqual(review.pending, [0])
+
+        review.set_excluded_true_labels(["bird"])
+        self.assertEqual(review.pending, [2])
+
+        review.set_excluded_true_labels(["bird", "hare"])
+        self.assertEqual(review.pending, [])
+        self.assertEqual(review.position, 0)
+
+        review.set_excluded_true_labels([])
+        self.assertEqual(set(review.pending), {0, 2})
+        self.assertEqual(self.csv_path.read_bytes(), original)
+
+    def test_true_label_exclusions_do_not_change_other_review_modes(self):
+        review = LabelReview(self.csv_path)
+        review.set_excluded_true_labels(["hare"])
+        for mode, expected in (
+            ("Unseen", {0}),
+            ("Seen", {1, 2}),
+            ("All", {0, 1, 2}),
+            ("Unseen + errors", {0, 2}),
+            ("Latest model incorrect", set()),
+        ):
+            with self.subTest(mode=mode):
+                review.set_mode(mode)
+                self.assertEqual(set(review.pending), expected)
+
+    def test_undo_does_not_restore_excluded_true_labels_to_queue(self):
+        review = LabelReview(self.csv_path)
+        review.set_mode("Latest model incorrect")
+        review.choose("fox")
+        review.set_excluded_true_labels(["hare"])
+
+        review.undo()
+
+        self.assertEqual(review.rows[2]["manual_label"], "hare")
+        self.assertEqual(review.pending, [])
+        self.assertEqual(review.position, 0)
+        review.set_excluded_true_labels([])
+        self.assertEqual(review.pending, [2])
+
+    def test_browser_true_label_exclusions_update_queue_and_visibility(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        app.review.latest_predictions["camera1_unchecked.jpg"] = {
+            "true_label": "bird",
+            "predicted_label": "crow",
+            "status": "incorrect",
+        }
+        with review_app_module.ui.column() as container:
+            self.addCleanup(container.delete)
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+                selector = app.exclude_true_labels_select
+                self.assertFalse(selector.visible)
+                self.assertTrue(selector._props["multiple"])
+                self.assertTrue(selector._props["clearable"])
+
+                app.change_mode("Latest model incorrect")
+                self.assertTrue(selector.visible)
+                self.assertEqual(set(selector.options), {"bird", "fox", "hare"})
+
+                selector.set_value(["hare"])
+                self.assertEqual(app.review.pending, [0])
+                self.assertEqual(app.current_index, 0)
+
+                selector.set_value(["bird", "hare"])
+                self.assertEqual(app.review.pending, [])
+                self.assertEqual(app.counter.text, "0 images")
+                self.assertIsNone(app.current_index)
+
+                selector.set_value(None)
+                self.assertEqual(set(app.review.pending), {0, 2})
+
+                selector.set_value(["hare"])
+                app.change_mode("Unseen")
+                self.assertFalse(selector.visible)
+                self.assertEqual(app.review.pending, [0])
+                app.change_mode("Latest model incorrect")
+                self.assertTrue(selector.visible)
+                self.assertEqual(selector.value, ["hare"])
+                self.assertEqual(app.review.pending, [0])
+
     def test_latest_incorrect_deduplicates_resolved_images_until_undo(self):
         with self.csv_path.open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
@@ -1282,8 +1387,9 @@ class LabelReviewTests(unittest.TestCase):
         header_items = app.mode_select.parent_slot.children
         run_label = app.run_label
 
-        self.assertIs(header_items[-2], run_label)
-        self.assertIs(header_items[-1], app.mode_select)
+        self.assertIs(header_items[-3], run_label)
+        self.assertIs(header_items[-2], app.mode_select)
+        self.assertIs(header_items[-1], app.exclude_true_labels_select)
         self.assertEqual(run_label.text, run_name)
         self.assertFalse(run_label.visible)
         with patch.object(app, "image_path_for", return_value=None):

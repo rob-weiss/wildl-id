@@ -214,6 +214,20 @@ class ReviewApp:
                     .props("outlined dense")
                     .classes("w-64")
                 )
+                self.exclude_true_labels_select = (
+                    ui.select(
+                        {},
+                        value=sorted(self.review.excluded_true_labels),
+                        label="Exclude true labels",
+                        multiple=True,
+                        clearable=True,
+                        on_change=lambda event: self.change_excluded_true_labels(
+                            event.value
+                        ),
+                    )
+                    .props("outlined dense use-chips")
+                    .classes("w-64 max-w-full")
+                )
 
             with ui.row().classes("w-full items-start gap-4 flex-wrap"):
                 with ui.column().classes("grow min-w-0").style("flex-basis: 600px"):
@@ -339,6 +353,17 @@ class ReviewApp:
 
     def refresh(self):
         self.run_label.set_visibility(self.review.mode.startswith("Latest model"))
+        self.exclude_true_labels_select.set_visibility(
+            self.review.mode == "Latest model incorrect"
+        )
+        self.exclude_true_labels_select.set_options(
+            {
+                label: display_label(label)
+                for label in sorted(
+                    set(self.review.true_labels) | self.review.excluded_true_labels
+                )
+            }
+        )
         self.keep_manual_button.set_visibility(
             self.review.mode == "Latest model incorrect"
         )
@@ -528,6 +553,10 @@ class ReviewApp:
         self.review.set_mode(mode)
         self.refresh()
 
+    def change_excluded_true_labels(self, labels):
+        self.review.set_excluded_true_labels(labels)
+        self.refresh()
+
     def on_key(self, event: events.KeyEventArguments):
         if self.cleanup_dialog_open:
             return
@@ -668,6 +697,7 @@ class ReviewApp:
                 keep_species=keep_species,
             )
             updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
+            updated_review.set_excluded_true_labels(self.review.excluded_true_labels)
             updated_review.set_mode(self.review.mode)
         except (OSError, RuntimeError, ValueError) as error:
             ui.notify(f"Cleanup failed: {error}", type="negative")
