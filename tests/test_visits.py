@@ -1,7 +1,7 @@
 import csv
 import tempfile
 import unittest
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src import visits
@@ -15,6 +15,92 @@ def detection(name, time, species="fox", location="A", **extra):
         "class": species,
         **extra,
     }
+
+
+class LongestRecentVisitsTests(unittest.TestCase):
+    def test_exact_window_edges_and_ties_choose_latest_visit(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [
+            detection("boundary.jpg", "2026-11-01T12:00:00Z", location="A"),
+            detection("early.jpg", "2026-11-01T12:20:00Z", location="A"),
+            detection("recent.jpg", "2026-11-02T11:40:00Z", location="B"),
+            detection("now.jpg", "2026-11-02T12:00:00Z", location="B"),
+            detection("future.jpg", "2026-11-02T12:10:00Z", location="B"),
+        ]
+
+        result = visits.longest_recent_visits(rows, now=now)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].location_id, "B")
+        self.assertEqual(result[0].observed_span_seconds, 1200)
+        self.assertEqual(
+            result, visits.longest_recent_visits(list(reversed(rows)), now=now)
+        )
+
+    def test_selects_longest_positive_visit_per_animal_species(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [
+            detection(name, time, species, location, **extra)
+            for name, time, species, location, extra in (
+                ("a1.jpg", "2026-11-02T10:00:00Z", "fox", "A", {}),
+                ("a2.jpg", "2026-11-02T10:20:00Z", "fox", "A", {}),
+                ("a3.jpg", "2026-11-02T10:40:00Z", "fox", "A", {}),
+                ("b1.jpg", "2026-11-02T11:00:00Z", "fox", "B", {}),
+                ("b2.jpg", "2026-11-02T11:25:00Z", "fox", "B", {}),
+                ("s1.jpg", "2026-11-02T11:00:00Z", "squirrel", "A", {}),
+                ("s2.jpg", "2026-11-02T11:05:00Z", "squirrel", "A", {}),
+                ("h1.jpg", "2026-11-02T11:00:00Z", "human", "A", {}),
+                ("h2.jpg", "2026-11-02T11:10:00Z", "human", "A", {}),
+                (
+                    "deer1.jpg",
+                    "2026-11-02T11:00:00Z",
+                    "human",
+                    "B",
+                    {"manual_label": "roe deer"},
+                ),
+                (
+                    "deer2.jpg",
+                    "2026-11-02T11:15:00Z",
+                    "human",
+                    "B",
+                    {"manual_label": "roe deer"},
+                ),
+                ("single.jpg", "2026-11-02T11:30:00Z", "badger", "A", {}),
+                ("same1.jpg", "2026-11-02T11:00:00Z", "wild boar", "A", {}),
+                ("same2.jpg", "2026-11-02T11:00:00Z", "wild boar", "A", {}),
+                ("future1.jpg", "2026-11-02T12:05:00Z", "badger", "B", {}),
+                ("future2.jpg", "2026-11-02T12:20:00Z", "badger", "B", {}),
+            )
+        ]
+
+        result = visits.longest_recent_visits(rows, now=now)
+
+        self.assertEqual(
+            [
+                (visit.species, visit.location_id, visit.observed_span_seconds)
+                for visit in result
+            ],
+            [("fox", "A", 2400), ("roe deer", "B", 900), ("squirrel", "A", 300)],
+        )
+        self.assertEqual(
+            result, visits.longest_recent_visits(list(reversed(rows)), now=now)
+        )
+
+    def test_only_uses_observations_inside_last_day_without_splitting_visit_rules(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [
+            detection("before.jpg", "2026-11-01T11:50:00Z"),
+            detection("inside1.jpg", "2026-11-01T12:10:00Z"),
+            detection("inside2.jpg", "2026-11-01T12:20:00Z"),
+            detection("old1.jpg", "2026-11-01T10:00:00Z", species="badger"),
+            detection("old2.jpg", "2026-11-01T10:20:00Z", species="badger"),
+        ]
+
+        result = visits.longest_recent_visits(rows, now=now)
+
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0].observed_span_seconds, 600)
+        self.assertEqual(result[0].image_count, 2)
 
 
 class VisitGroupingTests(unittest.TestCase):

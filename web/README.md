@@ -36,6 +36,15 @@ without reloading the page; older sightings drop out automatically. Results
 are paginated when there are more than 48 images. Discovery is read-only and
 never creates or changes labels.
 
+Below the recent images, **Longest sightings** lists the longest positive
+observed span for each animal species in the last 24 hours, with its site and
+first/last detection times. It uses the same independent visits and EXIF-only
+times as the gallery. Only detections inside the rolling window contribute to
+the span, even when a visit began earlier. Single-photo and zero-span visits,
+people and vehicles are omitted; an empty summary stays hidden. Ties select
+the most recent visit. The table refreshes with the gallery and does not change
+when thumbnail species filters change. Observed span is not proven dwell time.
+
 Immediate species notifications show one emoji in the title and only the capture
 time and date in the body. They omit ntfy emoji tags to avoid duplicate icons.
 The landing page displays older species alerts in the same format without

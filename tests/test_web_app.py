@@ -1068,6 +1068,57 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     )
         self.assertEqual(visit_ids[0], visit_ids[1])
 
+    async def test_home_shows_longest_positive_sighting_per_species_and_refreshes(self):
+        now = datetime.now(UTC) - timedelta(minutes=1)
+        fields = ["location_id", "image_file", "timestamp_exif", "class"]
+        rows = [
+            {
+                "location_id": location,
+                "image_file": name,
+                "timestamp_exif": (now - timedelta(minutes=minutes)).isoformat(),
+                "class": species,
+            }
+            for name, minutes, species, location in (
+                ("fox1.jpg", 50, "fox", "camera1"),
+                ("fox2.jpg", 30, "fox", "camera1"),
+                ("fox3.jpg", 10, "fox", "camera1"),
+                ("short1.jpg", 25, "fox", "camera2"),
+                ("short2.jpg", 5, "fox", "camera2"),
+                ("squirrel1.jpg", 15, "squirrel", "camera1"),
+                ("squirrel2.jpg", 10, "squirrel", "camera1"),
+                ("single.jpg", 5, "badger", "camera1"),
+                ("human1.jpg", 20, "human", "camera1"),
+                ("human2.jpg", 10, "human", "camera1"),
+            )
+        ]
+        self.write_csv(fields, rows)
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer") as timer,
+        ):
+            async with self.app_user("/") as user:
+                table = next(iter(user.find(marker="longest-sightings-table").elements))
+                self.assertEqual(
+                    {row["species"] for row in table.rows}, {"fox", "squirrel"}
+                )
+                fox = next(row for row in table.rows if row["species"] == "fox")
+                self.assertEqual(fox["duration"], "0:40:00")
+                self.assertEqual(fox["location"], "camera1")
+                heading = next(
+                    iter(user.find(kind=ui.label, content="Best seats now").elements)
+                )
+                self.assertLess(table.id, heading.id)
+                self.write_csv(fields, rows[:1])
+                refresh = next(
+                    call.args[1] for call in timer.call_args_list if call.args[0] == 60
+                )
+                refresh()
+                await user.should_not_see(marker="longest-sightings-table")
+                await user.should_not_see(kind=ui.label, content="Longest sightings")
+
     async def test_home_species_buttons_count_photos_and_survive_refresh(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
         fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]

@@ -27,7 +27,12 @@ from src.labelling.review_app import (
 )
 from src.labelling.review_labels import SHORTCUTS, load_validation_predictions
 from src.labelling.species import RECENT_SPECIES
-from src.visits import CAMERA_TIMEZONE, exif_datetime, group_visits
+from src.visits import (
+    CAMERA_TIMEZONE,
+    exif_datetime,
+    group_visits,
+    longest_recent_visits,
+)
 
 LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
@@ -1140,6 +1145,12 @@ def build_recent_gallery(
             .props("direction-links max-pages=5")
             .classes("max-w-full overflow-x-auto")
         )
+        longest_section = (
+            ui.column()
+            .classes("w-full min-w-0 gap-2 overflow-x-auto")
+            .mark("longest-sightings")
+        )
+        longest_section.set_visibility(False)
     items = []
     show_image, close_image_viewer = build_image_viewer(items, boxes, compact=True)
 
@@ -1224,6 +1235,47 @@ def build_recent_gallery(
                     detailed=True,
                 )
 
+    def render_longest_sightings(rows):
+        visits = longest_recent_visits(rows)
+        longest_section.clear()
+        longest_section.set_visibility(bool(visits))
+        if not visits:
+            return
+        records = [
+            {
+                "species": visit.species,
+                "label": display_label(visit.species),
+                "duration": str(timedelta(seconds=visit.observed_span_seconds)),
+                "location": visit.location_id,
+                "started": visit.started_at.astimezone(CAMERA_TIMEZONE).strftime(
+                    f"{label_data.DATE_FORMAT} %H:%M"
+                ),
+                "ended": visit.ended_at.astimezone(CAMERA_TIMEZONE).strftime(
+                    f"{label_data.DATE_FORMAT} %H:%M"
+                ),
+            }
+            for visit in visits
+        ]
+        with longest_section:
+            ui.label("Longest sightings").classes("text-xl font-semibold")
+            ui.table(
+                columns=[
+                    {"name": field, "label": title, "field": field, "align": "left"}
+                    for field, title in (
+                        ("label", "Species"),
+                        ("duration", "Observed span"),
+                        ("location", "Site"),
+                        ("started", "First seen"),
+                        ("ended", "Last seen"),
+                    )
+                ],
+                rows=records,
+                row_key="species",
+                pagination={"rowsPerPage": 0},
+            ).props("flat dense hide-bottom").classes("w-full max-w-full").mark(
+                "longest-sightings-table"
+            )
+
     def refresh():
         nonlocal missing_count
         try:
@@ -1234,9 +1286,9 @@ def build_recent_gallery(
                 if not local_images:
                     raise
                 rows = []
-            rows = recent_rows(
-                with_visit_groups(rows_with_originals(rows, local_images))
-            )
+            merged = rows_with_originals(rows, local_images)
+            render_longest_sightings(merged)
+            rows = recent_rows(with_visit_groups(merged))
             all_items[:] = [
                 (row, source)
                 for row in rows
@@ -1253,6 +1305,8 @@ def build_recent_gallery(
             update_counts()
             pagination.set_visibility(False)
             grid.clear()
+            longest_section.clear()
+            longest_section.set_visibility(False)
             return
         missing_count = len(rows) - len(all_items)
         update_counts()

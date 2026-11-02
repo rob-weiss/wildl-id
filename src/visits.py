@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unicodedata import normalize
@@ -58,6 +58,14 @@ class VisitGrouping:
     excluded_count: int
 
 
+def _effective_species(row):
+    return normalize(
+        "NFC",
+        str(row.get("manual_label") or "").strip()
+        or str(row.get("class") or "").strip(),
+    ).casefold()
+
+
 def group_visits(rows):
     grouped = {}
     seen = set()
@@ -69,11 +77,7 @@ def group_visits(rows):
         taken = exif_datetime(row)
         location = normalize("NFC", str(row.get("location_id") or ""))
         name = row.get("image_file") or ""
-        species = normalize(
-            "NFC",
-            str(row.get("manual_label") or "").strip()
-            or str(row.get("class") or "").strip(),
-        ).casefold()
+        species = _effective_species(row)
         if (
             taken is None
             or not location.strip()
@@ -140,6 +144,51 @@ def group_visits(rows):
         {key: visit for visit in visits for key in visit.image_keys},
         excluded_count,
     )
+
+
+def longest_recent_visits(rows, *, now=None):
+    rows = list(rows)
+    grouping = group_visits(rows)
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=CAMERA_TIMEZONE)
+    now = now.astimezone(UTC)
+    cutoff = now - timedelta(hours=24)
+    recent_times = {}
+    for row in rows:
+        taken = exif_datetime(row)
+        if taken is None or not row.get("location_id") or not row.get("image_file"):
+            continue
+        key = image_key(row)
+        visit = grouping.image_visits.get(key)
+        if visit is None or _effective_species(row) != visit.species:
+            continue
+        taken = taken.astimezone(UTC)
+        if cutoff <= taken <= now:
+            recent_times[key] = taken
+    best = {}
+    for visit in grouping.visits:
+        if visit.species in {"human", "vehicle"}:
+            continue
+        keys = tuple(key for key in visit.image_keys if key in recent_times)
+        if len(keys) < 2:
+            continue
+        candidate = replace(
+            visit,
+            started_at=recent_times[keys[0]],
+            ended_at=recent_times[keys[-1]],
+            image_keys=keys,
+        )
+        if candidate.observed_span_seconds <= 0:
+            continue
+        previous = best.get(visit.species)
+        if previous is None or (
+            candidate.observed_span_seconds,
+            candidate.ended_at,
+            candidate.visit_id,
+        ) > (previous.observed_span_seconds, previous.ended_at, previous.visit_id):
+            best[visit.species] = candidate
+    return [best[species] for species in sorted(best)]
 
 
 def export_visits(grouping, output_dir):
