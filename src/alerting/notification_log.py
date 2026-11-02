@@ -11,6 +11,20 @@ LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "push_alerts.csv"
 FIELDS = ("sent", "title", "message")
 
 
+def _display_message(title, message):
+    match = re.fullmatch(
+        r"\d+ (?P<species>.+) at (?P<timestamp>\d{2}:\d{2} \(\d{2}-\d{2}-\d{4}\))",
+        message,
+    )
+    if match and title.casefold().startswith(f"{match['species']} at ".casefold()):
+        try:
+            datetime.strptime(match["timestamp"], "%H:%M (%d-%m-%Y)")
+        except ValueError:
+            return message
+        return match["timestamp"]
+    return message
+
+
 def record_notification(title, message, sent, path=None):
     path = Path(path or LOG_PATH)
     try:
@@ -38,10 +52,14 @@ def recent_notifications(limit=5, path=None):
     for row in reversed(rows):
         try:
             sent = datetime.fromisoformat(row["sent"])
-        except (KeyError, TypeError, ValueError):
+        except KeyError, TypeError, ValueError:
             continue
         notifications.append(
-            {"sent": sent, "title": row["title"], "message": row["message"]}
+            {
+                "sent": sent,
+                "title": row["title"],
+                "message": _display_message(row["title"], row["message"]),
+            }
         )
         if len(notifications) == limit:
             break
@@ -81,7 +99,7 @@ def latest_status(path=None):
         enabled = status["enabled"]
         sent = status["sent"]
         failures = status["failures"]
-    except (OSError, KeyError, TypeError, ValueError):
+    except OSError, KeyError, TypeError, ValueError:
         return None
     if (
         not isinstance(enabled, bool)

@@ -36,6 +36,11 @@ without reloading the page; older sightings drop out automatically. Results
 are paginated when there are more than 48 images. Discovery is read-only and
 never creates or changes labels.
 
+Immediate species notifications show one emoji in the title and only the capture
+time and date in the body. They omit ntfy emoji tags to avoid duplicate icons.
+The landing page displays older species alerts in the same format without
+rewriting notification history. Daily summaries retain their full text.
+
 ### Independent Visits
 
 Both galleries frame images from the same visit in the same colour, without

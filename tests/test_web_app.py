@@ -1394,6 +1394,20 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find("Smart filter").trigger("keydown.enter")
                 await user.should_see("3 images · all images")
 
+    async def test_home_species_notification_has_emoji_only_in_title(self):
+        log_path = self.root / "push_alerts.csv"
+        notification_log.record_notification(
+            "🐗 Wild boar at Grenzweg",
+            "1 🐗 wild boar at 20:10 (02-11-2026)",
+            datetime(2026, 11, 2, 19, 14, tzinfo=UTC),
+            log_path,
+        )
+        with patch.object(notification_log, "LOG_PATH", log_path):
+            async with self.app_user("/") as user:
+                await user.should_see("🐗 Wild boar at Grenzweg")
+                await user.should_see("20:10 (02-11-2026)")
+                await user.should_not_see("1 🐗 wild boar at 20:10 (02-11-2026)")
+
     async def test_home_shows_latest_five_notifications_below_images(self):
         log_path = self.root / "push_alerts.csv"
         start = datetime(2026, 11, 1, 6, 0, tzinfo=UTC)

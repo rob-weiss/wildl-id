@@ -117,36 +117,36 @@ class PushAlertTests(unittest.TestCase):
             [
                 (
                     "🦝 Raccoons at Douglasien",
-                    "2 🦝 raccoons at 20:56 (30-10-2026)",
+                    "20:56 (30-10-2026)",
                 ),
                 (
                     "🐗 Wild boar at Wendeplatte",
-                    "1 🐗 wild boar at 20:55 (30-10-2026)",
+                    "20:55 (30-10-2026)",
                 ),
             ],
         )
 
-    def test_alert_text_adds_emojis_and_pluralizes_species(self):
+    def test_alert_text_has_emoji_only_in_title_and_timestamp_body(self):
         alerts_to_format = (
             (
                 alerts.Alert("Wendeplatte", "wild boar", 1, NOW, None),
                 (
                     "🐗 Wild boar at Wendeplatte",
-                    "1 🐗 wild boar at 21:00 (30-10-2026)",
+                    "21:00 (30-10-2026)",
                 ),
             ),
             (
                 alerts.Alert("Douglasien", "raccoon", 2, NOW, None),
                 (
                     "🦝 Raccoons at Douglasien",
-                    "2 🦝 raccoons at 21:00 (30-10-2026)",
+                    "21:00 (30-10-2026)",
                 ),
             ),
             (
                 alerts.Alert("Madenhäule", "roe deer", 3, NOW, None),
                 (
                     "🦌 Roe deer at Madenhäule",
-                    "3 🦌 roe deer at 21:00 (30-10-2026)",
+                    "21:00 (30-10-2026)",
                 ),
             ),
         )
@@ -245,8 +245,8 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(request.get_method(), "PUT")
         self.assertEqual(url.path, "/topic%20x")
         self.assertEqual(query["title"], ["🐗 Wild boars at Madenhäule"])
-        self.assertEqual(query["message"], ["3 🐗 wild boars at 21:00 (30-10-2026)"])
-        self.assertEqual(query["tags"], ["boar"])
+        self.assertEqual(query["message"], ["21:00 (30-10-2026)"])
+        self.assertNotIn("tags", query)
         self.assertEqual(query["filename"], ["image_0000002.jpg"])
         self.assertEqual(request.data, path.read_bytes())
 
@@ -255,7 +255,8 @@ class PushAlertTests(unittest.TestCase):
 
         request = alerts.ntfy_request("https://ntfy.sh", "topic", alert)
 
-        self.assertEqual(request.data, "1 🦝 raccoon at 21:00 (30-10-2026)".encode())
+        self.assertEqual(request.data, b"21:00 (30-10-2026)")
+        self.assertNotIn("tags", parse_qs(urlsplit(request.full_url).query))
         self.assertNotIn("filename", parse_qs(urlsplit(request.full_url).query))
 
 

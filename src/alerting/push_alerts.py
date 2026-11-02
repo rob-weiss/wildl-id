@@ -92,7 +92,7 @@ def _read_keychain_secret(service, account):
             capture_output=True,
             text=True,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except OSError, subprocess.CalledProcessError:
         return ""
     return result.stdout.rstrip("\r\n")
 
@@ -171,7 +171,7 @@ def _capture_time(path):
         captured = datetime.strptime(
             str(raw).strip().rstrip("\x00"), "%Y:%m:%d %H:%M:%S"
         )
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return None
     return captured.replace(tzinfo=CAMERA_TIME)
 
@@ -238,18 +238,13 @@ def alert_text(alert):
     species = pluralize_species(alert.species, alert.count)
     emoji = species_emoji(alert.species)
     title = f"{emoji} {species.capitalize()} at {alert.location}"
-    message = (
-        f"{alert.count} {emoji} {species} at {local_time:%H:%M} "
-        f"({local_time:{DATE_FORMAT}})"
-    )
+    message = f"{local_time:%H:%M} ({local_time:{DATE_FORMAT}})"
     return title, message
 
 
 def ntfy_request(server, topic, alert):
     title, message = alert_text(alert)
     params = {"title": title, "priority": "high"}
-    if alert.species in TAGS:
-        params["tags"] = TAGS[alert.species]
     if alert.image_path is None:
         body = message.encode("utf-8")
     else:
