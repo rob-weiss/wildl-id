@@ -542,6 +542,115 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Sat 31-10-2026 15:00 CET")
                 self.assertEqual(len(user.find(marker="seat-rank").elements), 1)
 
+    async def test_home_seat_ranking_recovers_and_tracks_map_wind_refresh(self):
+        import pandas as pd
+        from web import camera_map
+
+        camera = camera_map.Camera("camera1", 48.6, 9.0, 270, 60)
+        first = pd.Timestamp.now(tz="UTC").floor("h")
+        forecasts = [
+            {
+                "camera1": [
+                    camera_map.WindHour(
+                        first + pd.Timedelta(hours=hour), 10, direction, 15
+                    )
+                    for hour in range(24)
+                ]
+            }
+            for direction in (270, 90)
+        ]
+        with (
+            patch.object(camera_map, "read_camera_locations", return_value=[camera]),
+            patch.object(
+                camera_map, "fetch_wind", side_effect=[OSError("offline"), *forecasts]
+            ),
+            patch.object(gallery.ui, "timer") as timer,
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("Seat ranking unavailable")
+                refresh = next(
+                    call.args[1]
+                    for call in timer.call_args_list
+                    if call.args[0] == camera_map.WIND_CACHE_SECONDS
+                )
+                await refresh()
+                await user.should_not_see("Seat ranking unavailable")
+                await user.should_see("1. camera1 · 150° from the wind arc")
+                await refresh()
+                await user.should_see("1. camera1 · 0° from the wind arc")
+                await user.should_not_see("1. camera1 · 150° from the wind arc")
+
+    async def test_home_map_below_best_seats_uses_one_day_and_five_wind_hours(self):
+        import pandas as pd
+        from web import camera_map
+
+        now = datetime.now().astimezone() - timedelta(minutes=1)
+        self.write_csv(
+            ["location_id", "image_file", "timestamp_exif", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": name,
+                    "timestamp_exif": taken.isoformat(),
+                    "class": species,
+                }
+                for name, taken, species in (
+                    ("recent.jpg", now, "fox"),
+                    ("old.jpg", now - timedelta(days=2), "badger"),
+                )
+            ],
+        )
+        camera = camera_map.Camera("camera1", 48.6, 9.0, 270, 60)
+        first = pd.Timestamp.now(tz="UTC").floor("h")
+        wind = {
+            "camera1": [
+                camera_map.WindHour(
+                    first + pd.Timedelta(hours=hour), 10, 270 if hour < 5 else 90, 15
+                )
+                for hour in range(24)
+            ]
+        }
+        with (
+            patch.object(camera_map, "read_camera_locations", return_value=[camera]),
+            patch.object(camera_map, "fetch_wind", return_value=wind) as fetch,
+            patch.object(gallery.ui, "timer"),
+        ):
+            async with self.app_user("/") as user:
+                heading = next(
+                    iter(user.find(kind=ui.label, content="Best seats now").elements)
+                )
+                leaflet = next(iter(user.find(marker="home-camera-map").elements))
+                self.assertLess(heading.id, leaflet.id)
+                await user.should_not_see(marker="sighting-days")
+                await user.should_not_see(marker="wind-hours")
+                await user.should_not_see(marker="wind-hour")
+                await user.should_not_see(kind=ui.label, content="Camera map")
+                await user.should_see("next 5 h")
+                polygons = [
+                    layer
+                    for layer in leaflet.layers
+                    if layer.to_dict()["type"] == "polygon"
+                ]
+                self.assertEqual(len(polygons), 3)
+                arc = polygons[-1].to_dict()
+                self.assertEqual(
+                    arc["args"][0],
+                    camera_map.sector_polygon(
+                        camera.latitude, camera.longitude, 90, 0, 150
+                    ),
+                )
+                marker = next(
+                    layer
+                    for layer in leaflet.layers
+                    if layer.to_dict()["type"] == "circleMarker"
+                )
+                with patch.object(type(marker), "run_method") as calls:
+                    user.find(marker="home-camera-map").trigger("init", {})
+                    label = calls.call_args.args[1]
+                    self.assertIn('data-species="fox"', label)
+                    self.assertNotIn('data-species="badger"', label)
+                fetch.assert_called_once()
+
     async def test_camera_map_days_slider_updates_species_without_fetching_wind(self):
         from web import camera_map
 
@@ -1099,7 +1208,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 user.find(marker="recent-image-close").click()
                 self.assertTrue(timer.call_args_list)
                 self.assertCountEqual(
-                    [call.args[0] for call in timer.call_args_list], [60, 5, 60]
+                    [call.args[0] for call in timer.call_args_list],
+                    [60, 5, 60, 900, 60],
                 )
                 refresh = timer.call_args_list[0].args[1]
                 rows[0]["timestamp"] = (now - timedelta(hours=25)).isoformat()

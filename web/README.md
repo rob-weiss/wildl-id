@@ -163,6 +163,12 @@ previous successful results. The visualiser never writes to host
 
 ## Camera Map
 
+The home page places a compact map directly below **Best seats now**. Its species
+emojis always cover the last 24 hours, and its wind arcs always cover the next
+five forecast hours. This view has no day or wind-window controls. The map and
+the top-three seat ranking use the same wind result. Sightings refresh every
+minute and wind refreshes every 15 minutes.
+
 Open `/map` for camera locations on Esri World Imagery satellite tiles.
 Permanent site labels include one emoji per relevant species seen within the
 selected window. The **Sightings** slider selects 0–90 rolling days, starting at

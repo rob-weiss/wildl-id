@@ -263,7 +263,7 @@ async def home_page() -> None:
             after_heading=build_home_job_progress,
         )
         ui.timer(5, progress_refresh, immediate=False)
-        await build_best_seats()
+        await build_best_seats(DEFAULT_CSV)
         build_recent_notifications()
 
 

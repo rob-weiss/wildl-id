@@ -355,7 +355,7 @@ def view_polygon(camera: Camera) -> list[list[float]]:
     )
 
 
-async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
+async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=None):
     from nicegui import run, ui
 
     state: dict = {
@@ -365,9 +365,13 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
         "sightings": {},
         "map_ready": False,
     }
-    with ui.column().classes("w-full max-w-6xl mx-auto p-4 sm:p-6 gap-4"):
-        ui.label("Camera map").classes("text-2xl font-semibold")
+    with ui.column().classes(
+        "w-full gap-3" if compact else "w-full max-w-6xl mx-auto p-4 sm:p-6 gap-4"
+    ):
+        if not compact:
+            ui.label("Camera map").classes("text-2xl font-semibold")
         status = ui.label().classes("text-sm text-gray-600").mark("map-status")
+        status.set_visibility(not compact)
         try:
             cameras = read_camera_locations(configured_locations_path())
         except (OSError, ValueError, KeyError, TypeError) as error:
@@ -375,25 +379,31 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
             status.set_text(f"Camera locations unavailable: {error}")
         located = [camera for camera in cameras if camera.located]
         center, zoom = initial_view(located)
-        with ui.column().classes("w-full gap-1"):
-            sighting_label = (
-                ui.label().classes("text-sm font-medium").mark("sighting-window")
-            )
-            sighting_days = (
-                ui.slider(
-                    min=0, max=MAX_SIGHTING_DAYS, step=1, value=DEFAULT_SIGHTING_DAYS
+        sighting_label = sighting_days = None
+        if not compact:
+            with ui.column().classes("w-full gap-1"):
+                sighting_label = (
+                    ui.label().classes("text-sm font-medium").mark("sighting-window")
                 )
-                .props('label snap aria-label="Sighting window in days"')
-                .classes("w-full")
-                .mark("sighting-days")
-            )
-            sighting_status = (
-                ui.label().classes("text-sm text-gray-600").mark("sighting-status")
-            )
+                sighting_days = (
+                    ui.slider(
+                        min=0,
+                        max=MAX_SIGHTING_DAYS,
+                        step=1,
+                        value=DEFAULT_SIGHTING_DAYS,
+                    )
+                    .props('label snap aria-label="Sighting window in days"')
+                    .classes("w-full")
+                    .mark("sighting-days")
+                )
+        sighting_status = (
+            ui.label().classes("text-sm text-gray-600").mark("sighting-status")
+        )
+        sighting_status.set_visibility(not compact)
         leaflet = (
             ui.leaflet(center=center, zoom=zoom, options={"attributionControl": False})
-            .classes("w-full h-[60vh] min-h-80")
-            .mark("camera-map")
+            .classes("w-full h-80 sm:h-96" if compact else "w-full h-[60vh] min-h-80")
+            .mark("home-camera-map" if compact else "camera-map")
         )
         leaflet.clear_layers()
         leaflet.tile_layer(
@@ -419,37 +429,39 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
             )
             for camera in located
         ]
-        with ui.row().classes("w-full items-center gap-4 flex-nowrap"):
-            ui.label("Wind").classes("text-sm font-medium")
-            slider = (
-                ui.slider(
-                    min=0,
-                    max=RANKING_HOURS - 1,
-                    step=1,
-                    value=0,
+        slider = hour_label = hours_select = wind_list = None
+        if not compact:
+            with ui.row().classes("w-full items-center gap-4 flex-nowrap"):
+                ui.label("Wind").classes("text-sm font-medium")
+                slider = (
+                    ui.slider(
+                        min=0,
+                        max=RANKING_HOURS - 1,
+                        step=1,
+                        value=0,
+                    )
+                    .props("markers snap")
+                    .classes("flex-1 min-w-0")
+                    .mark("wind-hour")
                 )
-                .props("markers snap")
-                .classes("flex-1 min-w-0")
-                .mark("wind-hour")
-            )
-            hour_label = (
-                ui.label().classes("text-sm font-medium w-36").mark("wind-time")
-            )
-            hours_select = (
-                ui.select(
-                    {hours: f"{hours} h" for hours in RANKING_HOUR_OPTIONS},
-                    value=RANKING_HOURS,
-                    label="Hours",
+                hour_label = (
+                    ui.label().classes("text-sm font-medium w-36").mark("wind-time")
                 )
-                .classes("w-24")
-                .mark("wind-hours")
-            )
-        ui.label(
-            "The grey arc shows where the wind blows over the selected hours. "
-            "The view sector is red when the arc overlaps it, yellow when "
-            "within 30°, green when further away."
-        ).classes("text-sm text-gray-600")
-        wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
+                hours_select = (
+                    ui.select(
+                        {hours: f"{hours} h" for hours in RANKING_HOUR_OPTIONS},
+                        value=RANKING_HOURS,
+                        label="Hours",
+                    )
+                    .classes("w-24")
+                    .mark("wind-hours")
+                )
+            ui.label(
+                "The grey arc shows where the wind blows over the selected hours. "
+                "The view sector is red when the arc overlaps it, yellow when "
+                "within 30°, green when further away."
+            ).classes("text-sm text-gray-600")
+            wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
         missing = [camera.location_id for camera in cameras if not camera.located]
         if missing:
             ui.label(
@@ -470,12 +482,13 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
             )
 
     def render_sightings() -> None:
-        days = int(sighting_days.value)
-        sighting_label.set_text(
-            f"Sightings: last {days} {'day' if days == 1 else 'days'}"
-            if days
-            else "Sightings: off"
-        )
+        days = 1 if compact else int(sighting_days.value)
+        if sighting_label is not None:
+            sighting_label.set_text(
+                f"Sightings: last {days} {'day' if days == 1 else 'days'}"
+                if days
+                else "Sightings: off"
+            )
         state["sightings"] = recent_species_by_location(state["sighting_rows"], days)
         if state["map_ready"]:
             label_markers()
@@ -487,16 +500,19 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
         except OSError, ValueError, csv.Error:
             state["sighting_rows"] = []
             sighting_status.set_text("Sighting data unavailable")
+        sighting_status.set_visibility(bool(sighting_status.text) if compact else True)
         render_sightings()
 
     def render() -> None:
         for arrow in state["arrows"]:
             leaflet.remove_layer(arrow)
         state["arrows"] = []
-        wind_list.clear()
-        index = int(slider.value)
-        window = int(hours_select.value)
-        hour_label.set_text("")
+        if wind_list is not None:
+            wind_list.clear()
+        index = 0 if compact else int(slider.value)
+        window = RANKING_HOURS if compact else int(hours_select.value)
+        if hour_label is not None:
+            hour_label.set_text("")
         ranking = rank_seats(located, state["wind"], 0, window)
         distances = {camera.location_id: gap for camera, gap in ranking}
         for camera in located:
@@ -522,7 +538,7 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
             if not hours:
                 continue
             forecast = hours[:window]
-            if forecast:
+            if forecast and hour_label is not None:
                 hour_label.set_text(
                     forecast[index]
                     .time.tz_convert(LOCAL_TIMEZONE)
@@ -582,6 +598,8 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
                 )
             )
 
+        if compact:
+            return
         with wind_list:
             if ranking:
                 window_hours = state["wind"][ranking[0][0].location_id][:window]
@@ -655,6 +673,8 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
             state["wind"] = {}
             status.set_text("Wind forecast unavailable")
         render()
+        if on_wind is not None:
+            on_wind(located, state["wind"])
 
     def change_hours() -> None:
         slider.props["max"] = int(hours_select.value) - 1
@@ -664,37 +684,48 @@ async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
         render()
 
     leaflet.on("init", label_markers)
-    sighting_days.on_value_change(lambda _: render_sightings())
-    slider.on_value_change(lambda _: render())
-    hours_select.on_value_change(lambda _: change_hours())
+    if not compact:
+        sighting_days.on_value_change(lambda _: render_sightings())
+        slider.on_value_change(lambda _: render())
+        hours_select.on_value_change(lambda _: change_hours())
     await refresh_sightings()
     await refresh()
     ui.timer(60, refresh_sightings)
     ui.timer(WIND_CACHE_SECONDS, refresh)
+    return located, state["wind"]
 
 
-async def build_best_seats() -> None:
-    from nicegui import run, ui
+async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
+    await _build_camera_map(csv_path)
+
+
+async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
+    from nicegui import ui
 
     ui.label("Best seats now").classes("text-xl font-semibold")
-    try:
-        cameras = [
-            camera
-            for camera in read_camera_locations(configured_locations_path())
-            if camera.located
-        ]
-        wind = await run.io_bound(fetch_wind, cameras)
-    except OSError, ValueError, KeyError, TypeError:
-        ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
-        return
-    ranking = rank_seats(cameras, wind, 0)[:3]
-    if not ranking:
-        ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
-        return
-    ui.label(
-        f"Largest gap between view and wind over the next {RANKING_HOURS} h"
-    ).classes("text-sm text-gray-600")
-    for rank, (camera, gap) in enumerate(ranking, 1):
-        ui.label(
-            f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
-        ).classes("px-3 py-1 rounded").style(f"background-color: {arc_colour(gap)}66")
+    ranking_container = None
+
+    def render_ranking(cameras, wind):
+        if ranking_container is None:
+            return
+        ranking_container.clear()
+        ranking = rank_seats(cameras, wind, 0)[:3]
+        with ranking_container:
+            if not ranking:
+                ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
+                return
+            ui.label(
+                f"Largest gap between view and wind over the next {RANKING_HOURS} h"
+            ).classes("text-sm text-gray-600")
+            for rank, (camera, gap) in enumerate(ranking, 1):
+                ui.label(
+                    f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
+                ).classes("px-3 py-1 rounded").style(
+                    f"background-color: {arc_colour(gap)}66"
+                )
+
+    cameras, wind = await _build_camera_map(
+        csv_path, compact=True, on_wind=render_ranking
+    )
+    ranking_container = ui.column().classes("w-full gap-2")
+    render_ranking(cameras, wind)
