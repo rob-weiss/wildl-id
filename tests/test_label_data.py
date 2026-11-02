@@ -148,7 +148,7 @@ class LabelDataTests(unittest.TestCase):
 
         self.assertEqual(
             path.read_text(encoding="utf-8"),
-            'location_id,image_file,box,manual_label\n'
+            "location_id,image_file,box,manual_label\n"
             'camera,photo.jpg,"[0.5, 0.5, 0.2, 0.2]",fox \n',
         )
         self.assertEqual(label_data.read_records(path)[0]["manual_label"], "fox ")
