@@ -1123,7 +1123,7 @@ class LabelReviewTests(unittest.TestCase):
                     ["camera1", "songbird.jpg", "song bird", "", ""],
                     ["camera1", "owl.jpg", "owl", "", ""],
                     ["camera1", "marten.jpg", "marten", "", ""],
-                    ["camera1", "otherbird.jpg", "other bird", "", ""],
+                    ["camera1", "generic-bird.jpg", "bird", "", ""],
                 ]
             )
         app = review_app_module.ReviewApp(self.csv_path)

@@ -267,6 +267,13 @@ def save_confusion_matrix(targets, predictions, class_names, output_path):
         figure.savefig(output_path, format="svg", bbox_inches="tight")
 
 
+def classifier_class_names(labels):
+    native_names = DeepfauneClassifier.CLASS_NAMES["en"]
+    names = {normalize_species(name) for name in native_names}
+    names.update(normalize_species(label) for label in labels)
+    return sorted((names | {"crow", "pigeon"}) - EXCLUDED_LABELS)
+
+
 def build_model(class_names, device):
     pretrained = DeepfauneClassifier(device="cpu", class_name_lang="en")
     model = pretrained.predictor
@@ -347,7 +354,7 @@ def main():
     writer = SummaryWriter(log_dir=str(out_dir / "tensorboard"))
 
     df = load_labelled_rows()
-    class_names = sorted(df["manual_label"].unique())
+    class_names = classifier_class_names(df["manual_label"])
     class_to_idx = {c: i for i, c in enumerate(class_names)}
     df["target"] = df["manual_label"].map(class_to_idx)
 
@@ -458,7 +465,9 @@ def main():
         zero_division=0,
         output_dict=True,
     )
-    baseline_acc = float((val_df["class"] == val_df["manual_label"]).mean())
+    baseline_acc = float(
+        (val_df["class"].map(normalize_species) == val_df["manual_label"]).mean()
+    )
     print(f"\nBest epoch: {best_epoch} (val balanced accuracy {best_score:.3f})")
     print(f"Original pipeline accuracy on the same val set: {baseline_acc:.3f}")
     print(

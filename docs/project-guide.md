@@ -107,7 +107,7 @@ choose a label. Press **Enter** to focus the custom-label field, then press **En
 again to save it. Press **Backspace** to undo the last label.
 
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
-`g` other bird,
+`g` bird,
 `d` dog, `f` fox, `h` hare, `s` squirrel, `o` raccoon, `c` crow,
 `a` human, `n` none, `u` unknown, `t` cat, `v` vehicle.
 Additional labels receive their own displayed shortcut.

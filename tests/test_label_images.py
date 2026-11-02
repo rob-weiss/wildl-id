@@ -286,7 +286,7 @@ class AutomaticLabelTests(unittest.TestCase):
         )
         classifier.pretrained = False
         classifier.device = "cpu"
-        classifier.class_names = ["fox", "crow", "pigeon"]
+        classifier.class_names = ["fox", "crow", "pigeon", "bird"]
         classifier.transform = Mock(return_value=torch.zeros(3, 8, 8))
         for index, label in enumerate(classifier.class_names):
             with self.subTest(label=label):

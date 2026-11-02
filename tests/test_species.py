@@ -36,7 +36,6 @@ class RelevantSpeciesTests(unittest.TestCase):
     def test_normalize_species_keeps_crows_and_pigeons_separate_from_birds(self):
         for label in (
             "bird",
-            "other bird",
             "jay",
             "owl",
             "song_bird",

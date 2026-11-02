@@ -11,6 +11,18 @@ from src.labelling import finetune_classifier
 
 
 class FinetuneLabelTests(unittest.TestCase):
+    def test_classifier_class_names_keeps_native_classes_without_examples(self):
+        native_names = finetune_classifier.DeepfauneClassifier.CLASS_NAMES["en"]
+        expected = {
+            finetune_classifier.normalize_species(name) for name in native_names
+        } | {"crow", "pigeon"}
+        for labels in ([], ["pigeon", "crow"], ["bird", "fox"]):
+            with self.subTest(labels=labels):
+                names = finetune_classifier.classifier_class_names(labels)
+                self.assertEqual(names, sorted(expected))
+                self.assertEqual(len(names), len(native_names) + 2)
+                self.assertIn("bird", names)
+
     def test_build_model_seeds_all_native_classes_and_bird_subclasses(self):
         native_names = finetune_classifier.DeepfauneClassifier.CLASS_NAMES["en"]
         model = torch.nn.Module()
@@ -76,7 +88,7 @@ class FinetuneLabelTests(unittest.TestCase):
             "human ",
             "cat",
             "crow",
-            "other bird",
+            "bird",
             "jay",
             "owl",
             "equid",
@@ -110,7 +122,16 @@ class FinetuneLabelTests(unittest.TestCase):
 
         self.assertEqual(
             rows["manual_label"].tolist(),
-            ["pigeon"] * 5 + ["cat", "crow", "bird", "bird", "bird", "horse", "mouse"],
+            ["pigeon"] * 5
+            + [
+                "cat",
+                "crow",
+                "bird",
+                "bird",
+                "bird",
+                "horse",
+                "mouse",
+            ],
         )
 
 

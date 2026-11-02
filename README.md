@@ -313,6 +313,15 @@ incomplete runs without weights are ignored. If no fine-tuned model exists, it u
 pretrained DeepFaune. A checkpoint loading error stops the run instead of silently
 falling back to a different model.
 
+Fine-tuning keeps all 34 native DeepFaune classes and adds `crow` and `pigeon`.
+The native `bird` output covers birds that are neither crows nor pigeons.
+Every native head row starts from its pretrained weights, and the crow and pigeon
+rows start from the native bird row. Reviewed `bird` examples will participate in
+training when available, providing negatives for crow and pigeon classification.
+Classes without reviewed examples remain outputs, but their accuracy is not
+guaranteed after fine-tuning. Include representative old-class and generic bird
+examples, and compare held-out per-class metrics before deploying new weights.
+
 The dataset is separated by ownership:
 
 - `labels/human_labels.csv`: `location_id`, `image_file`, `box`, `manual_label`.
@@ -407,7 +416,7 @@ choose a label. Press **Enter** to focus the custom-label field, then press **En
 again to save it. Press **Backspace** to undo the last label.
 
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
-`g` other bird,
+`g` bird,
 `d` dog, `f` fox, `h` hare, `s` squirrel, `o` raccoon, `c` crow,
 `a` human, `n` none, `u` unknown, `t` cat, `v` vehicle.
 Additional labels receive their own displayed shortcut.

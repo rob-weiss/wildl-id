@@ -48,6 +48,18 @@ def names(rows):
 
 
 class RecentSightingsTests(unittest.TestCase):
+    def test_bird_queries_include_birds_pigeons_and_crows(self):
+        rows = [
+            make_row(f"{label}.jpg", label, "2026-10-30T12:00:00")
+            for label in ("bird", "pigeon", "crow", "fox")
+        ]
+        for prompt in ("birds", "vogel"):
+            with self.subTest(prompt=prompt):
+                self.assertEqual(
+                    set(names(filter_rows(rows, parse(prompt)))),
+                    {"bird.jpg", "pigeon.jpg", "crow.jpg"},
+                )
+
     def test_rolling_window_species_and_manual_labels(self):
         now = datetime(2026, 10, 30, 12)
         rows = [
@@ -320,7 +332,7 @@ class SmartFilterTests(unittest.TestCase):
         rows = [
             make_row("a.jpg", "fox", "2025-01-01T00:00:00", manual_label="badger"),
             make_row("b.jpg", "fox", "2025-01-02T00:00:00", manual_label="fox"),
-            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="other bird"),
+            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="bird"),
         ]
 
         self.assertEqual(
@@ -333,7 +345,7 @@ class SmartFilterTests(unittest.TestCase):
         rows = [
             make_row("a.jpg", "", "2025-01-01T00:00:00", manual_label="badger"),
             make_row("b.jpg", "unknown", "2025-01-02T00:00:00", manual_label="fox"),
-            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="other bird"),
+            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="bird"),
         ]
 
         self.assertEqual(names(filter_rows(rows, parse("misclassified"))), ["c.jpg"])

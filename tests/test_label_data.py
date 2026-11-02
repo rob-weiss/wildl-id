@@ -331,7 +331,7 @@ class LabelDataTests(unittest.TestCase):
         self.assertEqual(self.human.read_bytes(), original)
         self.assertEqual(list(self.human.parent.glob("*.bak")), [])
         review.set_mode("All")
-        for label in ("cat", "hare", "dog", "badger", "marten", "other bird", "crow"):
+        for label in ("cat", "hare", "dog", "badger", "marten", "bird", "crow"):
             review.position = 0
             review.choose(label)
         self.assertEqual(len(list(self.human.parent.glob("*.bak"))), 5)

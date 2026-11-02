@@ -33,7 +33,6 @@ LABEL_EMOJIS = {
 def normalize_species(label):
     label = str(label).strip().lower()
     if label.replace("_", " ") in {
-        "other bird",
         "song bird",
         "songbird",
         "woodpecker",
