@@ -50,7 +50,7 @@ for one architecture to another host.
 
 The app uses the default dataset:
 
-- Human annotations: `labels/human_labels.csv` (location, filename, box, manual label)
+- Human annotations: `labels/human_labels.csv` (location, filename, box, manual label, reviewed model)
 - Image metadata: `labels/image_metadata.csv`
 - Automatic predictions: `labels/labels_<latest-completed-run>/predictions.csv`
 - Annotated images: `labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified/images/`

@@ -464,6 +464,74 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(review.pending, [])
 
+    def test_reviewed_model_persists_and_new_run_starts_fresh(self):
+        human_csv = Path(self.temp_dir.name) / "labels" / "human_labels.csv"
+        human_csv.parent.mkdir()
+        with human_csv.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(
+                target,
+                fieldnames=["location_id", "image_file", "box", "manual_label"],
+            )
+            writer.writeheader()
+            writer.writerow(
+                {
+                    "location_id": "camera1",
+                    "image_file": "incorrect.jpg",
+                    "box": "",
+                    "manual_label": "hare",
+                }
+            )
+        key = "camera1_incorrect.jpg"
+        prediction = {
+            "location_id": "camera1",
+            "image_file": "incorrect.jpg",
+            "true_label": "hare",
+            "predicted_label": "fox",
+            "status": "incorrect",
+        }
+
+        def open_review(run_name):
+            with (
+                patch.object(review_module, "image_paths", return_value={}),
+                patch.object(
+                    review_module,
+                    "latest_incorrect_predictions",
+                    return_value=(run_name, {key}),
+                ),
+                patch.object(
+                    review_module,
+                    "load_validation_predictions",
+                    return_value={key: prediction},
+                ),
+            ):
+                return LabelReview(human_csv)
+
+        first_run = "deepfaune_finetuned_first"
+        review = open_review(first_run)
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(review.pending, [0])
+        review.choose("badger")
+
+        saved = review_module.label_data.read_records(human_csv)
+        self.assertEqual(saved[0]["reviewed_model"], first_run)
+        self.assertEqual(
+            tuple(saved[0]), review_module.label_data.HUMAN_COLUMNS
+        )
+
+        reopened = open_review(first_run)
+        reopened.set_mode("Latest model incorrect")
+        self.assertEqual(reopened.pending, [])
+
+        second_run = "deepfaune_finetuned_second"
+        fresh_review = open_review(second_run)
+        fresh_review.set_mode("Latest model incorrect")
+        self.assertEqual(fresh_review.pending, [0])
+        fresh_review.choose("marten")
+        fresh_review.undo()
+        self.assertEqual(fresh_review.pending, [0])
+        saved = review_module.label_data.read_records(human_csv)
+        self.assertEqual(saved[0]["reviewed_model"], first_run)
+
     def test_auto_label_unseen_button_is_not_rendered(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:

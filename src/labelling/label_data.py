@@ -13,7 +13,9 @@ from unicodedata import normalize
 
 REPO_DIR = Path(__file__).resolve().parents[2]
 DATE_FORMAT = "%d-%m-%Y"
-HUMAN_COLUMNS = ("location_id", "image_file", "box", "manual_label")
+LEGACY_HUMAN_COLUMNS = ("location_id", "image_file", "box", "manual_label")
+REVIEWED_MODEL_COLUMN = "reviewed_model"
+HUMAN_COLUMNS = (*LEGACY_HUMAN_COLUMNS, REVIEWED_MODEL_COLUMN)
 METADATA_COLUMNS = (
     "location_id",
     "image_file",
@@ -199,9 +201,12 @@ def migrate_human_labels(repo_dir=REPO_DIR):
     if human_path.exists():
         with human_path.open(newline="", encoding="utf-8") as source:
             reader = csv.DictReader(source)
-            if reader.fieldnames == list(HUMAN_COLUMNS):
+            if reader.fieldnames in (
+                list(LEGACY_HUMAN_COLUMNS),
+                list(HUMAN_COLUMNS),
+            ):
                 return human_path
-            if not {*HUMAN_COLUMNS, "class", "classifier_model"}.issubset(
+            if not {*LEGACY_HUMAN_COLUMNS, "class", "classifier_model"}.issubset(
                 reader.fieldnames or []
             ):
                 raise ValueError("Existing human-label CSV has an unexpected schema")
@@ -220,7 +225,7 @@ def migrate_human_labels(repo_dir=REPO_DIR):
         raise FileNotFoundError(f"Original human-labelled dataset not found: {legacy}")
     original = legacy.read_bytes()
     reader = csv.DictReader(io.StringIO(original.decode("utf-8")))
-    if not set(HUMAN_COLUMNS).issubset(reader.fieldnames or []):
+    if not set(LEGACY_HUMAN_COLUMNS).issubset(reader.fieldnames or []):
         raise ValueError("Original dataset is missing human annotation columns")
     rows = list(reader)
     save_image_metadata(repo_dir, [*displaced, *rows])
@@ -248,9 +253,10 @@ def load_rows(csv_path):
     if csv_path.name != "human_labels.csv":
         return read_records(csv_path)
     with csv_path.open(newline="", encoding="utf-8") as source:
-        if csv.DictReader(source).fieldnames != list(HUMAN_COLUMNS):
+        fieldnames = csv.DictReader(source).fieldnames
+        if fieldnames not in (list(LEGACY_HUMAN_COLUMNS), list(HUMAN_COLUMNS)):
             raise ValueError(
-                "Human-label CSV must contain only the four annotation columns"
+                "Human-label CSV must use the current or legacy schema"
             )
     repo_dir = csv_path.parent.parent
     humans = read_records(csv_path)
@@ -269,7 +275,9 @@ def load_rows(csv_path):
     for human in humans:
         key = image_key(human)
         prediction = predictions.get(key, {})
-        row = dict.fromkeys((*PREDICTION_COLUMNS, "manual_label"), "")
+        row = dict.fromkeys(
+            (*PREDICTION_COLUMNS, "manual_label", REVIEWED_MODEL_COLUMN), ""
+        )
         row.update(metadata.get(key, {}))
         row.update(
             {column: value for column, value in prediction.items() if value != ""}
