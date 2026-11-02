@@ -206,49 +206,39 @@ def map_classifier_to_wildlife(classifier_name):
     str
         Mapped wildlife category matching labelling.py classes.
     """
-    # DeepFaune to our categories mapping
-    # DeepFaune has European wildlife classes
     classifier_name_lower = classifier_name.lower()
-
-    # Direct matches
-    if "roe deer" in classifier_name_lower:
-        return "roe deer"
-    elif "wild boar" in classifier_name_lower:
-        return "wild boar"
-    elif "badger" in classifier_name_lower:
-        return "badger"
-    elif "marten" in classifier_name_lower or "mustelid" in classifier_name_lower:
-        return "marten"
-    elif "dog" in classifier_name_lower:
-        return "dog"
-    elif "fox" in classifier_name_lower:
-        return "fox"
-    elif "raccoon" in classifier_name_lower:
-        return "raccoon"
-    elif "hare" in classifier_name_lower or "lagomorph" in classifier_name_lower:
-        return "hare"
-    elif "squirrel" in classifier_name_lower:
-        return "squirrel"
-    elif "jay" in classifier_name_lower or "owl" in classifier_name_lower:
-        return "other bird"
-    elif "crow" in classifier_name_lower or "raven" in classifier_name_lower:
-        return "crow"
-    elif "pigeon" in classifier_name_lower or "dove" in classifier_name_lower:
-        return "pigeon"
-    elif "human" in classifier_name_lower or "person" in classifier_name_lower:
-        return "human"
-    elif "cat" in classifier_name_lower:
-        # Domestic cats in wildlife context might be feral, but keep as separate
-        return "cat"
-    elif "bird" in classifier_name_lower:
-        # Generic bird - default to other bird
-        return "other bird"
-    elif "deer" in classifier_name_lower:
-        # Generic deer - default to roe deer
-        return "roe deer"
-    else:
-        # Unknown species
-        return "unknown"
+    for species in (
+        "roe deer",
+        "wild boar",
+        "badger",
+        "marten",
+        "dog",
+        "fox",
+        "raccoon",
+        "hare",
+        "squirrel",
+        "crow",
+        "pigeon",
+        "human",
+        "cat",
+    ):
+        if species in classifier_name_lower:
+            return species
+    aliases = {
+        "mustelid": "marten",
+        "lagomorph": "hare",
+        "jay": "other bird",
+        "owl": "other bird",
+        "raven": "crow",
+        "dove": "pigeon",
+        "person": "human",
+        "bird": "other bird",
+        "deer": "roe deer",
+    }
+    for alias, species in aliases.items():
+        if alias in classifier_name_lower:
+            return species
+    return "unknown"
 
 
 def extract_text_from_image(image_path):
