@@ -520,7 +520,10 @@ class ReviewApp:
         if event.modifiers.alt or event.modifiers.ctrl or event.modifiers.meta:
             return
         if event.key.space:
-            self.accept()
+            if self.review.mode == "Latest model incorrect":
+                self.keep_manual_label()
+            else:
+                self.accept()
         elif event.key.backspace:
             self.undo_label()
         elif event.key.enter:

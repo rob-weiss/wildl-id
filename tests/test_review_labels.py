@@ -1106,7 +1106,17 @@ class LabelReviewTests(unittest.TestCase):
                 chosen = []
                 app.choose_label = chosen.append
                 app.accept()
-                app.keep_manual_label()
+                app.on_key(
+                    SimpleNamespace(
+                        action=SimpleNamespace(keydown=True, repeat=False),
+                        key=SimpleNamespace(
+                            name=" ", space=True, backspace=False, enter=False
+                        ),
+                        modifiers=SimpleNamespace(
+                            alt=False, ctrl=False, meta=False
+                        ),
+                    )
+                )
 
         self.assertEqual(chosen, ["fox", "hare"])
 
