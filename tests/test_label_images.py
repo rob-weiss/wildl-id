@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-
 from src.labelling import label_data, label_images
 
 wildl_id = import_module("wildl_id")

@@ -13,7 +13,6 @@ import httpx
 from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
-
 from web import app as web_app
 from web import background, gallery
 
@@ -438,7 +437,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_predictions_page_plots_all_landing_page_species(self):
         import pandas as pd
-
         from web import predictions
 
         origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)
@@ -486,7 +484,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_camera_map_shows_satellite_cameras_and_wind_slider(self):
         import pandas as pd
-
         from web import camera_map
 
         locations = self.root / "camera_locations.json"
@@ -544,7 +541,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_camera_map_ranks_seats_and_draws_views(self):
         import pandas as pd
-
         from web import camera_map
 
         locations = self.root / "camera_locations.json"
@@ -628,7 +624,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         from dataclasses import replace
 
         import pandas as pd
-
         from web import predictions
 
         origin = pd.Timestamp.now(tz="UTC").floor("h") + pd.Timedelta(hours=1)

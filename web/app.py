@@ -7,7 +7,6 @@ from zoneinfo import ZoneInfo
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
-
 from src.alerting import notification_log
 from src.background import job_control
 from src.labelling.label_data import DATE_FORMAT
