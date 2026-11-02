@@ -133,6 +133,26 @@ class LabelDataTests(unittest.TestCase):
         self.assertEqual(self.human.read_bytes(), original)
         self.assertEqual(list(self.human.parent.glob("*.bak")), [])
 
+    def test_write_records_uses_minimal_csv_quoting(self):
+        path = self.root / "labels" / "annotations.csv"
+        rows = [
+            {
+                "location_id": "camera",
+                "image_file": "photo.jpg",
+                "box": "[0.5, 0.5, 0.2, 0.2]",
+                "manual_label": "fox ",
+            }
+        ]
+
+        label_data.write_records(path, rows, label_data.HUMAN_COLUMNS)
+
+        self.assertEqual(
+            path.read_text(encoding="utf-8"),
+            'location_id,image_file,box,manual_label\n'
+            'camera,photo.jpg,"[0.5, 0.5, 0.2, 0.2]",fox \n',
+        )
+        self.assertEqual(label_data.read_records(path)[0]["manual_label"], "fox ")
+
     def test_reviewer_skips_unchanged_saves_and_bounds_its_backups(self):
         from src.labelling.review_labels import LabelReview
 

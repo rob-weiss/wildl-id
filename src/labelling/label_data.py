@@ -164,7 +164,6 @@ def write_records(path, rows, columns):
                 fieldnames=columns,
                 extrasaction="ignore",
                 lineterminator="\n",
-                quoting=csv.QUOTE_ALL,
             )
             writer.writeheader()
             writer.writerows(rows)
