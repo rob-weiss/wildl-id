@@ -11,6 +11,7 @@ from urllib.parse import quote
 from nicegui import events, run, ui
 from PIL import Image
 
+from .label_data import needs_model_review
 from .remove_empty_images import is_confirmed_empty, is_removable, remove_empty_images
 from .review_labels import (
     DEFAULT_CSV,
@@ -439,7 +440,18 @@ class ReviewApp:
 
     def prediction_for_row(self, row):
         image_name = f"{row['location_id']}_{row['image_file']}"
-        return self.review.latest_predictions.get(image_name)
+        validation = self.review.latest_predictions.get(image_name)
+        if (
+            self.review.mode in {"Latest model incorrect", "Unseen + errors"}
+            and needs_model_review(row)
+            and not needs_model_review({**row, "class": ""}, validation)
+        ):
+            return {
+                "true_label": row.get("manual_label", ""),
+                "predicted_label": row.get("class", ""),
+                "status": "incorrect",
+            }
+        return validation
 
     def on_image_resize(self, event):
         display_size = (event.args["width"], event.args["height"])

@@ -170,7 +170,12 @@ def load_validation_predictions(run_name, models_dir=None):
             / "predictions.csv"
         )
         if not predictions_path.is_file():
-            return {}
+            incorrect_dir = predictions_path.parent / "incorrect"
+            return {
+                path.name: {"status": "incorrect"}
+                for path in incorrect_dir.glob("*")
+                if path.is_file()
+            }
         with predictions_path.open(newline="", encoding="utf-8") as source:
             rows = list(csv.DictReader(source))
     return {f"{row['location_id']}_{row['image_file']}": row for row in rows}
@@ -269,10 +274,20 @@ class LabelReview:
             row = dict.fromkeys(self.columns, "")
             row.update(location_id=location_id, image_file=image_file)
             self.rows.append(row)
-        self.latest_model_name, self.latest_incorrect_filenames = (
-            latest_incorrect_predictions()
-        )
-        self.latest_predictions = load_validation_predictions(self.latest_model_name)
+        if self.human_only:
+            self.latest_model_name = label_data.predictions_path(repo_dir).parent.name.removeprefix("labels_")
+            self.latest_predictions = load_validation_predictions(
+                self.latest_model_name, repo_dir / "models"
+            )
+            self.latest_incorrect_filenames = {
+                name for name, row in self.latest_predictions.items()
+                if row.get("status") == "incorrect"
+            }
+        else:
+            self.latest_model_name, self.latest_incorrect_filenames = (
+                latest_incorrect_predictions()
+            )
+            self.latest_predictions = load_validation_predictions(self.latest_model_name)
         self.capture_rank = capture_order(self.rows)
         self.review_predictions_path = (
             label_data.predictions_path(repo_dir, self.latest_model_name)
@@ -315,18 +330,9 @@ class LabelReview:
             image_name = f"{row['location_id']}_{row['image_file']}"
             is_unseen = not manual_label
             validation = self.latest_predictions.get(image_name, {})
-            current_label = (
-                manual_label or str(validation.get("true_label") or "").strip()
-            )
-            predicted_label = str(validation.get("predicted_label") or "").strip()
-            is_correct_now = (
-                bool(current_label and predicted_label)
-                and current_label.casefold() == predicted_label.casefold()
-            )
             is_latest_error = (
-                image_name in self.latest_incorrect_filenames
-                and image_name not in self.resolved_incorrect
-                and not is_correct_now
+                image_name not in self.resolved_incorrect
+                and label_data.needs_model_review(row, validation)
             )
             if self.mode == "Latest model incorrect":
                 if is_latest_error and image_name not in seen_latest_errors:
@@ -490,11 +496,12 @@ class LabelReview:
         previous = row["manual_label"]
         image_name = f"{row['location_id']}_{row['image_file']}"
         was_resolved = image_name in self.resolved_incorrect
+        reviewing_error = self.mode == "Latest model incorrect" or (
+            self.mode == "Unseen + errors"
+            and label_data.needs_model_review(row, self.latest_predictions.get(image_name))
+        )
         row["manual_label"] = label
-        if (
-            self.mode == "Latest model incorrect"
-            and image_name in self.latest_incorrect_filenames
-        ):
+        if reviewing_error:
             self.resolved_incorrect.add(image_name)
         try:
             self.save()

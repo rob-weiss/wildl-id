@@ -27,6 +27,34 @@ class LabelDataTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
 
+    def test_pending_model_errors_merge_inference_and_validation_and_skip_reviewed(self):
+        cases = [
+            ({"manual_label": "fox", "class": "hare"}, None, True),
+            ({"manual_label": "fox", "class": "fox"}, None, False),
+            ({"manual_label": "fox", "class": "unknown"}, None, False),
+            ({"manual_label": "", "class": "hare"}, None, False),
+            ({"manual_label": "fox", "class": "hare", "reviewed": "true"}, None, False),
+            ({"manual_label": "fox", "class": "fox"}, {"status": "incorrect"}, True),
+            (
+                {"manual_label": "fox", "class": "fox"},
+                {"true_label": "fox", "predicted_label": "hare", "status": "incorrect"},
+                True,
+            ),
+            (
+                {"manual_label": "fox", "class": "fox", "reviewed": "true"},
+                {"true_label": "fox", "predicted_label": "hare", "status": "incorrect"},
+                False,
+            ),
+            (
+                {"manual_label": "fox", "class": "fox"},
+                {"true_label": "hare", "predicted_label": "fox", "status": "incorrect"},
+                False,
+            ),
+        ]
+        for row, validation, expected in cases:
+            with self.subTest(row=row, validation=validation):
+                self.assertEqual(label_data.needs_model_review(row, validation), expected)
+
     def test_backup_retention_keeps_five_newest_distinct_states(self):
         self.write(
             self.human,

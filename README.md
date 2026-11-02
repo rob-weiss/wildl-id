@@ -415,9 +415,12 @@ Additional labels receive their own displayed shortcut.
 Each choice is saved immediately in a new `manual_label` column in the same CSV.
 The original `class` column remains unchanged: an empty manual label means unchecked,
 a matching label means confirmed, and a different label means corrected. By default,
-the reviewer shows unchecked rows. The browser mode dropdown offers **Unseen**,
-**Latest model incorrect**, and **Latest model correct**. The two model modes
-use the validation predictions of the newest timestamped fine-tuning run under `models/`.
+the reviewer shows unchecked rows. The browser mode dropdown offers **Unseen**
+and **Latest model incorrect**. The latter shares its pending-error rule with the
+gallery's **Misclassified** filter: current inference mismatches and unresolved
+saved validation errors for the newest completed model. Images marked `reviewed`
+for that model are excluded from both views. Confirming a label hides the image
+from both queues; undo restores its previous state. A new model starts fresh.
 A `.csv.before-review.bak` backup is created before the first changed save;
 subsequent changed states use timestamped snapshots, sharing the five-distinct-
 backup limit above. Unchanged saves create no backup. Inference writes model

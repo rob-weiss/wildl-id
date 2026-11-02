@@ -450,7 +450,7 @@ class LabelReviewTests(unittest.TestCase):
             ["incorrect.jpg"],
         )
 
-    def test_latest_incorrect_excludes_predictions_matching_current_manual_label(self):
+    def test_current_inference_error_remains_when_validation_matches_manual_label(self):
         review = LabelReview(self.csv_path)
         filename = "camera1_incorrect.jpg"
         review.latest_incorrect_filenames.add(filename)
@@ -462,6 +462,9 @@ class LabelReviewTests(unittest.TestCase):
 
         review.set_mode("Latest model incorrect")
 
+        self.assertEqual(review.pending, [2])
+        review.rows[2]["class"] = "hare"
+        review.set_mode("Latest model incorrect")
         self.assertEqual(review.pending, [])
 
     def test_reviewed_model_persists_and_new_run_starts_fresh(self):
@@ -491,6 +494,9 @@ class LabelReviewTests(unittest.TestCase):
         }
 
         def open_review(run_name):
+            weights = human_csv.parent.parent / "models" / run_name / "weights.pt"
+            weights.parent.mkdir(parents=True, exist_ok=True)
+            weights.touch()
             predictions = review_module.label_data.predictions_path(
                 human_csv.parent.parent, run_name
             )
@@ -515,7 +521,7 @@ class LabelReviewTests(unittest.TestCase):
             ):
                 return LabelReview(human_csv)
 
-        first_run = "deepfaune_finetuned_first"
+        first_run = "deepfaune_finetuned_20261101-120000_first"
         review = open_review(first_run)
         review.set_mode("Latest model incorrect")
         self.assertEqual(review.pending, [0])
@@ -538,7 +544,7 @@ class LabelReviewTests(unittest.TestCase):
         reopened.set_mode("Latest model incorrect")
         self.assertEqual(reopened.pending, [])
 
-        second_run = "deepfaune_finetuned_second"
+        second_run = "deepfaune_finetuned_20261102-120000_second"
         fresh_review = open_review(second_run)
         fresh_review.set_mode("Latest model incorrect")
         self.assertEqual(fresh_review.pending, [0])
@@ -580,7 +586,13 @@ class LabelReviewTests(unittest.TestCase):
                 "latest_incorrect_predictions",
                 return_value=("deepfaune_finetuned_test", {"camera1_incorrect.jpg"}),
             ),
-            patch.object(review_module, "load_validation_predictions", return_value={}),
+            patch.object(
+                review_module,
+                "load_validation_predictions",
+                return_value={"camera1_incorrect.jpg": {
+                    "true_label": "hare", "predicted_label": "fox", "status": "incorrect"
+                }},
+            ),
         ):
             review = LabelReview(human_csv)
         review.set_mode("Latest model incorrect")
@@ -613,6 +625,101 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(human_csv.read_bytes(), original)
         self.assertEqual(prediction.read_bytes(), external)
         self.assertEqual(review.rows[0]["manual_label"], "hare")
+
+    def test_gallery_and_review_share_pending_errors_and_review_flags(self):
+        from web import gallery
+
+        data = review_module.label_data
+        root = Path(self.temp_dir.name)
+        human = root / "labels/human_labels.csv"
+        run = "deepfaune_finetuned_20261102-120000_shared"
+        weights = root / "models" / run / "weights.pt"
+        weights.parent.mkdir(parents=True)
+        weights.touch()
+        humans = [
+            {"location_id": "camera1", "image_file": name, "manual_label": "fox"}
+            for name in ("inference.jpg", "validation.jpg", "reviewed.jpg", "correct.jpg")
+        ]
+        data.write_records(human, [*humans, humans[0].copy()], data.HUMAN_COLUMNS)
+        data.write_records(
+            data.predictions_path(root, run),
+            [
+                {**row, "class": "hare" if row["image_file"] in {"inference.jpg", "reviewed.jpg"} else "fox",
+                 "reviewed": "true" if row["image_file"] == "reviewed.jpg" else ""}
+                for row in humans
+            ],
+            data.PREDICTION_COLUMNS,
+        )
+        data.write_records(
+            data.validation_predictions_dir(root, run) / "predictions.csv",
+            [{"location_id": "camera1", "image_file": "validation.jpg", "true_label": "fox",
+              "predicted_label": "hare", "status": "incorrect"}],
+            ("location_id", "image_file", "true_label", "predicted_label", "status"),
+        )
+
+        def gallery_names():
+            matches = gallery.filter_rows(
+                gallery.load_rows(human), gallery.parse_filter_prompt("misclassified")
+            )
+            names = {row["image_file"] for row in matches}
+            self.assertEqual(len(matches), len(names))
+            return names
+
+        with patch.object(review_module, "image_paths", return_value={}):
+            review = LabelReview(human)
+        review.set_mode("Latest model incorrect")
+        expected = {"inference.jpg", "validation.jpg"}
+        self.assertEqual({review.rows[index]["image_file"] for index in review.pending}, expected)
+        self.assertEqual(gallery_names(), expected)
+        self.assertEqual(review.latest_model_name, run)
+        review.choose("fox")
+        self.assertEqual(gallery_names(), {"validation.jpg"})
+        with patch.object(review_module, "image_paths", return_value={}):
+            reopened = LabelReview(human)
+        reopened.set_mode("Latest model incorrect")
+        self.assertEqual([reopened.rows[index]["image_file"] for index in reopened.pending], ["validation.jpg"])
+        review.undo()
+        self.assertEqual(gallery_names(), expected)
+        self.assertEqual({review.rows[index]["image_file"] for index in review.pending}, expected)
+        review.choose("fox")
+        newer = "deepfaune_finetuned_20261102-130000_new"
+        newer_weights = root / "models" / newer / "weights.pt"
+        newer_weights.parent.mkdir(parents=True)
+        newer_weights.touch()
+        data.write_records(
+            data.predictions_path(root, newer),
+            [{**row, "class": "hare" if row["image_file"] in {"inference.jpg", "reviewed.jpg"} else "fox"}
+             for row in humans],
+            data.PREDICTION_COLUMNS,
+        )
+        with patch.object(review_module, "image_paths", return_value={}):
+            fresh = LabelReview(human)
+        fresh.set_mode("Latest model incorrect")
+        self.assertEqual(fresh.latest_model_name, newer)
+        expected_new = {"inference.jpg", "reviewed.jpg"}
+        self.assertEqual(gallery_names(), expected_new)
+        self.assertEqual({fresh.rows[index]["image_file"] for index in fresh.pending}, expected_new)
+
+    def test_pretrained_model_review_flags_persist_without_finetuned_weights(self):
+        from web import gallery
+
+        data = review_module.label_data
+        root = Path(self.temp_dir.name)
+        human = root / "labels/human_labels.csv"
+        row = {"location_id": "camera1", "image_file": "photo.jpg", "manual_label": "fox"}
+        data.write_records(human, [row], data.HUMAN_COLUMNS)
+        data.write_records(data.predictions_path(root), [{**row, "class": "hare"}], data.PREDICTION_COLUMNS)
+        with (
+            patch.object(review_module, "image_paths", return_value={}),
+            patch.object(review_module, "latest_incorrect_predictions", return_value=(None, set())),
+            patch.object(review_module, "load_validation_predictions", return_value={}),
+        ):
+            review = LabelReview(human)
+        review.set_mode("Latest model incorrect")
+        self.assertEqual(review.pending, [0])
+        review.choose("fox")
+        self.assertEqual(data.read_records(data.predictions_path(root))[0]["reviewed"], "true")
+        self.assertEqual(gallery.filter_rows(gallery.load_rows(human), gallery.parse_filter_prompt("misclassified")), [])
 
     def test_auto_label_unseen_button_is_not_rendered(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -946,6 +1053,19 @@ class LabelReviewTests(unittest.TestCase):
                     "🏷️ True: 🐇 hare | Predicted: 🐦 song bird",
                 )
                 self.assertEqual(render_overlay.call_args.args[2], prediction)
+
+    def test_inference_error_shows_current_prediction_when_validation_is_correct(self):
+        app = review_app_module.ReviewApp(self.csv_path)
+        row = app.review.rows[2]
+        app.review.latest_predictions["camera1_incorrect.jpg"] = {
+            "true_label": "hare", "predicted_label": "hare", "status": "correct"
+        }
+        for mode in ("Latest model incorrect", "Unseen + errors"):
+            with self.subTest(mode=mode):
+                app.review.set_mode(mode)
+                prediction = app.prediction_for_row(row)
+                self.assertEqual(prediction["predicted_label"], "fox")
+                self.assertEqual(prediction["true_label"], "hare")
 
     def test_browser_model_name_is_visible_only_in_latest_model_modes(self):
         run_name = "deepfaune_finetuned_20261020-191127_latest"
@@ -1427,9 +1547,9 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(review.pending, [0])
         review.set_mode("Latest model incorrect")
-        self.assertEqual(review.pending, [1])
+        self.assertEqual(review.pending, [1, 2])
         review.set_mode("Unseen + errors")
-        self.assertEqual(review.pending, [0, 1])
+        self.assertEqual(review.pending, [0, 1, 2])
         self.assertEqual(review.pending[review.position], 1)
         review.set_mode("Seen")
         self.assertEqual(review.pending, [1, 2])
@@ -1438,8 +1558,8 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(review.pending, [0, 1, 2])
         review.position = 2
         review.set_mode("Latest model incorrect")
-        self.assertEqual(review.pending, [1])
-        self.assertEqual(review.position, 0)
+        self.assertEqual(review.pending, [1, 2])
+        self.assertEqual(review.position, 1)
 
     def test_gui_dropdown_selects_review_mode(self):
         image_dir = self.csv_path.parent / "images"

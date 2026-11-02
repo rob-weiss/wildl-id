@@ -192,7 +192,11 @@ months”, “last 24h”, “last 24 hours”, “this year”, “in March 202
 “since 2025-06-01”, “in winter”), night
 or day, temperatures (“below 0 °C”, “freezing”), labelling status
 (“unlabelled”, “misclassified”), and order or count (“oldest first”, “latest
-20”).
+20”). **Misclassified** and the review page's **Latest model incorrect** use the
+same pending-error rule: current inference mismatches and unresolved saved
+validation errors for the latest model, excluding images marked reviewed for
+that model. Confirming a label removes the image from both views after refresh;
+undo restores it. A new model starts a fresh queue.
 
 Hour filters use an exact rolling window ending now, shared with the home
 gallery. They exclude undated and future images and do not limit the image

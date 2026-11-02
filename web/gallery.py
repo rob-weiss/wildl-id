@@ -26,7 +26,7 @@ from src.labelling.review_app import (
     cloud_image_url,
     display_label,
 )
-from src.labelling.review_labels import SHORTCUTS
+from src.labelling.review_labels import SHORTCUTS, load_validation_predictions
 from src.labelling.species import RECENT_SPECIES
 
 LOCAL_IMAGE_ROUTE = "/local-images"
@@ -132,8 +132,11 @@ Reviewed terms include `reviewed`, `labelled`/`labeled`, `manually labelled`,
 `verified`, `checked`, and `with [a] manual label(s)`.
 
 `misclassified`, `corrected`, or a `wrong`/`incorrect` prediction, classification,
-or label selects rows with a manual label different from the model's `class`.
-Forms such as `wrongly predicted` and `incorrectly classified` are also accepted.
+or label selects pending errors for the latest model: current inference mismatches
+and unresolved saved validation errors. Images marked reviewed for that model are
+excluded, matching **Latest model incorrect** in the reviewer. A new model starts
+a fresh queue. Forms such as `wrongly predicted` and `incorrectly classified` are
+also accepted.
 
 ### Order and result count
 
@@ -623,12 +626,7 @@ def filter_rows(rows, gallery_filter, now=None):
         if f.reviewed is not None and bool(manual_label) != f.reviewed:
             continue
         if f.misclassified:
-            predicted = normalize_text((row.get("class") or "").strip())
-            if (
-                not manual_label
-                or predicted in {"", "unknown"}
-                or normalize_text(manual_label) == predicted
-            ):
+            if not label_data.needs_model_review(row, row.get("_validation_prediction")):
                 continue
         if (
             f.lighting
@@ -660,6 +658,11 @@ def filter_rows(rows, gallery_filter, now=None):
         (dated if taken else undated).append((taken, row))
     dated.sort(key=lambda item: item[0], reverse=not f.oldest_first)
     matches = [row for _, row in dated + undated]
+    if f.misclassified:
+        unique = {}
+        for row in matches:
+            unique.setdefault(label_data.image_key(row), row)
+        matches = list(unique.values())
     return matches[: f.limit] if f.limit else matches
 
 
@@ -697,7 +700,7 @@ def describe_filter(gallery_filter):
     if f.reviewed is not None:
         parts.append("manually labelled" if f.reviewed else "not yet labelled")
     if f.misclassified:
-        parts.append("prediction corrected")
+        parts.append("unreviewed model errors")
     if f.limit:
         parts.append(f"{'oldest' if f.oldest_first else 'newest'} {f.limit}")
     elif f.oldest_first:
@@ -723,7 +726,15 @@ def image_source(row, local_images, images_dir, base_url):
 
 def load_rows(csv_path):
     if Path(csv_path).name == "human_labels.csv":
-        return label_data.load_rows(csv_path)
+        repo_dir = Path(csv_path).parent.parent
+        run_name = label_data.predictions_path(repo_dir).parent.name.removeprefix("labels_")
+        validation = load_validation_predictions(run_name, repo_dir / "models")
+        rows = label_data.load_rows(csv_path)
+        for row in rows:
+            image_name = f"{row['location_id']}_{row['image_file']}"
+            if image_name in validation:
+                row["_validation_prediction"] = validation[image_name]
+        return rows
     with Path(csv_path).open(newline="", encoding="utf-8") as source:
         reader = csv.DictReader(source)
         if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or []):

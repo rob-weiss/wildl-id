@@ -120,6 +120,26 @@ def image_key(row):
     return normalize("NFC", row["location_id"]), row["image_file"]
 
 
+def needs_model_review(row, validation=None):
+    if str(row.get("reviewed") or "").strip().casefold() == "true":
+        return False
+    manual = str(row.get("manual_label") or "").strip().casefold()
+    predicted = str(row.get("class") or "").strip().casefold()
+    if manual and predicted not in {"", "unknown"} and manual != predicted:
+        return True
+    validation = validation or {}
+    current = manual or str(validation.get("true_label") or "").strip().casefold()
+    validated = str(validation.get("predicted_label") or "").strip().casefold()
+    if validation.get("status") == "incorrect" and not validated:
+        return True
+    return bool(
+        validation.get("status") == "incorrect"
+        and current
+        and validated
+        and current != validated
+    )
+
+
 def latest_weights(models_dir):
     candidates = [
         path
