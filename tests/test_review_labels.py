@@ -1471,7 +1471,7 @@ class LabelReviewTests(unittest.TestCase):
 
         overlay = review_app_module.box_overlay_svg(row, (4000, 3000), prediction)
 
-        self.assertIn("🏷️ True: 🐦 bird | Predicted: 🐦 pigeon", overlay)
+        self.assertIn("🏷️ True: 🐦 bird | Predicted: 🕊️ pigeon", overlay)
         self.assertNotIn("🏷️ True: 🐦 bird | Predicted: 🐦 bird", overlay)
         self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
@@ -1546,7 +1546,7 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(annotation.find("rect").get("height"), "72")
         self.assertEqual(
             " ".join(text.itertext()),
-            "🏷️ True: 🐦 pigeon | Predicted: 🐾 fallow deer",
+            "🏷️ True: 🕊️ pigeon | Predicted: 🦌 fallow deer",
         )
 
     def test_accept_prediction_uses_latest_finetuned_class(self):
