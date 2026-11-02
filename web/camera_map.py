@@ -117,12 +117,16 @@ def recent_species_by_location(rows, days, now=None):
     return {location: tuple(sorted(species)) for location, species in sightings.items()}
 
 
-def sighting_marker_label(camera, species):
-    icons = "".join(
+def sighting_icons(species):
+    return "".join(
         f'<span role="img" aria-label="{html.escape(name, quote=True)}" '
         f'title="{html.escape(name, quote=True)}" data-species="{html.escape(name, quote=True)}">{LABEL_EMOJIS[name]}</span>'
         for name in species
     )
+
+
+def sighting_marker_label(camera, species):
+    icons = sighting_icons(species)
     return (
         '<div style="max-width:180px;white-space:normal;text-align:center">'
         f"{html.escape(camera.location_id)}"
@@ -355,7 +359,7 @@ def view_polygon(camera: Camera) -> list[list[float]]:
     )
 
 
-async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=None):
+async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=None):
     from nicegui import run, ui
 
     state: dict = {
@@ -461,7 +465,11 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
                 "The view sector is red when the arc overlaps it, yellow when "
                 "within 30°, green when further away."
             ).classes("text-sm text-gray-600")
-            wind_list = ui.column().classes("w-full gap-1 text-sm").mark("wind-list")
+            wind_list = (
+                ui.column()
+                .classes("w-full min-w-0 gap-1 text-sm overflow-x-auto")
+                .mark("wind-list")
+            )
         missing = [camera.location_id for camera in cameras if not camera.located]
         if missing:
             ui.label(
@@ -492,6 +500,10 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
         state["sightings"] = recent_species_by_location(state["sighting_rows"], days)
         if state["map_ready"]:
             label_markers()
+        if wind_list is not None:
+            render()
+        if on_update is not None:
+            on_update(located, state["wind"], state["sightings"])
 
     async def refresh_sightings() -> None:
         try:
@@ -626,7 +638,7 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
                     .mark("seat-table")
                 ):
                     with ui.element("thead"), ui.element("tr"):
-                        for title in ("#", "Seat", "Gap", "Wind", "View"):
+                        for title in ("#", "Seat", "Sightings", "Gap", "Wind", "View"):
                             ui.html(title, tag="th").classes("text-left px-2 py-1")
                     with ui.element("tbody"):
                         for rank, (camera, gap) in enumerate(rows, 1):
@@ -652,10 +664,24 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
                                 .style(f"background-color: {colour}66")
                                 .mark("seat-rank")
                             ):
-                                for cell in cells:
+                                for column, cell in enumerate(cells):
                                     ui.html(html.escape(cell), tag="td").classes(
                                         "px-2 py-1"
                                     )
+                                    if column == 1:
+                                        ui.html(
+                                            sighting_icons(
+                                                state["sightings"].get(
+                                                    normalize(
+                                                        "NFC", camera.location_id
+                                                    ),
+                                                    (),
+                                                )
+                                            ),
+                                            tag="td",
+                                        ).classes(
+                                            "px-2 py-1 text-lg whitespace-nowrap"
+                                        ).mark("seat-sightings")
 
     async def refresh() -> None:
         if not located:
@@ -673,8 +699,8 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
             state["wind"] = {}
             status.set_text("Wind forecast unavailable")
         render()
-        if on_wind is not None:
-            on_wind(located, state["wind"])
+        if on_update is not None:
+            on_update(located, state["wind"], state["sightings"])
 
     def change_hours() -> None:
         slider.props["max"] = int(hours_select.value) - 1
@@ -692,7 +718,7 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_wind=No
     await refresh()
     ui.timer(60, refresh_sightings)
     ui.timer(WIND_CACHE_SECONDS, refresh)
-    return located, state["wind"]
+    return located, state["wind"], state["sightings"]
 
 
 async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
@@ -705,7 +731,7 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
     ui.label("Best seats now").classes("text-xl font-semibold")
     ranking_container = None
 
-    def render_ranking(cameras, wind):
+    def render_ranking(cameras, wind, sightings):
         if ranking_container is None:
             return
         ranking_container.clear()
@@ -718,14 +744,23 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
                 f"Largest gap between view and wind over the next {RANKING_HOURS} h"
             ).classes("text-sm text-gray-600")
             for rank, (camera, gap) in enumerate(ranking, 1):
-                ui.label(
-                    f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
-                ).classes("px-3 py-1 rounded").style(
-                    f"background-color: {arc_colour(gap)}66"
-                )
+                with (
+                    ui.row()
+                    .classes("w-full items-center gap-2 px-3 py-1 rounded")
+                    .style(f"background-color: {arc_colour(gap)}66")
+                    .mark("home-seat-rank")
+                ):
+                    ui.label(
+                        f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
+                    )
+                    ui.html(
+                        sighting_icons(
+                            sightings.get(normalize("NFC", camera.location_id), ())
+                        )
+                    ).classes("flex flex-wrap gap-1 text-lg").mark("seat-sightings")
 
-    cameras, wind = await _build_camera_map(
-        csv_path, compact=True, on_wind=render_ranking
+    cameras, wind, sightings = await _build_camera_map(
+        csv_path, compact=True, on_update=render_ranking
     )
     ranking_container = ui.column().classes("w-full gap-2")
-    render_ranking(cameras, wind)
+    render_ranking(cameras, wind, sightings)

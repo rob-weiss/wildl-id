@@ -648,6 +648,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_not_see(marker="wind-hour")
                 await user.should_not_see(kind=ui.label, content="Camera map")
                 await user.should_see("next 5 h")
+                sightings = next(iter(user.find(marker="seat-sightings").elements))
+                self.assertIn('data-species="fox"', sightings.content)
+                self.assertNotIn('data-species="badger"', sightings.content)
                 polygons = [
                     layer
                     for layer in leaflet.layers
@@ -671,6 +674,74 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     label = calls.call_args.args[1]
                     self.assertIn('data-species="fox"', label)
                     self.assertNotIn('data-species="badger"', label)
+                fetch.assert_called_once()
+
+    async def test_map_seat_sightings_match_slider_and_refresh_without_fetching_wind(
+        self,
+    ):
+        import pandas as pd
+        from web import camera_map
+
+        now = datetime.now().astimezone() - timedelta(minutes=1)
+        fields = ["location_id", "image_file", "timestamp_exif", "class"]
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": name,
+                "timestamp_exif": taken.isoformat(),
+                "class": species,
+            }
+            for name, taken, species in (
+                ("fox.jpg", now, "fox"),
+                ("badger.jpg", now - timedelta(days=3), "badger"),
+            )
+        ]
+        self.write_csv(fields, rows)
+        camera = camera_map.Camera("camera1", 48.6, 9.0, 270, 60)
+        first = pd.Timestamp.now(tz="UTC").floor("h")
+        wind = {
+            "camera1": [
+                camera_map.WindHour(first + pd.Timedelta(hours=hour), 10, 270, 15)
+                for hour in range(24)
+            ]
+        }
+        with (
+            patch.object(camera_map, "read_camera_locations", return_value=[camera]),
+            patch.object(camera_map, "fetch_wind", return_value=wind) as fetch,
+            patch.object(gallery.ui, "timer") as timer,
+        ):
+            async with self.app_user("/map") as user:
+                sightings = next(iter(user.find(marker="seat-sightings").elements))
+                self.assertIn('data-species="fox"', sightings.content)
+                self.assertIn('data-species="badger"', sightings.content)
+                slider = next(iter(user.find(marker="sighting-days").elements))
+                slider.set_value(1)
+                sightings = next(iter(user.find(marker="seat-sightings").elements))
+                self.assertIn('data-species="fox"', sightings.content)
+                self.assertNotIn('data-species="badger"', sightings.content)
+                slider.set_value(0)
+                self.assertNotIn(
+                    "data-species=",
+                    next(iter(user.find(marker="seat-sightings").elements)).content,
+                )
+                slider.set_value(1)
+                rows.append(
+                    {
+                        "location_id": "camera1",
+                        "image_file": "marten.jpg",
+                        "timestamp_exif": now.isoformat(),
+                        "class": "marten",
+                    }
+                )
+                self.write_csv(fields, rows)
+                refresh = next(
+                    call.args[1] for call in timer.call_args_list if call.args[0] == 60
+                )
+                await refresh()
+                self.assertIn(
+                    'data-species="marten"',
+                    next(iter(user.find(marker="seat-sightings").elements)).content,
+                )
                 fetch.assert_called_once()
 
     async def test_camera_map_days_slider_updates_species_without_fetching_wind(self):

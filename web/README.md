@@ -197,6 +197,11 @@ Changing days updates the icons without requesting wind again. Sightings refresh
 every minute, independently of wind; missing label data or a wind outage does
 not remove camera markers. Hover over each emoji for its species name.
 
+The home best-seat list and the map's seat table repeat the same species icons.
+Home uses the last 24 hours; the map table follows the days slider, including
+zero to hide sightings. Both lists update with sighting refreshes without
+requesting wind again.
+
 Fill `latitude` and `longitude` (decimal degrees, WGS84) per camera in
 `config/camera_locations.json`; cameras left `null` are listed as missing.
 The read-only `config/` mount picks up edits on page reload, without a rebuild.
