@@ -40,6 +40,15 @@ Immediate species notifications show one emoji in the title and only the capture
 time and date in the body. They omit ntfy emoji tags to avoid duplicate icons.
 The landing page displays older species alerts in the same format without
 rewriting notification history. Daily summaries retain their full text.
+The notification feed shows every notification sent within the last 24 hours,
+not only the latest five. Status shows the same 24-hour total separately from
+the latest polling run, which can legitimately send zero notifications.
+New image alerts retain a copy of the ntfy attachment under
+`logs/notification_images/`; the landing card shows that image with the same
+title and body. Text-only alerts and summaries have no image. Existing alerts
+show an image only when site, species and capture minute identify one original
+photo unambiguously. Missing or ambiguous historical images stay absent rather
+than showing a guessed photo. The notification CSV keeps its original columns.
 
 ### Independent Visits
 

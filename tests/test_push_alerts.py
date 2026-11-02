@@ -112,6 +112,7 @@ class PushAlertTests(unittest.TestCase):
         )
         self.assertEqual(self.factory_calls, 1)
         logged = notification_log.recent_notifications(5, self.notification_log)
+        self.assertTrue(all(item["image_file"] for item in logged))
         self.assertEqual(
             [(item["title"], item["message"]) for item in logged],
             [

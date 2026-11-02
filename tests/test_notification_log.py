@@ -1,3 +1,4 @@
+import csv
 import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -34,6 +35,86 @@ class NotificationLogTests(unittest.TestCase):
 
     def test_missing_log_has_no_notifications(self):
         self.assertEqual(notification_log.recent_notifications(5, self.path), [])
+
+    def test_attachment_snapshot_survives_source_deletion_and_preserves_csv_schema(
+        self,
+    ):
+        sent = datetime(2026, 11, 2, 20, tzinfo=UTC)
+        source = self.path.parent.parent / "photo.jpg"
+        source.write_bytes(b"exact sent image")
+        notification_log.record_notification(
+            "Old", "Message", sent - timedelta(minutes=1), self.path
+        )
+        notification_log.record_notification(
+            "New", "Message", sent, self.path, image_path=source
+        )
+        source.unlink()
+
+        recent = notification_log.recent_notifications(None, self.path)
+        cached = notification_log.notification_image_path(
+            recent[0]["image_file"], self.path
+        )
+
+        self.assertEqual(cached.read_bytes(), b"exact sent image")
+        self.assertTrue(recent[0]["attachment_recorded"])
+        self.assertEqual(len(recent), 2)
+        with self.path.open(newline="", encoding="utf-8") as handle:
+            self.assertEqual(
+                tuple(csv.DictReader(handle).fieldnames), notification_log.FIELDS
+            )
+        self.assertIsNone(
+            notification_log.notification_image_path("../photo.jpg", self.path)
+        )
+
+    def test_failed_image_copy_is_recorded_without_allowing_legacy_guessing(self):
+        notification_log.record_notification(
+            "Image",
+            "Message",
+            datetime.now(UTC),
+            self.path,
+            image_path=self.path.parent / "missing.jpg",
+        )
+
+        recent = notification_log.recent_notifications(1, self.path)
+
+        self.assertEqual(len(recent), 1)
+        self.assertTrue(recent[0]["attachment_recorded"])
+        self.assertIsNone(recent[0]["image_file"])
+
+    def test_text_only_notifications_explicitly_have_no_image(self):
+        notification_log.record_notification(
+            "Text", "Message", datetime.now(UTC), self.path
+        )
+
+        recent = notification_log.recent_notifications(1, self.path)
+
+        self.assertTrue(recent[0]["attachment_recorded"])
+        self.assertIsNone(recent[0]["image_file"])
+
+    def test_rolling_window_counts_all_recent_notifications_and_excludes_future(self):
+        now = datetime(2026, 11, 2, 20, tzinfo=UTC)
+        for index in range(7):
+            notification_log.record_notification(
+                f"Recent {index}", "Message", now - timedelta(minutes=index), self.path
+            )
+        notification_log.record_notification(
+            "Boundary", "Message", now - timedelta(hours=24), self.path
+        )
+        notification_log.record_notification(
+            "Old", "Message", now - timedelta(hours=24, seconds=1), self.path
+        )
+        notification_log.record_notification(
+            "Future", "Message", now + timedelta(seconds=1), self.path
+        )
+
+        recent = notification_log.recent_notifications(
+            None, self.path, hours=24, now=now
+        )
+
+        self.assertEqual(
+            [item["title"] for item in recent],
+            [f"Recent {index}" for index in range(7)] + ["Boundary"],
+        )
 
     def test_legacy_species_body_displays_only_capture_timestamp_without_rewriting_log(
         self,

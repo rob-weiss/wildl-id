@@ -339,6 +339,28 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             switch = next(iter(user.find(marker="automatic-runs").elements))
             self.assertTrue(switch.value)
 
+    async def test_status_counts_recent_sends_when_latest_poll_sent_zero(self):
+        log_path = self.root / "logs" / "push_alerts.csv"
+        now = datetime.now(UTC)
+        for index in range(7):
+            notification_log.record_notification(
+                f"Recent {index}", "Message", now - timedelta(minutes=index), log_path
+            )
+        notification_log.record_notification(
+            "Old", "Message", now - timedelta(hours=25), log_path
+        )
+        notification_log.record_status(
+            True, 0, (), now, log_path.with_name("push_alerts_status.json")
+        )
+
+        with patch.object(notification_log, "LOG_PATH", log_path):
+            async with self.app_user("/status") as user:
+                await user.should_see("7 sent in the last 24 hours")
+                await user.should_see("0 sent in last run")
+            async with self.app_user("/") as user:
+                await user.should_see("Recent 6")
+                await user.should_not_see(kind=ui.label, content="Old")
+
     async def test_status_page_shows_notification_run_status(self):
         log_path = self.root / "logs" / "push_alerts.csv"
         notification_log.record_status(
@@ -1408,9 +1430,99 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("20:10 (02-11-2026)")
                 await user.should_not_see("1 🐗 wild boar at 20:10 (02-11-2026)")
 
-    async def test_home_shows_latest_five_notifications_below_images(self):
+    async def test_home_notification_shows_exact_cached_ntfy_image(self):
         log_path = self.root / "push_alerts.csv"
-        start = datetime(2026, 11, 1, 6, 0, tzinfo=UTC)
+        image_path = self.root / "sent.jpg"
+        Image.new("RGB", (40, 30), "green").save(image_path)
+        original = image_path.read_bytes()
+        notification_log.record_notification(
+            "🐗 Wild boar at camera1",
+            "20:10 (02-11-2026)",
+            datetime.now(UTC) - timedelta(minutes=1),
+            log_path,
+            image_path=image_path,
+        )
+        image_path.unlink()
+        with patch.object(notification_log, "LOG_PATH", log_path):
+            async with self.app_user("/") as user:
+                image = next(iter(user.find(marker="notification-image").elements))
+                source = image.source
+                self.assertTrue(source.startswith("/notification-images/"))
+            async with self.http_client() as client:
+                response = await client.get(source)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.content, original)
+                self.assertEqual(
+                    (
+                        await client.get("/notification-images/not-an-image.txt")
+                    ).status_code,
+                    404,
+                )
+
+    def test_legacy_notification_image_uses_publishers_fixed_cet_camera_clock(self):
+        first = self.write_original_image("correct.jpg", datetime(2026, 7, 1, 20, 10))
+        second = self.write_original_image("wrong.jpg", datetime(2026, 7, 1, 21, 10))
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": path.name,
+                "timestamp_exif": taken,
+                "class": "fox",
+            }
+            for path, taken in (
+                (first, "2026-07-01T20:10:00"),
+                (second, "2026-07-01T21:10:00"),
+            )
+        ]
+        notice = {
+            "title": "🦊 Fox at camera1",
+            "message": "21:10 (01-07-2026)",
+            "image_file": None,
+            "attachment_recorded": False,
+        }
+
+        source = web_app.notification_image_source(
+            notice, rows, gallery.image_paths(self.source_images)
+        )
+
+        self.assertTrue(source.endswith("/camera1/correct.jpg"))
+
+    def test_legacy_notification_image_requires_unique_site_species_and_capture_time(
+        self,
+    ):
+        taken = datetime(2026, 11, 2, 20, 10)
+        first = self.write_original_image("first.jpg", taken)
+        row = {
+            "location_id": "camera1",
+            "image_file": first.name,
+            "timestamp_exif": taken.isoformat(),
+            "class": "fox",
+        }
+        notice = {
+            "title": "🦊 Fox at camera1",
+            "message": "20:10 (02-11-2026)",
+            "image_file": None,
+            "attachment_recorded": False,
+        }
+        local = gallery.image_paths(self.source_images)
+        source = web_app.notification_image_source(notice, [row], local)
+        self.assertTrue(source.endswith("/camera1/first.jpg"))
+        second = self.write_original_image("second.jpg", taken)
+        local = gallery.image_paths(self.source_images)
+        self.assertIsNone(
+            web_app.notification_image_source(
+                notice, [row, {**row, "image_file": second.name}], local
+            )
+        )
+        self.assertIsNone(
+            web_app.notification_image_source(
+                {**notice, "attachment_recorded": True}, [row], local
+            )
+        )
+
+    async def test_home_shows_all_notifications_from_last_day_below_images(self):
+        log_path = self.root / "push_alerts.csv"
+        start = datetime.now(UTC) - timedelta(minutes=10)
         for index in range(6):
             notification_log.record_notification(
                 f"Alert {index}",
@@ -1418,13 +1530,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 start + timedelta(minutes=index),
                 log_path,
             )
+        notification_log.record_notification(
+            "Old alert", "Old message", start - timedelta(hours=25), log_path
+        )
         with patch.object(notification_log, "LOG_PATH", log_path):
             async with self.app_user("/") as user:
                 await user.should_see("Latest notifications")
                 await user.should_see("Alert 5")
                 await user.should_see("Alert 1")
-                await user.should_not_see("Alert 0")
-                await user.should_see("01-11-2026 07:05")
+                await user.should_see("Alert 0")
+                await user.should_not_see("Old alert")
                 heading = next(
                     iter(
                         user.find(

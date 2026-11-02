@@ -1,18 +1,22 @@
 import csv
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from nicegui import ui
 from src.alerting import notification_log
+from src.alerting.push_alerts import CAMERA_TIME
 from src.background import job_control
-from src.labelling.label_data import DATE_FORMAT
+from src.labelling.label_data import DATE_FORMAT, image_key
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
-from web import background
+from src.labelling.species import pluralize_species, species_emoji
+from web import background, gallery
 from web.camera_map import build_best_seats, build_camera_map_page
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.predictions import build_predictions_page
@@ -172,6 +176,14 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+@app.get("/notification-images/{filename}")
+def notification_image(filename: str):
+    path = notification_log.notification_image_path(filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Notification image unavailable")
+    return FileResponse(path)
+
+
 def build_review_page(csv_path: Path = DEFAULT_CSV) -> None:
     add_brand_logo()
     try:
@@ -271,15 +283,66 @@ async def home_page() -> None:
         build_recent_notifications()
 
 
+def notification_image_source(
+    notification, rows=(), local_images=None, image_base_url=None
+):
+    if notification.get("image_file"):
+        return f"/notification-images/{notification['image_file']}"
+    if notification.get("attachment_recorded"):
+        return None
+    try:
+        datetime.strptime(notification["message"], f"%H:%M ({DATE_FORMAT})")
+    except ValueError, TypeError:
+        return None
+    matches = {}
+    for row in rows:
+        try:
+            taken = datetime.fromisoformat(str(row.get("timestamp_exif") or ""))
+        except ValueError:
+            continue
+        if taken.tzinfo is None:
+            taken = taken.replace(tzinfo=CAMERA_TIME)
+        taken = taken.astimezone(LOCAL_TIMEZONE)
+        if (
+            taken is None
+            or taken.strftime(f"%H:%M ({DATE_FORMAT})") != notification["message"]
+        ):
+            continue
+        species = gallery.row_label(row).strip().casefold()
+        titles = {
+            f"{species_emoji(species)} {pluralize_species(species, count).capitalize()} at {row['location_id']}"
+            for count in (1, 2)
+        }
+        if notification["title"] in titles:
+            matches[image_key(row)] = row
+    if len(matches) != 1:
+        return None
+    return gallery.image_source(
+        next(iter(matches.values())),
+        local_images or {},
+        gallery.IMAGES_DIR,
+        image_base_url,
+    )
+
+
 def build_recent_notifications() -> None:
     ui.label("Latest notifications").classes("text-xl font-semibold")
 
     @ui.refreshable
     def notification_list() -> None:
-        notifications = notification_log.recent_notifications(5)
+        notifications = notification_log.recent_notifications(None, hours=24)
         if not notifications:
-            ui.label("No notifications sent yet").classes("text-sm text-gray-600")
+            ui.label("No notifications in the last 24 hours").classes(
+                "text-sm text-gray-600"
+            )
             return
+        rows, local_images = [], {}
+        if any(not item.get("attachment_recorded") for item in notifications):
+            try:
+                rows = gallery.load_rows(DEFAULT_CSV)
+                local_images = gallery.image_paths(gallery.IMAGES_DIR)
+            except OSError, ValueError, csv.Error:
+                pass
         with ui.column().classes("w-full gap-2"):
             for notification in notifications:
                 sent = notification["sent"].astimezone(LOCAL_TIMEZONE)
@@ -288,6 +351,19 @@ def build_recent_notifications() -> None:
                     ui.label(notification["message"]).classes(
                         "text-sm whitespace-pre-line"
                     )
+                    source = notification_image_source(
+                        notification,
+                        rows,
+                        local_images,
+                        os.environ.get("WILDL_ID_IMAGE_BASE_URL"),
+                    )
+                    if source:
+                        with ui.link(target=source, new_tab=True).classes(
+                            "w-full max-w-xl"
+                        ):
+                            ui.image(source).props(
+                                'fit=contain alt="Notification image"'
+                            ).classes("w-full max-h-80").mark("notification-image")
                     ui.label(f"{sent:{DATE_FORMAT} %H:%M}").classes(
                         "text-xs text-gray-600"
                     )
@@ -398,6 +474,8 @@ def build_notification_status() -> None:
     def notification_status() -> None:
         status = notification_log.latest_status()
         with ui.card().classes("w-full gap-1"):
+            recent = notification_log.recent_notifications(None, hours=24)
+            ui.label(f"{len(recent)} sent in the last 24 hours").classes("text-sm")
             if status is None:
                 ui.label("No runs recorded yet").classes("text-sm text-gray-600")
                 return
@@ -406,7 +484,7 @@ def build_notification_status() -> None:
             )
             checked = status["checked"].astimezone(LOCAL_TIMEZONE)
             ui.label(f"Last run {checked:{DATE_FORMAT} %H:%M}").classes("text-sm")
-            ui.label(f"{status['sent']} sent").classes("text-sm")
+            ui.label(f"{status['sent']} sent in last run").classes("text-sm")
             failures = status["failures"]
             if failures:
                 count = len(failures)

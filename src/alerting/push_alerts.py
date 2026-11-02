@@ -335,7 +335,9 @@ def _send_species_alerts(
                 publish(config["server"], topic, alert)
                 state["last_alerts"][key] = captured.isoformat()
                 sent += 1
-                notification_log.record_notification(*alert_text(alert), now)
+                notification_log.record_notification(
+                    *alert_text(alert), now, image_path=alert.image_path
+                )
             state["seen"].setdefault(location, set()).add(name)
         except Exception as error:
             failures.append(f"{location}/{name}: {type(error).__name__}: {error}")
