@@ -1,5 +1,6 @@
 """Satellite map of camera locations with the Open-Meteo wind forecast."""
 
+import csv
 import html
 import json
 import math
@@ -9,10 +10,15 @@ import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unicodedata import normalize
 
 import pandas as pd
-from src.labelling.label_data import DATE_FORMAT
+from src.labelling.label_data import DATE_FORMAT, load_rows
+from src.labelling.review_labels import DEFAULT_CSV
+from src.labelling.species import LABEL_EMOJIS, RECENT_SPECIES
+from src.visits import CAMERA_TIMEZONE, exif_datetime
 
 DEFAULT_LOCATIONS = (
     Path(__file__).resolve().parents[1] / "config" / "camera_locations.json"
@@ -54,6 +60,8 @@ ARC_CLEARANCE = 30.0
 WIND_ARC_COLOUR = "#9ca3af"
 WIND_ARROW_COLOUR = "#1d4ed8"
 VIEW_RADIUS = 120.0
+DEFAULT_SIGHTING_DAYS = 7
+MAX_SIGHTING_DAYS = 90
 
 
 @dataclass(frozen=True)
@@ -79,6 +87,48 @@ class WindHour:
     speed: float
     direction: float
     gusts: float
+
+
+def recent_species_by_location(rows, days, now=None):
+    if not 0 <= days <= MAX_SIGHTING_DAYS:
+        raise ValueError(f"Sighting days must be between 0 and {MAX_SIGHTING_DAYS}")
+    if days == 0:
+        return {}
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=CAMERA_TIMEZONE)
+    now = now.astimezone(UTC)
+    cutoff = now - timedelta(days=days)
+    sightings = {}
+    for row in rows:
+        species = (
+            str(row.get("manual_label") or "").strip()
+            or str(row.get("class") or "").strip()
+        ).casefold()
+        location = normalize("NFC", str(row.get("location_id") or ""))
+        taken = exif_datetime(row)
+        if (
+            species in RECENT_SPECIES
+            and location.strip()
+            and taken is not None
+            and cutoff <= taken.astimezone(UTC) <= now
+        ):
+            sightings.setdefault(location, set()).add(species)
+    return {location: tuple(sorted(species)) for location, species in sightings.items()}
+
+
+def sighting_marker_label(camera, species):
+    icons = "".join(
+        f'<span role="img" aria-label="{html.escape(name, quote=True)}" '
+        f'title="{html.escape(name, quote=True)}" data-species="{html.escape(name, quote=True)}">{LABEL_EMOJIS[name]}</span>'
+        for name in species
+    )
+    return (
+        '<div style="max-width:180px;white-space:normal;text-align:center">'
+        f"{html.escape(camera.location_id)}"
+        '<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:3px;font-size:20px;line-height:1.3">'
+        f"{icons}</div></div>"
+    )
 
 
 def configured_locations_path() -> Path:
@@ -305,10 +355,16 @@ def view_polygon(camera: Camera) -> list[list[float]]:
     )
 
 
-async def build_camera_map_page() -> None:
+async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
     from nicegui import run, ui
 
-    state: dict = {"wind": {}, "arrows": []}
+    state: dict = {
+        "wind": {},
+        "arrows": [],
+        "sighting_rows": [],
+        "sightings": {},
+        "map_ready": False,
+    }
     with ui.column().classes("w-full max-w-6xl mx-auto p-4 sm:p-6 gap-4"):
         ui.label("Camera map").classes("text-2xl font-semibold")
         status = ui.label().classes("text-sm text-gray-600").mark("map-status")
@@ -319,6 +375,21 @@ async def build_camera_map_page() -> None:
             status.set_text(f"Camera locations unavailable: {error}")
         located = [camera for camera in cameras if camera.located]
         center, zoom = initial_view(located)
+        with ui.column().classes("w-full gap-1"):
+            sighting_label = (
+                ui.label().classes("text-sm font-medium").mark("sighting-window")
+            )
+            sighting_days = (
+                ui.slider(
+                    min=0, max=MAX_SIGHTING_DAYS, step=1, value=DEFAULT_SIGHTING_DAYS
+                )
+                .props('label snap aria-label="Sighting window in days"')
+                .classes("w-full")
+                .mark("sighting-days")
+            )
+            sighting_status = (
+                ui.label().classes("text-sm text-gray-600").mark("sighting-status")
+            )
         leaflet = (
             ui.leaflet(center=center, zoom=zoom, options={"attributionControl": False})
             .classes("w-full h-[60vh] min-h-80")
@@ -387,12 +458,36 @@ async def build_camera_map_page() -> None:
             ).classes("text-sm text-amber-800").mark("map-missing")
 
     def label_markers() -> None:
+        state["map_ready"] = True
         for camera, marker in markers:
             marker.run_method(
                 "bindTooltip",
-                html.escape(camera.location_id),
+                sighting_marker_label(
+                    camera,
+                    state["sightings"].get(normalize("NFC", camera.location_id), ()),
+                ),
                 {"permanent": True, "direction": "top", "offset": [0, -8]},
             )
+
+    def render_sightings() -> None:
+        days = int(sighting_days.value)
+        sighting_label.set_text(
+            f"Sightings: last {days} {'day' if days == 1 else 'days'}"
+            if days
+            else "Sightings: off"
+        )
+        state["sightings"] = recent_species_by_location(state["sighting_rows"], days)
+        if state["map_ready"]:
+            label_markers()
+
+    async def refresh_sightings() -> None:
+        try:
+            state["sighting_rows"] = await run.io_bound(load_rows, csv_path)
+            sighting_status.set_text("")
+        except OSError, ValueError, csv.Error:
+            state["sighting_rows"] = []
+            sighting_status.set_text("Sighting data unavailable")
+        render_sightings()
 
     def render() -> None:
         for arrow in state["arrows"]:
@@ -507,13 +602,14 @@ async def build_camera_map_page() -> None:
                 if camera.location_id in state["wind"] and not camera.has_view
             ]
             if rows:
-                with ui.element("table").classes("text-sm border-collapse").mark(
-                    "seat-table"
+                with (
+                    ui.element("table")
+                    .classes("text-sm border-collapse")
+                    .mark("seat-table")
                 ):
-                    with ui.element("thead"):
-                        with ui.element("tr"):
-                            for title in ("#", "Seat", "Gap", "Wind", "View"):
-                                ui.html(title, tag="th").classes("text-left px-2 py-1")
+                    with ui.element("thead"), ui.element("tr"):
+                        for title in ("#", "Seat", "Gap", "Wind", "View"):
+                            ui.html(title, tag="th").classes("text-left px-2 py-1")
                     with ui.element("tbody"):
                         for rank, (camera, gap) in enumerate(rows, 1):
                             hour = state["wind"][camera.location_id][index]
@@ -539,7 +635,9 @@ async def build_camera_map_page() -> None:
                                 .mark("seat-rank")
                             ):
                                 for cell in cells:
-                                    ui.html(html.escape(cell), tag="td").classes("px-2 py-1")
+                                    ui.html(html.escape(cell), tag="td").classes(
+                                        "px-2 py-1"
+                                    )
 
     async def refresh() -> None:
         if not located:
@@ -566,9 +664,12 @@ async def build_camera_map_page() -> None:
         render()
 
     leaflet.on("init", label_markers)
+    sighting_days.on_value_change(lambda _: render_sightings())
     slider.on_value_change(lambda _: render())
     hours_select.on_value_change(lambda _: change_hours())
+    await refresh_sightings()
     await refresh()
+    ui.timer(60, refresh_sightings)
     ui.timer(WIND_CACHE_SECONDS, refresh)
 
 
@@ -583,17 +684,17 @@ async def build_best_seats() -> None:
             if camera.located
         ]
         wind = await run.io_bound(fetch_wind, cameras)
-    except (OSError, ValueError, KeyError, TypeError):
+    except OSError, ValueError, KeyError, TypeError:
         ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
         return
     ranking = rank_seats(cameras, wind, 0)[:3]
     if not ranking:
         ui.label("Seat ranking unavailable").classes("text-sm text-gray-600")
         return
-    ui.label(f"Largest gap between view and wind over the next {RANKING_HOURS} h").classes(
-        "text-sm text-gray-600"
-    )
+    ui.label(
+        f"Largest gap between view and wind over the next {RANKING_HOURS} h"
+    ).classes("text-sm text-gray-600")
     for rank, (camera, gap) in enumerate(ranking, 1):
-        ui.label(f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc").classes(
-            "px-3 py-1 rounded"
-        ).style(f"background-color: {arc_colour(gap)}66")
+        ui.label(
+            f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
+        ).classes("px-3 py-1 rounded").style(f"background-color: {arc_colour(gap)}66")

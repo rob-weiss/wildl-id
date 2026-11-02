@@ -6,7 +6,7 @@ import math
 import re
 import unicodedata
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -17,7 +17,6 @@ from src.labelling.organize_images import (
     capture_time_from_exif,
     image_paths,
     nfc,
-    parse_camera_filename_time,
 )
 from src.labelling.review_app import (
     IMAGES_DIR,
@@ -28,9 +27,20 @@ from src.labelling.review_app import (
 )
 from src.labelling.review_labels import SHORTCUTS, load_validation_predictions
 from src.labelling.species import RECENT_SPECIES
+from src.visits import CAMERA_TIMEZONE, exif_datetime, group_visits
 
 LOCAL_IMAGE_ROUTE = "/local-images"
 PAGE_SIZE = 48
+VISIT_COLOURS = (
+    "#52694b",
+    "#9a6b45",
+    "#6f8580",
+    "#a0803f",
+    "#7a6656",
+    "#7e844c",
+    "#57717a",
+    "#99685f",
+)
 EXAMPLE_PROMPT = "Show only wild boar of the last two weeks"
 FILTER_EXAMPLES = {
     "Dates": {
@@ -341,16 +351,28 @@ def row_label(row):
 
 
 def row_datetime(row):
-    for key in ("timestamp", "timestamp_exif"):
-        value = (row.get(key) or "").strip()
-        if value:
-            if value.endswith("Z"):
-                value = value[:-1] + "+00:00"
-            try:
-                return datetime.fromisoformat(value)
-            except ValueError:
-                continue
-    return None
+    taken = exif_datetime(row)
+    return taken.astimezone(CAMERA_TIMEZONE) if taken is not None else None
+
+
+def with_visit_groups(rows):
+    grouping = group_visits(rows)
+    colours = {
+        visit.visit_id: VISIT_COLOURS[index % len(VISIT_COLOURS)]
+        for index, visit in enumerate(grouping.visits)
+    }
+    annotated = []
+    for row in rows:
+        record = {
+            key: value
+            for key, value in row.items()
+            if key not in {"_visit", "_visit_colour"}
+        }
+        visit = grouping.image_visits.get(label_data.image_key(row))
+        if visit is not None:
+            record.update(_visit=visit, _visit_colour=colours[visit.visit_id])
+        annotated.append(record)
+    return annotated
 
 
 def recent_rows(rows, now=None):
@@ -608,7 +630,10 @@ def filter_rows(rows, gallery_filter, now=None):
     f = gallery_filter
     has_date_filter = bool(f.start or f.end or f.months or f.hours is not None)
     if f.hours is not None:
-        now = (now or datetime.now().astimezone()).astimezone()
+        now = now or datetime.now(CAMERA_TIMEZONE)
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=CAMERA_TIMEZONE)
+        now = now.astimezone(UTC)
         cutoff = now - timedelta(hours=f.hours)
     locations = {normalize_text(location) for location in f.locations}
     excluded_locations = {normalize_text(location) for location in f.excluded_locations}
@@ -649,8 +674,8 @@ def filter_rows(rows, gallery_filter, now=None):
             if taken is None:
                 continue
             if f.hours is not None:
-                taken = taken.astimezone(now.tzinfo)
-                if not cutoff <= taken <= now:
+                instant = taken.astimezone(UTC)
+                if not cutoff <= instant <= now:
                     continue
             day = taken.date()
             if f.start and day < f.start or f.end and day > f.end:
@@ -658,7 +683,7 @@ def filter_rows(rows, gallery_filter, now=None):
             if f.months and day.month not in f.months:
                 continue
         (dated if taken else undated).append((taken, row))
-    dated.sort(key=lambda item: item[0], reverse=not f.oldest_first)
+    dated.sort(key=lambda item: item[0].astimezone(UTC), reverse=not f.oldest_first)
     matches = [row for _, row in dated + undated]
     if f.misclassified:
         unique = {}
@@ -762,12 +787,30 @@ def rows_with_originals(rows, local_images):
             continue
         try:
             with Image.open(path) as image:
-                taken = capture_time_from_exif(image.getexif())
-        except (ValueError, SyntaxError):
+                metadata = image.getexif()
+                taken = capture_time_from_exif(metadata)
+                exif_ifd = metadata.get_ifd(0x8769)
+                offset_tag = (
+                    0x9011
+                    if exif_ifd.get(0x9003)
+                    else 0x9012
+                    if exif_ifd.get(0x9004)
+                    else 0x9010
+                )
+                offset = exif_ifd.get(offset_tag)
+                if taken is not None and offset:
+                    offset = (
+                        offset.decode("ascii")
+                        if isinstance(offset, bytes)
+                        else str(offset)
+                    )
+                    taken = datetime.fromisoformat(
+                        taken.isoformat() + offset.strip("\x00 ")
+                    )
+        except ValueError, SyntaxError:
             taken = None
         except OSError:
             continue
-        taken = taken or parse_camera_filename_time(path)
         if taken is not None:
             row["timestamp_exif"] = taken.isoformat()
     return merged
@@ -821,7 +864,28 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
     when = (
         taken.strftime(f"{label_data.DATE_FORMAT} %H:%M") if taken else "unknown date"
     )
-    with ui.card().tight().classes("w-full"):
+    visit = row.get("_visit")
+    colour = row.get("_visit_colour", "transparent")
+    with (
+        ui.card()
+        .tight()
+        .classes("w-full gallery-thumbnail")
+        .style(f"border: 3px solid {colour}; border-radius: 6px") as card
+    ):
+        if visit is not None:
+            card.mark("visit-frame")
+            card.props["data-visit-id"] = visit.visit_id
+            card.props["data-image-file"] = row["image_file"]
+            start = visit.started_at.astimezone(CAMERA_TIMEZONE)
+            end = visit.ended_at.astimezone(CAMERA_TIMEZONE)
+            description = (
+                f"{display_label(visit.species)} · {visit.location_id} · "
+                f"{start.strftime(f'{label_data.DATE_FORMAT} %H:%M')} – "
+                f"{end.strftime(f'{label_data.DATE_FORMAT} %H:%M')} · "
+                f"{visit.image_count} images"
+            )
+            card.props["aria-label"] = description
+            card.tooltip(description)
         image = (
             boxed_image(row, source, "w-full cursor-pointer")
             if show_boxes
@@ -1051,8 +1115,10 @@ def build_recent_gallery(
         grid = ui.grid(
             columns="repeat(auto-fit, minmax(min(100%, 220px), 1fr))"
         ).classes("w-full gap-3")
-        pagination = ui.pagination(1, 1, on_change=lambda: show_page()).props(
-            "direction-links max-pages=5"
+        pagination = (
+            ui.pagination(1, 1, on_change=lambda: show_page())
+            .props("direction-links max-pages=5")
+            .classes("max-w-full overflow-x-auto")
         )
     items = []
     show_image, close_image_viewer = build_image_viewer(items, boxes, compact=True)
@@ -1148,7 +1214,9 @@ def build_recent_gallery(
                 if not local_images:
                     raise
                 rows = []
-            rows = recent_rows(rows_with_originals(rows, local_images))
+            rows = recent_rows(
+                with_visit_groups(rows_with_originals(rows, local_images))
+            )
             all_items[:] = [
                 (row, source)
                 for row in rows
@@ -1158,7 +1226,7 @@ def build_recent_gallery(
                     )
                 )
             ]
-        except (OSError, ValueError, csv.Error):
+        except OSError, ValueError, csv.Error:
             status.set_text("Recent images unavailable")
             all_items.clear()
             items.clear()
@@ -1187,7 +1255,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
 
     images_dir = Path(images_dir) if images_dir is not None else IMAGES_DIR
     local_images = image_paths(images_dir)
-    rows = rows_with_originals(rows, local_images)
+    rows = with_visit_groups(rows_with_originals(rows, local_images))
     labels = {
         str(value).strip()
         for row in rows
@@ -1258,7 +1326,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
             prompt.update()
             apply()
 
-        with ui.grid(columns="repeat(auto-fit, minmax(190px, 1fr))").classes(
+        with ui.grid(columns="repeat(auto-fit, minmax(min(100%, 190px), 1fr))").classes(
             "w-full gap-2"
         ):
             dropdowns = (
@@ -1296,10 +1364,12 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
                     on_click=lambda example=example: select_example(example),
                 ).props("flat no-caps dense")
     summary = ui.label().classes("text-sm text-gray-600")
-    pagination = ui.pagination(
-        1, 1, direction_links=True, on_change=lambda: show_page()
-    ).props("max-pages=7 boundary-links ellipses")
-    grid = ui.grid(columns="repeat(auto-fill, minmax(220px, 1fr))").classes(
+    pagination = (
+        ui.pagination(1, 1, direction_links=True, on_change=lambda: show_page())
+        .props("max-pages=7 boundary-links ellipses")
+        .classes("max-w-full overflow-x-auto")
+    )
+    grid = ui.grid(columns="repeat(auto-fill, minmax(min(100%, 220px), 1fr))").classes(
         "w-full gap-3"
     )
 

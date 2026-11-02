@@ -21,9 +21,10 @@ are yellow before review, green when a human label agrees with the prediction,
 and red when it disagrees. Gallery pagination uses bounded page links, ellipses,
 and first/last controls for large datasets.
 Photos that are unlabelled, empty, unknown, or of other species stay off the
-home page; browse them in the Gallery. Capture times come from the CSV
-or the original image's EXIF metadata; supported camera filenames are a
-fallback. File modification times are not used. Thumbnails show the manual
+home page; browse them in the Gallery. Capture times come only from
+`timestamp_exif`, or from the original image's EXIF metadata when that column
+has no valid time. OCR timestamps, camera filenames and file modification
+times are not used. Thumbnails show the manual
 label, or the automatic label when there is none. Boxes appear when present.
 Click an image to
 enlarge it. The viewer has previous/next controls and an image counter;
@@ -34,6 +35,37 @@ The gallery reloads the CSV and image availability every minute
 without reloading the page; older sightings drop out automatically. Results
 are paginated when there are more than 48 images. Discovery is read-only and
 never creates or changes labels.
+
+### Independent Visits
+
+Both galleries frame images from the same visit in the same colour, without
+moving them out of capture-time order. Frames use muted woodland colours;
+hovering over a thumbnail raises its shadow and brightens it without moving
+or resizing the card. Each visit belongs to one site and one
+effective species: the manual label when present, otherwise the prediction.
+A gap of **at least 30 minutes** since the previous detection starts another
+visit. Visits can span midnight and last longer than 30 minutes when detections
+continue. Other species do not end a visit. Colours repeat across the dataset;
+hover over a frame for the visit's species, site, interval and photo count.
+Frames remain consistent across filters, pagination and bounding-box toggles.
+Photo counts still count photos, not visits.
+
+Grouping uses the full dataset before display filters and does not change or
+sort the source CSVs. Missing sites, missing or invalid EXIF times, and empty or
+unknown species have no visit frame. Humans and vehicles form their own groups,
+separate from wildlife. Repeated rows for the same site and image count once
+within a visit; separate photos at the same instant remain separate members.
+Rows that disagree on species or capture time for the same image have no visit
+until the conflict is resolved. This is a one-label-per-image view, not support
+for multiple species detections in one photo.
+
+Naive EXIF times use `Europe/Berlin`; explicit offsets determine elapsed time.
+Naive times within ambiguous or skipped daylight-saving hours remain ungrouped.
+The observed span is the last detection minus the first, not proven dwell time.
+A single-photo visit has an observed span of zero. New images and label changes
+recompute visits; visit IDs identify the current derived dataset, not immutable
+records. Predictions retain the existing acceptance rules, so incorrect labels
+can still create false visits.
 
 The app binds only to localhost; it is not available from the
 LAN or internet. There is no login, so other local processes may access it.
@@ -112,6 +144,18 @@ report automatically; a spinner remains visible while it runs. When it finishes,
 read the summary and select one chart at a time. Filter-based plots remain
 available for targeted comparisons.
 
+Under **Filter-based plots**, choose **Individual species timelines (visits)**
+for independent visits instead of the existing image-count timeline. Each visit
+counts once at its start time. Date and other filters apply to that first photo,
+so a visit beginning before the selected interval does not become a new visit
+inside it. Capture times throughout these reports use EXIF only.
+
+Visit charts offer **Visits CSV** and **Member images CSV** downloads. The first
+contains site, species, UTC start/end, observed span in seconds, image count and
+the 30-minute threshold. The second links visit IDs to all member image keys,
+including members outside the chosen interval. Only selected visits are exported.
+Neither visit counts nor observed spans estimate population size or camera uptime.
+
 Charts and summaries live only in the container's 64 MiB `/tmp` filesystem.
 They disappear when the container stops or restarts. A failed rerun keeps the
 previous successful results. The visualiser never writes to host
@@ -120,6 +164,15 @@ previous successful results. The visualiser never writes to host
 ## Camera Map
 
 Open `/map` for camera locations on Esri World Imagery satellite tiles.
+Permanent site labels include one emoji per relevant species seen within the
+selected window. The **Sightings** slider selects 0–90 rolling days, starting at
+7 days. At 0, all species emojis are hidden; site names and camera markers remain.
+Sightings use `timestamp_exif` only and prefer manual species labels;
+empty, unknown and non-relevant species do not appear. Future times are excluded.
+Changing days updates the icons without requesting wind again. Sightings refresh
+every minute, independently of wind; missing label data or a wind outage does
+not remove camera markers. Hover over each emoji for its species name.
+
 Fill `latitude` and `longitude` (decimal degrees, WGS84) per camera in
 `config/camera_locations.json`; cameras left `null` are listed as missing.
 The read-only `config/` mount picks up edits on page reload, without a rebuild.

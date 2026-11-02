@@ -14,11 +14,11 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import pytz
 from astral import LocationInfo
 from astral.sun import sun
 from nicegui import run
-from src.labelling.label_data import DATE_FORMAT
+from src.labelling.label_data import DATE_FORMAT, image_key
+from src.visits import CAMERA_TIMEZONE, VisitGrouping, export_visits, group_visits
 from src.visualisation import evaluate_labels
 from web.gallery import (
     filter_rows,
@@ -33,16 +33,22 @@ FILTERED_PLOT_ROOT = Path("/tmp/wildl-id-filtered-plots")
 FILTERED_PLOT_TYPES = {
     "daily-yearly": "Daily yearly activity by species",
     "individual-timelines": "Individual species timelines",
+    "visit-timelines": "Individual species timelines (visits)",
 }
 SUN_LOCATION = LocationInfo(
     "Camera Location", "Germany", "Europe/Berlin", 48.7667, 8.9333
 )
-STANDARD_TIMEZONE = pytz.timezone("Etc/GMT-1")
 
 
-def filtered_activity_frame(csv_path: Path, prompt: str) -> pd.DataFrame:
+def filtered_activity_frame(
+    csv_path: Path, prompt: str, independent_visits: bool = False
+) -> pd.DataFrame:
     """Return timestamped rows matching the gallery's local filter syntax."""
     rows = load_rows(csv_path)
+    grouping = group_visits(rows) if independent_visits else None
+    if grouping is not None:
+        first_images = {visit.image_keys[0] for visit in grouping.visits}
+        rows = [row for row in rows if image_key(row) in first_images]
     labels = {
         str(value).strip()
         for row in rows
@@ -57,10 +63,21 @@ def filtered_activity_frame(csv_path: Path, prompt: str) -> pd.DataFrame:
     gallery_filter.oldest_first = False
     gallery_filter.limit = None
     records = []
+    seen = set()
     for row in filter_rows(rows, gallery_filter):
         timestamp = row_datetime(row)
         if timestamp is not None:
-            records.append({"timestamp": timestamp, "species": row_label(row)})
+            record = {
+                "timestamp": timestamp.astimezone(CAMERA_TIMEZONE).replace(tzinfo=None),
+                "species": row_label(row),
+            }
+            if grouping is not None:
+                visit = grouping.image_visits[image_key(row)]
+                if visit.visit_id in seen:
+                    continue
+                seen.add(visit.visit_id)
+                record.update(visit_id=visit.visit_id, species=visit.species)
+            records.append(record)
     if not records:
         raise ValueError("No timestamped rows match these filters")
 
@@ -68,6 +85,14 @@ def filtered_activity_frame(csv_path: Path, prompt: str) -> pd.DataFrame:
     frame["year"] = frame["timestamp"].dt.year
     frame["month"] = frame["timestamp"].dt.month
     frame["hour"] = frame["timestamp"].dt.hour
+    frame.attrs["count_unit"] = "visits" if independent_visits else "images"
+    if grouping is not None:
+        selected = [visit for visit in grouping.visits if visit.visit_id in seen]
+        frame.attrs["visit_grouping"] = VisitGrouping(
+            selected,
+            {key: visit for visit in selected for key in visit.image_keys},
+            grouping.excluded_count,
+        )
     return frame
 
 
@@ -75,7 +100,7 @@ def _sunrise_sunset(day: date):
     try:
         solar_times = sun(SUN_LOCATION.observer, date=day)
         return tuple(
-            solar_times[key].astimezone(STANDARD_TIMEZONE).replace(tzinfo=None)
+            solar_times[key].astimezone(CAMERA_TIMEZONE).replace(tzinfo=None)
             for key in ("sunrise", "sunset")
         )
     except Exception:
@@ -320,7 +345,7 @@ def _create_individual_timelines_figure(frame: pd.DataFrame):
         )
         species_count = (frame["species"] == species).sum()
         axis.set_title(f"{species.capitalize()} Activity (n={species_count})")
-        axis.set_ylabel("Detections")
+        axis.set_ylabel(frame.attrs.get("count_unit", "images").capitalize())
         axis.grid(True, alpha=0.3)
         axis.legend(loc="upper right", fontsize=8)
         axis.tick_params(axis="x", rotation=45)
@@ -357,7 +382,10 @@ def generate_filtered_plot_svgs(
     """Generate filter-scoped SVG files in a dedicated output directory."""
     if plot_type not in FILTERED_PLOT_TYPES:
         raise ValueError(f"Unknown filtered plot type: {plot_type}")
-    frame = filtered_activity_frame(csv_path, prompt)
+    independent_visits = plot_type == "visit-timelines"
+    frame = filtered_activity_frame(
+        csv_path, prompt, independent_visits=independent_visits
+    )
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     for old_plot in output_dir.glob("*.svg"):
@@ -379,12 +407,18 @@ def generate_filtered_plot_svgs(
             paths.append(path)
     else:
         figure = _create_individual_timelines_figure(frame)
-        path = output_dir / "09_individual_species_timelines.svg"
+        path = output_dir / (
+            "09_independent_visit_timelines.svg"
+            if independent_visits
+            else "09_individual_species_timelines.svg"
+        )
         try:
             _save_svg(figure, path)
         finally:
             plt.close(figure)
         paths = [path]
+    if independent_visits:
+        export_visits(frame.attrs["visit_grouping"], output_dir)
     return paths
 
 

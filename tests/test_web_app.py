@@ -135,6 +135,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(run_store_patch.stop)
 
     def write_csv(self, fieldnames, rows):
+        if "timestamp" in fieldnames and "timestamp_exif" not in fieldnames:
+            fieldnames = [*fieldnames, "timestamp_exif"]
+            rows = [{"timestamp_exif": row.get("timestamp", ""), **row} for row in rows]
         with self.csv_path.open("w", newline="", encoding="utf-8") as target:
             writer = csv.DictWriter(target, fieldnames=fieldnames)
             writer.writeheader()
@@ -539,6 +542,68 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("Sat 31-10-2026 15:00 CET")
                 self.assertEqual(len(user.find(marker="seat-rank").elements), 1)
 
+    async def test_camera_map_days_slider_updates_species_without_fetching_wind(self):
+        from web import camera_map
+
+        now = datetime.now().astimezone() - timedelta(minutes=1)
+        self.write_csv(
+            ["location_id", "image_file", "timestamp_exif", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": name,
+                    "timestamp_exif": taken.isoformat(),
+                    "class": species,
+                }
+                for name, taken, species in (
+                    ("fox.jpg", now, "fox"),
+                    ("badger.jpg", now - timedelta(days=3), "badger"),
+                    ("old.jpg", now - timedelta(days=10), "wild boar"),
+                )
+            ],
+        )
+        cameras = [camera_map.Camera("camera1", 48.6, 9.0)]
+        with (
+            patch.object(camera_map, "read_camera_locations", return_value=cameras),
+            patch.object(
+                camera_map, "fetch_wind", side_effect=OSError("offline")
+            ) as fetch,
+            patch.object(
+                camera_map.ui if hasattr(camera_map, "ui") else gallery.ui, "timer"
+            ),
+        ):
+            async with self.app_user("/map") as user:
+                slider = next(iter(user.find(marker="sighting-days").elements))
+                self.assertEqual(slider.value, 7)
+                leaflet = next(iter(user.find(marker="camera-map").elements))
+                marker = next(
+                    layer
+                    for layer in leaflet.layers
+                    if layer.to_dict()["type"] == "circleMarker"
+                )
+                with patch.object(type(marker), "run_method") as marker_calls:
+                    user.find(marker="camera-map").trigger("init", {})
+                    label = marker_calls.call_args.args[1]
+                    self.assertIn('data-species="fox"', label)
+                    self.assertIn('data-species="badger"', label)
+                    self.assertNotIn('data-species="wild boar"', label)
+                    slider.set_value(1)
+                    label = marker_calls.call_args.args[1]
+                    self.assertIn('data-species="fox"', label)
+                    self.assertNotIn('data-species="badger"', label)
+                    await user.should_see("Sightings: last 1 day")
+                    self.assertEqual(slider.props["min"], 0)
+                    slider.set_value(0)
+                    label = marker_calls.call_args.args[1]
+                    self.assertNotIn("data-species=", label)
+                    self.assertIn("camera1", label)
+                    await user.should_see("Sightings: off")
+                    self.assertIn(marker, leaflet.layers)
+                    slider.set_value(7)
+                    label = marker_calls.call_args.args[1]
+                    self.assertIn('data-species="badger"', label)
+                    fetch.assert_called_once()
+
     async def test_camera_map_ranks_seats_and_draws_views(self):
         import pandas as pd
         from web import camera_map
@@ -696,6 +761,100 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     release.set()
                 await user.should_see("14.40 expected images")
                 self.assertEqual(calls[-1], "camera2")
+
+    async def test_visit_chart_offers_exports_only_for_visit_results(self):
+        directory = self.root / "filtered"
+        directory.mkdir()
+        visit_path = directory / "09_independent_visit_timelines.svg"
+        visit_path.write_text("<svg/>", encoding="utf-8")
+        for name in ("visits.csv", "visit_images.csv"):
+            (directory / name).write_text("visit_id\nexample\n", encoding="utf-8")
+        image_directory = self.root / "image-plots"
+        image_directory.mkdir()
+        image_path = image_directory / "09_individual_species_timelines.svg"
+        image_path.write_text("<svg/>", encoding="utf-8")
+        store = FakeFilteredPlotRunStore(self.root)
+        store.runs = [
+            SimpleNamespace(prompt="foxes", paths=[image_path]),
+            SimpleNamespace(prompt="foxes", paths=[visit_path]),
+        ]
+        self.patch_filtered_plot_store(store)
+        self.patch_run_store(FakeVisualisationRunStore())
+
+        async with self.app_user("/visualisations") as user:
+            await user.should_see(marker="download-visits")
+            await user.should_see(marker="download-visit-images")
+            selector = next(iter(user.find("Filtered SVGs").elements))
+            selector.set_value(str(image_path))
+            await user.should_not_see(marker="download-visits")
+            selector.set_value(str(visit_path))
+            await user.should_see(marker="download-visits")
+
+    async def test_visit_frames_on_home_and_gallery_keep_exif_order(self):
+        now = datetime.now().astimezone() - timedelta(minutes=1)
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "timestamp_exif", "class"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": name,
+                    "timestamp": (now + timedelta(minutes=minutes)).isoformat(),
+                    "timestamp_exif": (now - timedelta(minutes=minutes)).isoformat(),
+                    "class": species,
+                }
+                for name, minutes, species in (
+                    ("old.jpg", 60, "fox"),
+                    ("first.jpg", 20, "fox"),
+                    ("boar.jpg", 10, "wild boar"),
+                    ("last.jpg", 0, "fox"),
+                )
+            ],
+        )
+        visit_ids = []
+        with (
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer"),
+        ):
+            for path in ("/", "/gallery"):
+                async with self.app_user(path) as user:
+                    frames = sorted(
+                        user.find(marker="visit-frame").elements,
+                        key=lambda frame: frame.id,
+                    )
+                    self.assertEqual(
+                        [frame.props["data-image-file"] for frame in frames],
+                        ["last.jpg", "boar.jpg", "first.jpg", "old.jpg"],
+                    )
+                    self.assertEqual(
+                        frames[0].props["data-visit-id"],
+                        frames[2].props["data-visit-id"],
+                    )
+                    self.assertNotEqual(
+                        frames[0].props["data-visit-id"],
+                        frames[3].props["data-visit-id"],
+                    )
+                    self.assertEqual(
+                        frames[0].style["border"], frames[2].style["border"]
+                    )
+                    self.assertIn("gallery-thumbnail", frames[0].classes)
+                    self.assertNotEqual(
+                        frames[0].style["border"], frames[1].style["border"]
+                    )
+                    visit_ids.append([frame.props["data-visit-id"] for frame in frames])
+                    toggle = "recent-boxes" if path == "/" else "gallery-boxes"
+                    user.find(marker=toggle).click()
+                    refreshed = sorted(
+                        user.find(marker="visit-frame").elements,
+                        key=lambda frame: frame.id,
+                    )
+                    self.assertEqual(
+                        [frame.props["data-visit-id"] for frame in refreshed],
+                        visit_ids[-1],
+                    )
+        self.assertEqual(visit_ids[0], visit_ids[1])
 
     async def test_home_species_buttons_count_photos_and_survive_refresh(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
@@ -1019,7 +1178,27 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 timer.call_args_list[0].args[1]()
                 await user.should_see("1 images")
 
-    def test_original_capture_time_falls_back_to_filename_after_invalid_exif(self):
+    def test_original_capture_time_preserves_embedded_exif_offset(self):
+        import piexif
+
+        path = self.write_original_image("offset.jpg", datetime(2026, 10, 25, 2, 50))
+        exif = piexif.dump(
+            {
+                "Exif": {
+                    piexif.ExifIFD.DateTimeOriginal: b"2026:10:25 02:50:00",
+                    piexif.ExifIFD.OffsetTimeOriginal: b"+02:00",
+                }
+            }
+        )
+        Image.new("RGB", (16, 16), "green").save(path, exif=exif)
+
+        rows = gallery.rows_with_originals([], gallery.image_paths(self.source_images))
+
+        self.assertEqual(
+            gallery.row_datetime(rows[0]).isoformat(), "2026-10-25T02:50:00+02:00"
+        )
+
+    def test_original_with_invalid_exif_does_not_use_filename_time(self):
         taken = datetime(2026, 10, 30, 12, 45)
         path = self.write_original_image("Aufnahme_261030_1245_test.jpg", taken)
         with Image.open(path) as original:
@@ -1029,7 +1208,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             original.save(path, exif=exif)
         rows = gallery.rows_with_originals([], gallery.image_paths(self.source_images))
         self.assertEqual(len(rows), 1)
-        self.assertEqual(gallery.row_datetime(rows[0]), taken)
+        self.assertIsNone(gallery.row_datetime(rows[0]))
 
     async def test_gallery_shows_new_photos_without_label_rows(self):
         self.write_csv(
@@ -1336,6 +1515,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
                     "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                 }
             ],
             label_data.METADATA_COLUMNS,

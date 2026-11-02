@@ -31,7 +31,7 @@ def make_row(
         "location_id": location,
         "image_file": image_file,
         "timestamp": timestamp,
-        "timestamp_exif": "",
+        "timestamp_exif": timestamp,
         "class": label,
         "lighting": lighting,
         "temperature_celsius": temperature,
@@ -45,6 +45,55 @@ def parse(prompt):
 
 def names(rows):
     return [row["image_file"] for row in rows]
+
+
+class VisitFrameTests(unittest.TestCase):
+    def test_calendar_filters_use_berlin_dates_for_utc_exif(self):
+        row = make_row("new-year.jpg", "fox", "2023-12-31T23:30:00Z")
+
+        self.assertEqual(names(filter_rows([row], parse("in 2024"))), ["new-year.jpg"])
+        self.assertEqual(filter_rows([row], parse("in 2023")), [])
+        self.assertEqual(gallery.row_datetime(row).year, 2024)
+
+    def test_grouping_precedes_filters_and_preserves_input_order(self):
+        rows = [
+            make_row("last.jpg", "fox", "2026-10-30T12:50:00"),
+            make_row("first.jpg", "fox", "2026-10-30T12:00:00"),
+            make_row("middle.jpg", "fox", "2026-10-30T12:25:00"),
+            make_row("boar.jpg", "wild boar", "2026-10-30T12:30:00"),
+            make_row("next.jpg", "fox", "2026-10-30T13:20:00"),
+        ]
+        grouped = gallery.with_visit_groups(rows)
+
+        self.assertEqual(names(grouped), names(rows))
+        self.assertNotIn("_visit", rows[0])
+        self.assertEqual(grouped[0]["_visit"], grouped[1]["_visit"])
+        self.assertEqual(grouped[0]["_visit_colour"], grouped[2]["_visit_colour"])
+        self.assertNotEqual(grouped[0]["_visit_colour"], grouped[3]["_visit_colour"])
+        self.assertNotEqual(grouped[0]["_visit_colour"], grouped[4]["_visit_colour"])
+        limited = filter_rows(grouped, parse("only foxes latest 2"))
+        self.assertEqual(names(limited), ["next.jpg", "last.jpg"])
+        self.assertEqual(limited[1]["_visit"].image_count, 3)
+
+    def test_dates_and_sorting_never_fall_back_to_timestamp(self):
+        first = make_row("first.jpg", "fox", "2099-01-01T00:00:00")
+        first["timestamp_exif"] = "2026-10-30T12:00:00"
+        second = make_row("second.jpg", "fox", "1999-01-01T00:00:00")
+        second["timestamp_exif"] = "2026-10-30T12:10:00"
+        missing = make_row("missing.jpg", "fox", "2026-10-30T12:20:00")
+        missing["timestamp_exif"] = ""
+        invalid = make_row("invalid.jpg", "fox", "2026-10-30T12:30:00")
+        invalid["timestamp_exif"] = "bad"
+
+        rows = gallery.with_visit_groups([first, missing, second, invalid])
+
+        self.assertIsNone(gallery.row_datetime(missing))
+        self.assertIsNone(gallery.row_datetime(invalid))
+        self.assertNotIn("_visit", rows[1])
+        self.assertEqual(
+            names(filter_rows(rows, parse("only foxes"))),
+            ["second.jpg", "first.jpg", "missing.jpg", "invalid.jpg"],
+        )
 
 
 class RecentSightingsTests(unittest.TestCase):

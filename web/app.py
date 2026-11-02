@@ -53,6 +53,10 @@ def add_navigation(current_path: str) -> None:
         }
         a:not(.q-item):not(.q-btn) { color: #53675d; }
         a:not(.q-item):not(.q-btn):hover { color: #214a3a; }
+        .gallery-thumbnail:hover, .gallery-thumbnail:focus-within {
+            box-shadow: 0 0 0 2px #52694b66, 0 6px 16px #214a3a33;
+            filter: brightness(1.05);
+        }
         .q-drawer--mini .navigation-header {
             flex-direction: column;
             justify-content: center;
@@ -314,7 +318,7 @@ async def predictions_page() -> None:
 async def camera_map_page() -> None:
     add_navigation("/map")
     add_brand_logo()
-    await build_camera_map_page()
+    await build_camera_map_page(DEFAULT_CSV)
 
 
 @ui.page("/status")
@@ -462,11 +466,14 @@ def visualisations_page() -> None:
         selected_plot["path"] = selected_path
         with filtered_results:
             chart_image = {}
+            export_controls = ui.row().classes("gap-2")
             ui.select(
                 options,
                 value=selected_path,
                 label="Filtered SVGs",
-                on_change=lambda event: show_selected_plot(event, chart_image),
+                on_change=lambda event: show_selected_plot(
+                    event, chart_image, export_controls
+                ),
             ).classes("w-full")
             chart_image["element"] = ui.image(selected_path).classes("w-full max-w-6xl")
             ui.button(
@@ -474,10 +481,27 @@ def visualisations_page() -> None:
                 icon="delete",
                 on_click=remove_selected_plot,
             ).props("outline no-caps")
+            show_visit_exports(selected_path, export_controls)
 
-    def show_selected_plot(event, chart_image) -> None:
+    def show_visit_exports(selected_path, export_controls) -> None:
+        export_controls.clear()
+        with export_controls:
+            for name, title, marker in (
+                ("visits.csv", "Visits CSV", "download-visits"),
+                ("visit_images.csv", "Member images CSV", "download-visit-images"),
+            ):
+                path = Path(selected_path).parent / name
+                if path.is_file():
+                    ui.button(
+                        title,
+                        icon="download",
+                        on_click=lambda path=path: ui.download(path),
+                    ).props("outline no-caps").mark(marker)
+
+    def show_selected_plot(event, chart_image, export_controls) -> None:
         selected_plot["path"] = event.value
         chart_image["element"].set_source(event.value)
+        show_visit_exports(event.value, export_controls)
 
     async def remove_selected_plot() -> None:
         selected_path = selected_plot["path"]

@@ -33,12 +33,15 @@ from astral.sun import sun
 try:
     from ..labelling import label_data
     from ..labelling.species import RECENT_SPECIES
+    from ..visits import CAMERA_TIMEZONE, exif_datetime
 except ImportError:
     import sys
 
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from labelling import label_data
-    from labelling.species import RECENT_SPECIES
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from src.labelling import label_data
+    from src.labelling.species import RECENT_SPECIES
+    from src.visits import CAMERA_TIMEZONE, exif_datetime
+
 
 def _apply_manual_labels(dataframe: pd.DataFrame) -> pd.DataFrame:
     filtered = dataframe.copy()
@@ -135,10 +138,9 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
         "location_id",
         "lighting",
         "temperature_celsius",
+        "timestamp_exif",
     }
     missing_columns = required_columns.difference(df.columns)
-    if not {"timestamp", "timestamp_exif"}.intersection(df.columns):
-        missing_columns.add("timestamp or timestamp_exif")
     if df.empty:
         print(f"Error: Results file contains no rows: {csv_path}")
         return False
@@ -170,14 +172,14 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     print("\nFirst few rows:")
     print(df.head())
 
-    # Parse timestamps (EXIF preferred, OCR as fallback where EXIF is missing)
-    if {"timestamp_exif", "timestamp"}.issubset(df.columns):
-        timestamp_source = df["timestamp_exif"].fillna(df["timestamp"])
-    else:
-        timestamp_source = (
-            df["timestamp_exif"] if "timestamp_exif" in df else df["timestamp"]
-        )
-    df["timestamp"] = pd.to_datetime(timestamp_source, errors="coerce")
+    df["timestamp"] = pd.to_datetime(
+        [
+            taken.astimezone(CAMERA_TIMEZONE).replace(tzinfo=None)
+            if (taken := exif_datetime(row)) is not None
+            else None
+            for row in df.fillna("").to_dict("records")
+        ]
+    )
     df["hour"] = df["timestamp"].dt.hour
     df["date"] = df["timestamp"].dt.date
     df["weekday"] = df["timestamp"].dt.day_name()
@@ -616,14 +618,11 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
         )
 
         def get_sun_times(date):
-            """Get sunrise and sunset times in standard time (CET, UTC+1)."""
+            """Get sunrise and sunset in the camera's local time."""
             try:
-                import pytz
-
                 s = sun(location.observer, date=date)
-                standard_tz = pytz.timezone("Etc/GMT-1")
-                sunrise_standard = s["sunrise"].astimezone(standard_tz)
-                sunset_standard = s["sunset"].astimezone(standard_tz)
+                sunrise_standard = s["sunrise"].astimezone(CAMERA_TIMEZONE)
+                sunset_standard = s["sunset"].astimezone(CAMERA_TIMEZONE)
                 return sunrise_standard.replace(tzinfo=None), sunset_standard.replace(
                     tzinfo=None
                 )

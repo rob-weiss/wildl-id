@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,6 +9,54 @@ from web import camera_map
 
 
 class CameraMapTests(unittest.TestCase):
+    def test_zero_days_hides_even_current_species(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [{"location_id": "A", "class": "fox", "timestamp_exif": now.isoformat()}]
+
+        self.assertEqual(camera_map.recent_species_by_location(rows, 0, now), {})
+
+    def test_recent_species_use_exif_effective_labels_and_rolling_days(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [
+            {
+                "location_id": location,
+                "class": species,
+                "manual_label": manual,
+                "timestamp_exif": taken,
+                "timestamp": now.isoformat(),
+            }
+            for location, species, manual, taken in (
+                ("A", "fox", "", now.isoformat()),
+                ("A", "fox", "", (now - timedelta(hours=1)).isoformat()),
+                ("A", "human", "Badger", (now - timedelta(days=2)).isoformat()),
+                ("B", "wild boar", "", (now - timedelta(days=7)).isoformat()),
+                ("B", "roe deer", "", (now - timedelta(days=7, seconds=1)).isoformat()),
+                ("A", "fox", "human", now.isoformat()),
+                ("A", "fox", "", (now + timedelta(seconds=1)).isoformat()),
+                ("A", "marten", "", "bad"),
+                ("A", "hare", "", ""),
+                ("A", "squirrel", "", now.isoformat()),
+            )
+        ]
+
+        self.assertEqual(
+            camera_map.recent_species_by_location(rows, 7, now),
+            {"A": ("badger", "fox"), "B": ("wild boar",)},
+        )
+        self.assertEqual(
+            camera_map.recent_species_by_location(rows, 1, now), {"A": ("fox",)}
+        )
+
+    def test_sighting_marker_label_escapes_sites_and_names_species(self):
+        camera = camera_map.Camera("A <script>", 48.6, 9.0)
+        label = camera_map.sighting_marker_label(camera, ("badger", "fox"))
+
+        self.assertIn("A &lt;script&gt;", label)
+        self.assertNotIn("<script>", label)
+        self.assertIn('data-species="fox"', label)
+        self.assertIn('aria-label="badger"', label)
+        self.assertEqual(label.count('data-species="fox"'), 1)
+
     def write_locations(self, cameras):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)

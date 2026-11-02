@@ -146,6 +146,18 @@ class VisualizationCustomPathTests(unittest.TestCase):
         with patch.object(evaluate_module, "__file__", self.script_path):
             return evaluate_module.main(csv_path=csv_path, output_dir=output_dir)
 
+    def test_timestamp_only_csv_is_rejected_before_removing_output(self):
+        self.write_valid_csv()
+        rows = label_data.read_records(self.csv_path)
+        columns = tuple(column for column in rows[0] if column != "timestamp_exif")
+        label_data.write_records(self.csv_path, rows, columns)
+        self.output_dir.mkdir()
+        sentinel = self.output_dir / "keep.svg"
+        sentinel.write_text("previous results", encoding="utf-8")
+
+        self.assertIs(self.run_visualisation(self.csv_path, self.output_dir), False)
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "previous results")
+
     def test_main_uses_custom_paths_and_manual_labels(self):
         self.write_valid_csv()
 

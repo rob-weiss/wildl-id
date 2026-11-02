@@ -112,6 +112,21 @@ class VisualisationRunStoreTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FilteredPlotTests(unittest.TestCase):
+    def test_summer_capture_at_sunset_has_zero_solar_offset(self):
+        from astral.sun import sun
+        from src.visits import CAMERA_TIMEZONE
+
+        sunset = (
+            sun(visualisations.SUN_LOCATION.observer, date=date(2026, 7, 1))["sunset"]
+            .astimezone(CAMERA_TIMEZONE)
+            .replace(tzinfo=None)
+        )
+        frame = visualisations.pd.DataFrame([{"timestamp": sunset, "species": "fox"}])
+
+        solar = visualisations._add_solar_activity(frame)
+
+        self.assertAlmostEqual(solar["hours_from_sunset"].iloc[0], 0)
+
     def setUp(self):
         temporary_directory = tempfile.TemporaryDirectory()
         self.addCleanup(temporary_directory.cleanup)
@@ -144,13 +159,75 @@ class FilteredPlotTests(unittest.TestCase):
                         location,
                         filename,
                         timestamp,
-                        "",
+                        timestamp,
                         label,
                         manual_label,
                         "bright",
                         8,
                     ]
                 )
+
+    def test_visit_timeline_groups_before_filters_and_exports_members(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            writer = csv.writer(target)
+            for name, taken in (
+                ("fox-before.jpg", "2023-12-31T23:50:00"),
+                ("fox-crossing.jpg", "2024-01-01T00:10:00"),
+                ("fox-burst.jpg", "2024-01-15T08:20:00"),
+            ):
+                writer.writerow(
+                    [
+                        "camera1",
+                        name,
+                        "1999-01-01T00:00:00",
+                        taken,
+                        "fox",
+                        "",
+                        "bright",
+                        8,
+                    ]
+                )
+
+        frame = visualisations.filtered_activity_frame(
+            self.csv_path, "foxes in 2024 latest 1", independent_visits=True
+        )
+
+        self.assertEqual(len(frame), 2)
+        self.assertEqual(frame.attrs["count_unit"], "visits")
+        self.assertEqual(frame["timestamp"].dt.year.tolist(), [2024, 2024])
+        figure = visualisations._create_individual_timelines_figure(frame)
+        self.addCleanup(visualisations.plt.close, figure)
+        self.assertEqual(figure.axes[0].get_ylabel(), "Visits")
+        paths = visualisations.generate_filtered_plot_svgs(
+            self.csv_path, "foxes in 2024", "visit-timelines", self.output_directory
+        )
+        self.assertEqual(paths[0].name, "09_independent_visit_timelines.svg")
+        with (self.output_directory / "visits.csv").open(
+            newline="", encoding="utf-8"
+        ) as source:
+            summary = list(csv.DictReader(source))
+        with (self.output_directory / "visit_images.csv").open(
+            newline="", encoding="utf-8"
+        ) as source:
+            members = list(csv.DictReader(source))
+        self.assertEqual(len(summary), 2)
+        self.assertEqual(len(members), 3)
+        self.assertNotIn(
+            "fox-crossing.jpg", {member["image_file"] for member in members}
+        )
+
+    def test_activity_frame_rejects_timestamp_only_rows(self):
+        with self.csv_path.open(newline="", encoding="utf-8") as source:
+            rows = list(csv.DictReader(source))
+        for row in rows:
+            row["timestamp_exif"] = ""
+        with self.csv_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+
+        with self.assertRaisesRegex(ValueError, "No timestamped rows match"):
+            visualisations.filtered_activity_frame(self.csv_path, "foxes")
 
     def test_activity_frame_uses_filters_but_ignores_plot_order_and_limit(self):
         make_frame = getattr(visualisations, "filtered_activity_frame", None)
