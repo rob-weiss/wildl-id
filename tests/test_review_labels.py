@@ -450,6 +450,20 @@ class LabelReviewTests(unittest.TestCase):
             ["incorrect.jpg"],
         )
 
+    def test_latest_incorrect_excludes_predictions_matching_current_manual_label(self):
+        review = LabelReview(self.csv_path)
+        filename = "camera1_incorrect.jpg"
+        review.latest_incorrect_filenames.add(filename)
+        review.latest_predictions[filename] = {
+            "true_label": "jay",
+            "predicted_label": "hare",
+            "status": "incorrect",
+        }
+
+        review.set_mode("Latest model incorrect")
+
+        self.assertEqual(review.pending, [])
+
     def test_auto_label_unseen_button_is_not_rendered(self):
         app = review_app_module.ReviewApp(self.csv_path)
         with review_app_module.ui.column() as container:

@@ -294,9 +294,19 @@ class LabelReview:
             manual_label = str(row.get("manual_label") or "").strip()
             image_name = f"{row['location_id']}_{row['image_file']}"
             is_unseen = not manual_label
+            validation = self.latest_predictions.get(image_name, {})
+            current_label = manual_label or str(
+                validation.get("true_label") or ""
+            ).strip()
+            predicted_label = str(validation.get("predicted_label") or "").strip()
+            is_correct_now = (
+                bool(current_label and predicted_label)
+                and current_label.casefold() == predicted_label.casefold()
+            )
             is_latest_error = (
                 image_name in self.latest_incorrect_filenames
                 and image_name not in self.resolved_incorrect
+                and not is_correct_now
             )
             if self.mode == "Latest model incorrect":
                 if is_latest_error and image_name not in seen_latest_errors:
