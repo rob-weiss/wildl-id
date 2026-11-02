@@ -104,6 +104,80 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertEqual([row["image_file"] for row in logged], ["empty.jpg"])
         self.assertEqual(self.default_csv.read_bytes(), b"do not change")
 
+    def test_game_cleanup_selects_unique_human_labelled_images_only(self):
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": name,
+                "class": automatic,
+                "manual_label": manual,
+            }
+            for name, automatic, manual in (
+                ("cat.jpg", "fox", "cat"),
+                ("cat.jpg", "fox", "cat"),
+                ("fox.jpg", "cat", "fox"),
+                ("unseen.jpg", "cat", ""),
+                ("bird.jpg", "cat", "bird"),
+                ("legacy-bird.jpg", "cat", "owl"),
+                ("mixed.jpg", "fox", "cat"),
+                ("mixed.jpg", "cat", "fox"),
+                ("squirrel.jpg", "fox", "squirrel"),
+            )
+        ]
+        self.assertEqual(
+            empty_images_module.non_game_images(rows, {"fox"}),
+            {("camera1", "cat.jpg"): "cat", ("camera1", "squirrel.jpg"): "squirrel"},
+        )
+
+    def test_game_cleanup_removes_related_csv_rows_but_not_training_archives(self):
+        data = empty_images_module.label_data
+        related_paths = [
+            self.root / "labels/image_metadata.csv",
+            self.root / "labels/labels_model/predictions.csv",
+            self.root / "labels/labels_model/validation_predictions/predictions.csv",
+        ]
+        rows = [{"location_id": "camera1", "image_file": name} for name in self.names]
+        columns = ("location_id", "image_file")
+        for path in related_paths:
+            data.write_records(path, rows, columns)
+        archive = self.root / "models/model/training_data/labels.csv"
+        data.write_records(archive, rows, columns)
+        before_archive = archive.read_bytes()
+        before = self.csv_path.read_bytes()
+
+        count = empty_images_module.remove_empty_images(
+            csv_path=self.csv_path,
+            annotated_dir=self.annotated_dir,
+            expected_bytes=before,
+            keep_species={"fox"},
+        )
+
+        self.assertEqual(count, 2)
+        for name in self.names:
+            kept = name in {"unseen.jpg", "animal.jpg"}
+            self.assertEqual((self.original_dir / name).exists(), kept)
+            self.assertEqual((self.annotated_dir / f"camera1_{name}").exists(), kept)
+        self.assertEqual(
+            [row["image_file"] for row in data.read_records(self.csv_path)],
+            ["unseen.jpg", "animal.jpg"],
+        )
+        for path in related_paths:
+            self.assertEqual(
+                [row["image_file"] for row in data.read_records(path)],
+                ["unseen.jpg", "animal.jpg"],
+            )
+            self.assertTrue(
+                list(path.parent.glob(f"{path.name}.before-remove-empty-*.bak"))
+            )
+        self.assertEqual(archive.read_bytes(), before_archive)
+        self.assertEqual(
+            {
+                data.image_key(row)
+                for row in data.read_records(self.root / "labels/deleted_images.csv")
+            },
+            {("camera1", "empty.jpg"), ("camera1", "corrected.jpg")},
+        )
+
     def test_remove_empty_can_include_false_detections(self):
         count = empty_images_module.remove_empty_images(
             csv_path=self.csv_path,
@@ -118,6 +192,116 @@ class RemoveEmptyImagesTests(unittest.TestCase):
         self.assertEqual(
             [row["image_file"] for row in rows], ["unseen.jpg", "animal.jpg"]
         )
+
+    def test_game_cleanup_dry_run_changes_nothing(self):
+        before = self.csv_path.read_bytes()
+        count = empty_images_module.remove_empty_images(
+            dry_run=True,
+            csv_path=self.csv_path,
+            annotated_dir=self.annotated_dir,
+            keep_species={"fox"},
+        )
+        self.assertEqual(count, 2)
+        self.assertEqual(self.csv_path.read_bytes(), before)
+        self.assertTrue(all((self.original_dir / name).exists() for name in self.names))
+        self.assertFalse((self.root / "logs").exists())
+        self.assertFalse((self.root / "labels/deleted_images.csv").exists())
+
+    def test_game_cleanup_related_backup_failure_keeps_images_and_rows(self):
+        data = empty_images_module.label_data
+        related = self.root / "labels/image_metadata.csv"
+        data.write_records(
+            related,
+            [{"location_id": "camera1", "image_file": "empty.jpg"}],
+            data.METADATA_COLUMNS,
+        )
+        before = self.csv_path.read_bytes()
+        before_related = related.read_bytes()
+        backup_csv = empty_images_module.backup_csv
+
+        def backup(path, reason):
+            if path == related:
+                raise OSError("backup failed")
+            return backup_csv(path, reason)
+
+        with (
+            patch.object(empty_images_module, "backup_csv", side_effect=backup),
+            self.assertRaisesRegex(OSError, "backup failed"),
+        ):
+            empty_images_module.remove_empty_images(
+                csv_path=self.csv_path,
+                annotated_dir=self.annotated_dir,
+                keep_species={"fox"},
+            )
+        self.assertEqual(self.csv_path.read_bytes(), before)
+        self.assertEqual(related.read_bytes(), before_related)
+        self.assertTrue(all((self.original_dir / name).exists() for name in self.names))
+
+    def test_gui_game_cleanup_summarizes_classes_and_requires_confirmation(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerows(
+                [
+                    ["camera1", "cat.jpg", "fox", "cat"],
+                    ["camera1", "dog.jpg", "fox", "dog"],
+                    ["camera1", "dog.jpg", "fox", "dog"],
+                ]
+            )
+        app = self.build_app()
+        before = self.csv_path.read_bytes()
+        for confirmed in (False, True):
+
+            async def answer():
+                self.assertTrue(app.cleanup_dialog_open)
+                return confirmed
+
+            async def confirm():
+                with app.keep_game_button.parent_slot.parent:
+                    await app.confirm_keep_game_species()
+
+            with (
+                patch.object(
+                    review_app_module.ui.dialog,
+                    "__await__",
+                    lambda dialog: answer().__await__(),
+                ),
+                patch.object(
+                    review_app_module.ui, "table", wraps=review_app_module.ui.table
+                ) as table,
+                patch.object(app, "remove_empty", new_callable=AsyncMock) as remove,
+            ):
+                asyncio.run(confirm())
+                self.assertEqual(
+                    table.call_args.kwargs["rows"],
+                    [
+                        {"class": "cat", "images": 1},
+                        {"class": "dog", "images": 1},
+                        {"class": "none", "images": 2},
+                    ],
+                )
+                if confirmed:
+                    remove.assert_awaited_once_with(
+                        keep_species=review_app_module.GAME_SPECIES
+                    )
+                else:
+                    remove.assert_not_awaited()
+            self.assertFalse(app.cleanup_dialog_open)
+        self.assertEqual(self.csv_path.read_bytes(), before)
+        self.assertTrue(all((self.original_dir / name).exists() for name in self.names))
+
+    def test_gui_game_cleanup_reloads_rows_and_resets_undo(self):
+        app = self.build_app()
+        app.change_mode("All")
+        app.review.history.append((0, "none"))
+        app.box_history.append((0, ""))
+        with patch.object(review_app_module.ui, "notify"):
+            asyncio.run(app.remove_empty(keep_species={"fox"}))
+        self.assertEqual(
+            [row["image_file"] for row in app.review.rows], ["unseen.jpg", "animal.jpg"]
+        )
+        self.assertEqual(app.counter.text, "1 / 2")
+        self.assertEqual(app.review.mode, "All")
+        self.assertEqual(app.review.history, [])
+        self.assertEqual(app.box_history, [])
 
     def test_remove_empty_supports_human_only_csv_and_hides_deleted_predictions(self):
         data = import_module("src.labelling.label_data")

@@ -5,6 +5,9 @@ from pathlib import Path
 
 CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "relevant_species.json"
 RECENT_SPECIES = frozenset(json.loads(CONFIG_PATH.read_text(encoding="utf-8")))
+GAME_SPECIES = frozenset(
+    json.loads(CONFIG_PATH.with_name("game_species.json").read_text(encoding="utf-8"))
+)
 LABEL_EMOJIS = {
     "roe deer": "🦌",
     "red deer": "🦌",

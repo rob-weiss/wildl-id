@@ -5,6 +5,7 @@ import ast
 import html
 import math
 import textwrap
+from collections import Counter
 from pathlib import Path
 from urllib.parse import quote
 
@@ -12,7 +13,12 @@ from nicegui import events, run, ui
 from PIL import Image
 
 from .label_data import needs_model_review
-from .remove_empty_images import is_confirmed_empty, is_removable, remove_empty_images
+from .remove_empty_images import (
+    is_confirmed_empty,
+    is_removable,
+    non_game_images,
+    remove_empty_images,
+)
 from .review_labels import (
     DEFAULT_CSV,
     MODE_OPTIONS,
@@ -20,7 +26,7 @@ from .review_labels import (
     bounding_box_color,
     box_from_drag,
 )
-from .species import LABEL_EMOJIS
+from .species import GAME_SPECIES, LABEL_EMOJIS
 
 IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
 
@@ -61,7 +67,7 @@ def cloud_image_url(
 def parse_box(value):
     try:
         box = ast.literal_eval(value or "")
-    except (ValueError, SyntaxError, TypeError):
+    except ValueError, SyntaxError, TypeError:
         return None
     if not isinstance(box, (list, tuple)) or len(box) != 4:
         return None
@@ -297,6 +303,15 @@ class ReviewApp:
                                 "🗑️ Remove unknown",
                                 icon="help_outline",
                                 on_click=self.confirm_remove_unknown,
+                            )
+                            .props("outline no-caps")
+                            .classes("text-red-700")
+                        )
+                        self.keep_game_button = (
+                            ui.button(
+                                "Keep German game species",
+                                icon="delete_sweep",
+                                on_click=self.confirm_keep_game_species,
                             )
                             .props("outline no-caps")
                             .classes("text-red-700")
@@ -684,7 +699,68 @@ class ReviewApp:
             self.cleanup_dialog_open = False
             dialog.delete()
 
-    async def remove_empty(self, include_false_detections=False, label="none"):
+    async def confirm_keep_game_species(self):
+        if self.cleanup_dialog_open:
+            return
+        candidates = non_game_images(self.review.rows, GAME_SPECIES)
+        if not candidates:
+            ui.notify("No human-labelled images outside the keep list")
+            return
+        counts = Counter(candidates.values())
+        with (
+            ui.dialog().props("persistent") as dialog,
+            ui.card().classes("w-full max-w-xl"),
+        ):
+            ui.label("Remove non-game images?").classes("text-lg font-semibold")
+            ui.table(
+                columns=[
+                    {
+                        "name": "class",
+                        "label": "Class",
+                        "field": "class",
+                        "align": "left",
+                    },
+                    {"name": "images", "label": "Images to delete", "field": "images"},
+                ],
+                rows=[
+                    {"class": label, "images": count}
+                    for label, count in sorted(counts.items())
+                ],
+                row_key="class",
+            ).props("dense flat").classes("w-full max-h-80 overflow-auto")
+            ui.label("Unlabelled images and generic bird labels are kept.").classes(
+                "max-w-md"
+            )
+            ui.label(
+                f"{len(candidates)} original images and their annotations will be permanently deleted. "
+                "Matching CSV rows will be removed after backups are saved. Deleted paths will be logged."
+            ).classes("max-w-md")
+            with ui.row().classes("w-full justify-end"):
+                ui.button("Cancel", on_click=lambda: dialog.submit(False)).props(
+                    "flat no-caps"
+                )
+                ui.button(
+                    f"Delete {len(candidates)} images",
+                    icon="delete_forever",
+                    color="negative",
+                    on_click=lambda: dialog.submit(True),
+                ).props("no-caps")
+        self.cleanup_dialog_open = True
+        try:
+            if await dialog:
+                dialog.clear()
+                with dialog, ui.card():
+                    ui.spinner()
+                    ui.label("Removing non-game images...")
+                dialog.open()
+                await self.remove_empty(keep_species=GAME_SPECIES)
+        finally:
+            self.cleanup_dialog_open = False
+            dialog.delete()
+
+    async def remove_empty(
+        self, include_false_detections=False, label="none", keep_species=None
+    ):
         try:
             count = await run.io_bound(
                 remove_empty_images,
@@ -693,6 +769,7 @@ class ReviewApp:
                 expected_bytes=self.review.original_bytes,
                 include_false_detections=include_false_detections,
                 label=label,
+                keep_species=keep_species,
             )
             updated_review = LabelReview(self.review.csv_path, self.review.images_dir)
             updated_review.set_mode(self.review.mode)
@@ -705,7 +782,10 @@ class ReviewApp:
         self.image_size = None
         self.undo_box_button.disable()
         self.refresh()
-        ui.notify(f"Removed {count} images labelled {label}", type="positive")
+        description = (
+            "outside the keep list" if keep_species is not None else f"labelled {label}"
+        )
+        ui.notify(f"Removed {count} images {description}", type="positive")
 
     def undo_box(self):
         if not self.box_history:

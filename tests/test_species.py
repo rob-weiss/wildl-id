@@ -6,6 +6,33 @@ species = import_module("src.labelling.species")
 
 
 class RelevantSpeciesTests(unittest.TestCase):
+    def test_game_species_come_from_the_approved_configurable_keep_list(self):
+        configured = json.loads(
+            species.CONFIG_PATH.with_name("game_species.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(species.GAME_SPECIES, frozenset(configured))
+        self.assertEqual(
+            species.GAME_SPECIES,
+            {
+                "roe deer",
+                "red deer",
+                "fallow deer",
+                "wild boar",
+                "fox",
+                "badger",
+                "hare",
+                "marten",
+                "raccoon",
+                "mouflon",
+                "chamois",
+                "nutria",
+                "crow",
+                "pigeon",
+            },
+        )
+
     def test_normalize_species_keeps_crows_and_pigeons_separate_from_birds(self):
         for label in (
             "bird",

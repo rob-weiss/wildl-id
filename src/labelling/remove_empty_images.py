@@ -32,6 +32,7 @@ try:
         read_csv,
         rewrite_csv,
     )
+    from .species import normalize_species
 except ImportError:
     import label_data
     from label_data import backup_csv
@@ -47,6 +48,7 @@ except ImportError:
         read_csv,
         rewrite_csv,
     )
+    from species import normalize_species
 
 EMPTY_LABEL = "none"
 
@@ -61,6 +63,20 @@ def is_removable(row, label=EMPTY_LABEL, include_false_detections=False):
     if label == EMPTY_LABEL:
         return is_confirmed_empty(row, include_false_detections)
     return (row.get("manual_label") or "").strip() == label
+
+
+def non_game_images(rows, keep_species):
+    keep_species = {normalize_species(label) for label in keep_species} | {"", "bird"}
+    candidates = {}
+    protected = set()
+    for row in rows:
+        key = label_data.image_key(row)
+        label = normalize_species(row.get("manual_label") or "")
+        if label in keep_species:
+            protected.add(key)
+        else:
+            candidates[key] = label
+    return {key: label for key, label in candidates.items() if key not in protected}
 
 
 def annotated_paths(removed, annotated_dir=None):
@@ -91,6 +107,7 @@ def remove_empty_images(
     expected_bytes=None,
     include_false_detections=False,
     label=EMPTY_LABEL,
+    keep_species=None,
 ):
     csv_path = Path(csv_path) if csv_path is not None else CSV_PATH
     if not csv_path.exists():
@@ -112,9 +129,14 @@ def remove_empty_images(
     review_rows = (
         label_data.load_rows(csv_path) if csv_path.name == "human_labels.csv" else rows
     )
-    for row in review_rows:
-        if is_removable(row, label, include_false_detections):
-            removed.add((nfc(row["location_id"]), row["image_file"]))
+    if keep_species is not None:
+        if not keep_species:
+            raise ValueError("Keep-species list must not be empty")
+        removed = set(non_game_images(review_rows, keep_species))
+    else:
+        for row in review_rows:
+            if is_removable(row, label, include_false_detections):
+                removed.add((nfc(row["location_id"]), row["image_file"]))
     kept = [
         row
         for row in rows
@@ -126,8 +148,11 @@ def remove_empty_images(
     annotated = annotated_paths(removed, annotated_dir)
     size = sum(path.stat().st_size for path in files + annotated)
     verb = "Would delete" if dry_run else "Deleting"
+    description = (
+        "outside the keep list" if keep_species is not None else f"labelled {label}"
+    )
     print(
-        f"{verb} {len(removed)} images labelled {label} "
+        f"{verb} {len(removed)} images {description} "
         f"({len(files)} found in {IMAGES_DIR.relative_to(REPO_DIR)}/, "
         f"{len(annotated)} annotated images)"
     )
@@ -137,6 +162,22 @@ def remove_empty_images(
     if not removed:
         return 0
 
+    csv_updates = []
+    deleted_path = REPO_DIR / "labels/deleted_images.csv"
+    if keep_species is not None:
+        for path in sorted((REPO_DIR / "labels").rglob("*.csv")):
+            if path.resolve() == csv_path.resolve() or path == deleted_path:
+                continue
+            original = path.read_bytes()
+            columns, related_rows = read_csv(path)
+            if not {"location_id", "image_file"}.issubset(columns):
+                continue
+            retained = [
+                row for row in related_rows if label_data.image_key(row) not in removed
+            ]
+            if len(retained) != len(related_rows):
+                csv_updates.append((path, original, columns, retained))
+
     if csv_path.read_bytes() != original_bytes:
         raise RuntimeError(
             "CSV changed during cleanup. Close and reopen it before removing images."
@@ -145,6 +186,16 @@ def remove_empty_images(
     LOG_DIR.mkdir(exist_ok=True)
     stamp = f"{datetime.now():%Y%m%d-%H%M%S-%f}"
     backup = backup_csv(csv_path, "remove-empty")
+    for path, original, _, _ in csv_updates:
+        if path.read_bytes() != original:
+            raise RuntimeError("CSV changed during cleanup; reopen the reviewer")
+        backup_csv(path, "remove-empty")
+    if keep_species is not None and deleted_path.exists():
+        backup_csv(deleted_path, "remove-empty")
+    if csv_path.read_bytes() != original_bytes or any(
+        path.read_bytes() != original for path, original, _, _ in csv_updates
+    ):
+        raise RuntimeError("CSV changed during cleanup; reopen the reviewer")
     log_path = LOG_DIR / f"remove_empty_images_{stamp}.csv"
     with log_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f, lineterminator="\n")
@@ -155,8 +206,9 @@ def remove_empty_images(
             writer.writerow([location, name, relative])
     print(f"Deleted paths written to {log_path.relative_to(REPO_DIR)}")
 
-    if csv_path.name == "human_labels.csv":
-        deleted_path = csv_path.parent / "deleted_images.csv"
+    if csv_path.name == "human_labels.csv" or keep_species is not None:
+        if csv_path.name == "human_labels.csv":
+            deleted_path = csv_path.parent / "deleted_images.csv"
         deleted = {
             label_data.image_key(row) for row in label_data.read_records(deleted_path)
         } | removed
@@ -169,10 +221,20 @@ def remove_empty_images(
             ("location_id", "image_file"),
         )
 
+    for path, original, columns, retained in csv_updates:
+        label_data.write_records(
+            path,
+            retained,
+            columns,
+            quoting=csv.QUOTE_ALL if original.startswith(b'"') else csv.QUOTE_MINIMAL,
+        )
+    if keep_species is not None:
+        rewrite_csv(csv_path, kept, fieldnames)
     for path in files + annotated:
         path.unlink()
 
-    rewrite_csv(csv_path, kept, fieldnames)
+    if keep_species is None:
+        rewrite_csv(csv_path, kept, fieldnames)
     print(
         f"CSV: {len(removed)} rows dropped; backup: {backup.name if backup else 'existing identical snapshot'}"
     )
