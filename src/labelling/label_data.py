@@ -150,7 +150,7 @@ def read_records(path):
         return list(csv.DictReader(source))
 
 
-def write_records(path, rows, columns):
+def write_records(path, rows, columns, quoting=csv.QUOTE_MINIMAL):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = None
@@ -164,6 +164,7 @@ def write_records(path, rows, columns):
                 fieldnames=columns,
                 extrasaction="ignore",
                 lineterminator="\n",
+                quoting=quoting,
             )
             writer.writeheader()
             writer.writerows(rows)
@@ -187,7 +188,9 @@ def save_image_metadata(repo_dir, rows):
             else previous.get(column, "")
             for column in METADATA_COLUMNS
         }
-    write_records(path, indexed.values(), METADATA_COLUMNS)
+    write_records(
+        path, indexed.values(), METADATA_COLUMNS, quoting=csv.QUOTE_ALL
+    )
 
 
 def migrate_human_labels(repo_dir=REPO_DIR):

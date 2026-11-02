@@ -19,31 +19,9 @@ from .review_labels import (
     bounding_box_color,
     box_from_drag,
 )
+from .species import LABEL_EMOJIS
 
 IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
-LABEL_EMOJIS = {
-    "roe deer": "🦌",
-    "red deer": "🦌",
-    "wild boar": "🐗",
-    "pigeon": "🐦",
-    "badger": "🦡",
-    "dog": "🐕",
-    "fox": "🦊",
-    "hare": "🐇",
-    "squirrel": "🐿️",
-    "jay": "🐦",
-    "raccoon": "🦝",
-    "crow": "🐦‍⬛",
-    "human": "🧍",
-    "none": "🚫",
-    "unknown": "❓",
-    "cat": "🐈",
-    "vehicle": "🚗",
-    "song bird": "🐦",
-    "other bird": "🐦",
-    "marten": "🦦",
-}
-
 
 def display_label(label):
     label = str(label).strip()

@@ -20,14 +20,22 @@ try:
     from ..labelling import label_data
     from ..labelling.label_data import DATE_FORMAT
     from ..labelling.organize_images import IMAGES_DIR, image_paths
-    from ..labelling.species import RECENT_SPECIES
+    from ..labelling.species import (
+        RECENT_SPECIES,
+        pluralize_species,
+        species_emoji,
+    )
     from . import notification_log
 except ImportError:
     from alerting import notification_log
     from labelling import label_data
     from labelling.label_data import DATE_FORMAT
     from labelling.organize_images import IMAGES_DIR, image_paths
-    from labelling.species import RECENT_SPECIES
+    from labelling.species import (
+        RECENT_SPECIES,
+        pluralize_species,
+        species_emoji,
+    )
 
 CONFIG_PATH = Path.home() / ".config/wildl-id/push-alerts.json"
 STATE_PATH = Path.home() / "Library/Application Support/wildl-id/push-alerts/state.json"
@@ -227,9 +235,11 @@ def _load_analyser(min_confidence):
 
 def alert_text(alert):
     local_time = alert.captured.astimezone(LOCAL_TIME)
-    title = f"{alert.species.capitalize()} at {alert.location}"
+    species = pluralize_species(alert.species, alert.count)
+    emoji = species_emoji(alert.species)
+    title = f"{emoji} {species.capitalize()} at {alert.location}"
     message = (
-        f"{alert.count} {alert.species} at {local_time:%H:%M} "
+        f"{alert.count} {emoji} {species} at {local_time:%H:%M} "
         f"({local_time:{DATE_FORMAT}})"
     )
     return title, message

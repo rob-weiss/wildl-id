@@ -10,12 +10,39 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
-from src.labelling import label_images
+from src.labelling import label_data, label_images
 
 wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_image_metadata_keeps_quoted_csv_format(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo_root = Path(directory)
+            label_data.save_image_metadata(
+                repo_root,
+                [
+                    {
+                        "location_id": "camera",
+                        "image_file": "photo.jpg",
+                        "timestamp": "2026-11-02T12:00:00",
+                        "timestamp_exif": "2026-11-02T12:00:00",
+                        "lighting": "bright",
+                        "temperature_celsius": "12.0",
+                    }
+                ],
+            )
+
+            self.assertEqual(
+                (repo_root / "labels/image_metadata.csv").read_text(
+                    encoding="utf-8"
+                ),
+                '"location_id","image_file","timestamp","timestamp_exif",'
+                '"lighting","temperature_celsius"\n'
+                '"camera","photo.jpg","2026-11-02T12:00:00",'
+                '"2026-11-02T12:00:00","bright","12.0"\n',
+            )
+
     def test_ocr_disabled_by_default_preserves_exif_timestamp(self):
         self.assertFalse(label_images.enable_ocr)
         with tempfile.TemporaryDirectory() as directory:
