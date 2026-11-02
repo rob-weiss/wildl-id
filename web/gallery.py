@@ -626,7 +626,9 @@ def filter_rows(rows, gallery_filter, now=None):
         if f.reviewed is not None and bool(manual_label) != f.reviewed:
             continue
         if f.misclassified:
-            if not label_data.needs_model_review(row, row.get("_validation_prediction")):
+            if not label_data.needs_model_review(
+                row, row.get("_validation_prediction")
+            ):
                 continue
         if (
             f.lighting
@@ -727,7 +729,9 @@ def image_source(row, local_images, images_dir, base_url):
 def load_rows(csv_path):
     if Path(csv_path).name == "human_labels.csv":
         repo_dir = Path(csv_path).parent.parent
-        run_name = label_data.predictions_path(repo_dir).parent.name.removeprefix("labels_")
+        run_name = label_data.predictions_path(repo_dir).parent.name.removeprefix(
+            "labels_"
+        )
         validation = load_validation_predictions(run_name, repo_dir / "models")
         rows = label_data.load_rows(csv_path)
         for row in rows:

@@ -589,9 +589,13 @@ class LabelReviewTests(unittest.TestCase):
             patch.object(
                 review_module,
                 "load_validation_predictions",
-                return_value={"camera1_incorrect.jpg": {
-                    "true_label": "hare", "predicted_label": "fox", "status": "incorrect"
-                }},
+                return_value={
+                    "camera1_incorrect.jpg": {
+                        "true_label": "hare",
+                        "predicted_label": "fox",
+                        "status": "incorrect",
+                    }
+                },
             ),
         ):
             review = LabelReview(human_csv)
@@ -604,9 +608,9 @@ class LabelReviewTests(unittest.TestCase):
             patch.object(
                 Path, "write_bytes", side_effect=AssertionError("non-atomic rollback")
             ),
+            self.assertRaisesRegex(OSError, "disk full"),
         ):
-            with self.assertRaisesRegex(OSError, "disk full"):
-                review.choose("fox")
+            review.choose("fox")
         self.assertEqual(human_csv.read_bytes(), original)
         self.assertEqual(review.rows[0]["manual_label"], "hare")
         self.assertEqual(review.pending, [0])
@@ -638,22 +642,39 @@ class LabelReviewTests(unittest.TestCase):
         weights.touch()
         humans = [
             {"location_id": "camera1", "image_file": name, "manual_label": "fox"}
-            for name in ("inference.jpg", "validation.jpg", "reviewed.jpg", "correct.jpg")
+            for name in (
+                "inference.jpg",
+                "validation.jpg",
+                "reviewed.jpg",
+                "correct.jpg",
+            )
         ]
         data.write_records(human, [*humans, humans[0].copy()], data.HUMAN_COLUMNS)
         data.write_records(
             data.predictions_path(root, run),
             [
-                {**row, "class": "hare" if row["image_file"] in {"inference.jpg", "reviewed.jpg"} else "fox",
-                 "reviewed": "true" if row["image_file"] == "reviewed.jpg" else ""}
+                {
+                    **row,
+                    "class": "hare"
+                    if row["image_file"] in {"inference.jpg", "reviewed.jpg"}
+                    else "fox",
+                    "reviewed": "true" if row["image_file"] == "reviewed.jpg" else "",
+                }
                 for row in humans
             ],
             data.PREDICTION_COLUMNS,
         )
         data.write_records(
             data.validation_predictions_dir(root, run) / "predictions.csv",
-            [{"location_id": "camera1", "image_file": "validation.jpg", "true_label": "fox",
-              "predicted_label": "hare", "status": "incorrect"}],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "validation.jpg",
+                    "true_label": "fox",
+                    "predicted_label": "hare",
+                    "status": "incorrect",
+                }
+            ],
             ("location_id", "image_file", "true_label", "predicted_label", "status"),
         )
 
@@ -669,7 +690,9 @@ class LabelReviewTests(unittest.TestCase):
             review = LabelReview(human)
         review.set_mode("Latest model incorrect")
         expected = {"inference.jpg", "validation.jpg"}
-        self.assertEqual({review.rows[index]["image_file"] for index in review.pending}, expected)
+        self.assertEqual(
+            {review.rows[index]["image_file"] for index in review.pending}, expected
+        )
         self.assertEqual(gallery_names(), expected)
         self.assertEqual(review.latest_model_name, run)
         review.choose("fox")
@@ -677,10 +700,15 @@ class LabelReviewTests(unittest.TestCase):
         with patch.object(review_module, "image_paths", return_value={}):
             reopened = LabelReview(human)
         reopened.set_mode("Latest model incorrect")
-        self.assertEqual([reopened.rows[index]["image_file"] for index in reopened.pending], ["validation.jpg"])
+        self.assertEqual(
+            [reopened.rows[index]["image_file"] for index in reopened.pending],
+            ["validation.jpg"],
+        )
         review.undo()
         self.assertEqual(gallery_names(), expected)
-        self.assertEqual({review.rows[index]["image_file"] for index in review.pending}, expected)
+        self.assertEqual(
+            {review.rows[index]["image_file"] for index in review.pending}, expected
+        )
         review.choose("fox")
         newer = "deepfaune_finetuned_20261102-130000_new"
         newer_weights = root / "models" / newer / "weights.pt"
@@ -688,8 +716,15 @@ class LabelReviewTests(unittest.TestCase):
         newer_weights.touch()
         data.write_records(
             data.predictions_path(root, newer),
-            [{**row, "class": "hare" if row["image_file"] in {"inference.jpg", "reviewed.jpg"} else "fox"}
-             for row in humans],
+            [
+                {
+                    **row,
+                    "class": "hare"
+                    if row["image_file"] in {"inference.jpg", "reviewed.jpg"}
+                    else "fox",
+                }
+                for row in humans
+            ],
             data.PREDICTION_COLUMNS,
         )
         with patch.object(review_module, "image_paths", return_value={}):
@@ -698,7 +733,9 @@ class LabelReviewTests(unittest.TestCase):
         self.assertEqual(fresh.latest_model_name, newer)
         expected_new = {"inference.jpg", "reviewed.jpg"}
         self.assertEqual(gallery_names(), expected_new)
-        self.assertEqual({fresh.rows[index]["image_file"] for index in fresh.pending}, expected_new)
+        self.assertEqual(
+            {fresh.rows[index]["image_file"] for index in fresh.pending}, expected_new
+        )
 
     def test_pretrained_model_review_flags_persist_without_finetuned_weights(self):
         from web import gallery
@@ -706,20 +743,39 @@ class LabelReviewTests(unittest.TestCase):
         data = review_module.label_data
         root = Path(self.temp_dir.name)
         human = root / "labels/human_labels.csv"
-        row = {"location_id": "camera1", "image_file": "photo.jpg", "manual_label": "fox"}
+        row = {
+            "location_id": "camera1",
+            "image_file": "photo.jpg",
+            "manual_label": "fox",
+        }
         data.write_records(human, [row], data.HUMAN_COLUMNS)
-        data.write_records(data.predictions_path(root), [{**row, "class": "hare"}], data.PREDICTION_COLUMNS)
+        data.write_records(
+            data.predictions_path(root),
+            [{**row, "class": "hare"}],
+            data.PREDICTION_COLUMNS,
+        )
         with (
             patch.object(review_module, "image_paths", return_value={}),
-            patch.object(review_module, "latest_incorrect_predictions", return_value=(None, set())),
+            patch.object(
+                review_module,
+                "latest_incorrect_predictions",
+                return_value=(None, set()),
+            ),
             patch.object(review_module, "load_validation_predictions", return_value={}),
         ):
             review = LabelReview(human)
         review.set_mode("Latest model incorrect")
         self.assertEqual(review.pending, [0])
         review.choose("fox")
-        self.assertEqual(data.read_records(data.predictions_path(root))[0]["reviewed"], "true")
-        self.assertEqual(gallery.filter_rows(gallery.load_rows(human), gallery.parse_filter_prompt("misclassified")), [])
+        self.assertEqual(
+            data.read_records(data.predictions_path(root))[0]["reviewed"], "true"
+        )
+        self.assertEqual(
+            gallery.filter_rows(
+                gallery.load_rows(human), gallery.parse_filter_prompt("misclassified")
+            ),
+            [],
+        )
 
     def test_auto_label_unseen_button_is_not_rendered(self):
         app = review_app_module.ReviewApp(self.csv_path)
@@ -1058,7 +1114,9 @@ class LabelReviewTests(unittest.TestCase):
         app = review_app_module.ReviewApp(self.csv_path)
         row = app.review.rows[2]
         app.review.latest_predictions["camera1_incorrect.jpg"] = {
-            "true_label": "hare", "predicted_label": "hare", "status": "correct"
+            "true_label": "hare",
+            "predicted_label": "hare",
+            "status": "correct",
         }
         for mode in ("Latest model incorrect", "Unseen + errors"):
             with self.subTest(mode=mode):

@@ -1059,8 +1059,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with self.app_user("/gallery") as user:
                 await user.should_see("3 images · all images")
-                await user.should_not_see(kind=ui.switch, content="Relevant species only")
-                relevant = next(iter(user.find(kind=ui.button, content="Relevant species only").elements))
+                await user.should_not_see(
+                    kind=ui.switch, content="Relevant species only"
+                )
+                relevant = next(
+                    iter(
+                        user.find(
+                            kind=ui.button, content="Relevant species only"
+                        ).elements
+                    )
+                )
                 self.assertEqual(relevant.parent_slot.children[0], relevant)
                 user.find(kind=ui.button, content="Relevant species only").click()
                 await user.should_see("1 images · relevant species")

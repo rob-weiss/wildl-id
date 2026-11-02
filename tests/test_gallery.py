@@ -113,12 +113,18 @@ class SmartFilterTests(unittest.TestCase):
     def test_relevant_species_prompt_uses_effective_manual_labels(self):
         rows = [
             make_row(f"{label}.jpg", label, "2026-10-29T12:00:00")
-            for label in sorted(set(gallery.RECENT_SPECIES) | {"squirrel", "human", "none"})
+            for label in sorted(
+                set(gallery.RECENT_SPECIES) | {"squirrel", "human", "none"}
+            )
         ]
         rows.extend(
             [
-                make_row("corrected.jpg", "human", "2026-10-29T12:00:00", manual_label="Fox"),
-                make_row("excluded.jpg", "fox", "2026-10-29T12:00:00", manual_label="human"),
+                make_row(
+                    "corrected.jpg", "human", "2026-10-29T12:00:00", manual_label="Fox"
+                ),
+                make_row(
+                    "excluded.jpg", "fox", "2026-10-29T12:00:00", manual_label="human"
+                ),
             ]
         )
 
@@ -137,12 +143,16 @@ class SmartFilterTests(unittest.TestCase):
         rows = [
             make_row("badger.jpg", "badger", "2026-10-29T12:00:00", lighting="dark"),
             make_row("fox.jpg", "fox", "2026-10-29T12:00:00", lighting="dark"),
-            make_row("squirrel.jpg", "squirrel", "2026-10-29T12:00:00", lighting="dark"),
+            make_row(
+                "squirrel.jpg", "squirrel", "2026-10-29T12:00:00", lighting="dark"
+            ),
             make_row("old.jpg", "badger", "2026-10-01T12:00:00", lighting="dark"),
             make_row("day.jpg", "badger", "2026-10-29T12:00:00"),
         ]
 
-        gallery_filter = parse("Relevant species only at night last 7 days except foxes")
+        gallery_filter = parse(
+            "Relevant species only at night last 7 days except foxes"
+        )
 
         self.assertEqual(names(filter_rows(rows, gallery_filter)), ["badger.jpg"])
 

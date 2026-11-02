@@ -27,7 +27,9 @@ class LabelDataTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
 
-    def test_pending_model_errors_merge_inference_and_validation_and_skip_reviewed(self):
+    def test_pending_model_errors_merge_inference_and_validation_and_skip_reviewed(
+        self,
+    ):
         cases = [
             ({"manual_label": "fox", "class": "hare"}, None, True),
             ({"manual_label": "fox", "class": "fox"}, None, False),
@@ -53,7 +55,9 @@ class LabelDataTests(unittest.TestCase):
         ]
         for row, validation, expected in cases:
             with self.subTest(row=row, validation=validation):
-                self.assertEqual(label_data.needs_model_review(row, validation), expected)
+                self.assertEqual(
+                    label_data.needs_model_review(row, validation), expected
+                )
 
     def test_backup_retention_keeps_five_newest_distinct_states(self):
         self.write(
@@ -291,11 +295,13 @@ class LabelDataTests(unittest.TestCase):
             ],
         )
         original = self.human.read_bytes()
-        with patch.object(
-            label_data, "save_prediction_reviews", side_effect=OSError("disk full")
+        with (
+            patch.object(
+                label_data, "save_prediction_reviews", side_effect=OSError("disk full")
+            ),
+            self.assertRaisesRegex(OSError, "disk full"),
         ):
-            with self.assertRaisesRegex(OSError, "disk full"):
-                label_data.migrate_review_status(self.root)
+            label_data.migrate_review_status(self.root)
         self.assertEqual(self.human.read_bytes(), original)
         label_data.migrate_review_status(self.root)
         self.assertEqual(

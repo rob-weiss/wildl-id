@@ -275,19 +275,24 @@ class LabelReview:
             row.update(location_id=location_id, image_file=image_file)
             self.rows.append(row)
         if self.human_only:
-            self.latest_model_name = label_data.predictions_path(repo_dir).parent.name.removeprefix("labels_")
+            self.latest_model_name = label_data.predictions_path(
+                repo_dir
+            ).parent.name.removeprefix("labels_")
             self.latest_predictions = load_validation_predictions(
                 self.latest_model_name, repo_dir / "models"
             )
             self.latest_incorrect_filenames = {
-                name for name, row in self.latest_predictions.items()
+                name
+                for name, row in self.latest_predictions.items()
                 if row.get("status") == "incorrect"
             }
         else:
             self.latest_model_name, self.latest_incorrect_filenames = (
                 latest_incorrect_predictions()
             )
-            self.latest_predictions = load_validation_predictions(self.latest_model_name)
+            self.latest_predictions = load_validation_predictions(
+                self.latest_model_name
+            )
         self.capture_rank = capture_order(self.rows)
         self.review_predictions_path = (
             label_data.predictions_path(repo_dir, self.latest_model_name)
@@ -498,7 +503,9 @@ class LabelReview:
         was_resolved = image_name in self.resolved_incorrect
         reviewing_error = self.mode == "Latest model incorrect" or (
             self.mode == "Unseen + errors"
-            and label_data.needs_model_review(row, self.latest_predictions.get(image_name))
+            and label_data.needs_model_review(
+                row, self.latest_predictions.get(image_name)
+            )
         )
         row["manual_label"] = label
         if reviewing_error:
