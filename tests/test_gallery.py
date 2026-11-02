@@ -14,7 +14,7 @@ from web.gallery import (
 )
 
 TODAY = date(2026, 10, 30)
-LABELS = {"wild boar", "fox", "badger", "roe deer", "red deer", "jay"}
+LABELS = {"wild boar", "fox", "badger", "roe deer", "red deer", "other bird"}
 LOCATIONS = {"Douglasien", "Madenhäule", "Sauloch hinten", "Sauloch vorne"}
 
 
@@ -248,7 +248,7 @@ class SmartFilterTests(unittest.TestCase):
         self.assertEqual(parse("all deer").labels, {"roe deer", "red deer"})
         self.assertEqual(
             parse("birds").labels,
-            {"pigeon", "jay", "crow", "song bird", "other bird"},
+            {"pigeon", "crow", "song bird", "other bird"},
         )
 
     def test_negated_labels_and_locations(self):
@@ -320,7 +320,7 @@ class SmartFilterTests(unittest.TestCase):
         rows = [
             make_row("a.jpg", "fox", "2025-01-01T00:00:00", manual_label="badger"),
             make_row("b.jpg", "fox", "2025-01-02T00:00:00", manual_label="fox"),
-            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="jay"),
+            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="other bird"),
         ]
 
         self.assertEqual(
@@ -333,7 +333,7 @@ class SmartFilterTests(unittest.TestCase):
         rows = [
             make_row("a.jpg", "", "2025-01-01T00:00:00", manual_label="badger"),
             make_row("b.jpg", "unknown", "2025-01-02T00:00:00", manual_label="fox"),
-            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="jay"),
+            make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="other bird"),
         ]
 
         self.assertEqual(names(filter_rows(rows, parse("misclassified"))), ["c.jpg"])

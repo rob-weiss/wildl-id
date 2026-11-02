@@ -408,7 +408,7 @@ again to save it. Press **Backspace** to undo the last label.
 
 Shortcuts: `r` roe deer, `w` wild boar, `p` pigeon, `b` badger, `m` marten,
 `g` other bird,
-`d` dog, `f` fox, `h` hare, `s` squirrel, `j` jay, `o` raccoon, `c` crow,
+`d` dog, `f` fox, `h` hare, `s` squirrel, `o` raccoon, `c` crow,
 `a` human, `n` none, `u` unknown, `t` cat, `v` vehicle.
 Additional labels receive their own displayed shortcut.
 

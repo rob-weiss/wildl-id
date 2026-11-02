@@ -15,7 +15,6 @@ LABEL_EMOJIS = {
     "fox": "🦊",
     "hare": "🐇",
     "squirrel": "🐿️",
-    "jay": "🐦",
     "raccoon": "🦝",
     "crow": "🐦‍⬛",
     "human": "🧍",

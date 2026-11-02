@@ -42,7 +42,6 @@ SHORTCUTS = {
     "f": "fox",
     "h": "hare",
     "s": "squirrel",
-    "j": "jay",
     "o": "raccoon",
     "c": "crow",
     "a": "human",

@@ -455,7 +455,7 @@ class LabelReviewTests(unittest.TestCase):
         filename = "camera1_incorrect.jpg"
         review.latest_incorrect_filenames.add(filename)
         review.latest_predictions[filename] = {
-            "true_label": "jay",
+            "true_label": "other bird",
             "predicted_label": "hare",
             "status": "incorrect",
         }
@@ -1304,7 +1304,7 @@ class LabelReviewTests(unittest.TestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "incorrect.jpg",
-                    "true_label": "jay",
+                    "true_label": "other bird",
                     "predicted_label": "song bird",
                     "status": "incorrect",
                 }
@@ -1320,20 +1320,20 @@ class LabelReviewTests(unittest.TestCase):
 
     def test_box_overlay_displays_latest_finetuned_prediction(self):
         row = {
-            "class": "jay",
-            "manual_label": "jay",
+            "class": "other bird",
+            "manual_label": "other bird",
             "box": "[0.5, 0.5, 0.4, 0.4]",
         }
         prediction = {
-            "true_label": "jay",
+            "true_label": "other bird",
             "predicted_label": "song bird",
             "status": "incorrect",
         }
 
         overlay = review_app_module.box_overlay_svg(row, (4000, 3000), prediction)
 
-        self.assertIn("🏷️ True: 🐦 jay | Predicted: 🐦 song bird", overlay)
-        self.assertNotIn("🏷️ True: 🐦 jay | Predicted: 🐦 jay", overlay)
+        self.assertIn("🏷️ True: 🐦 other bird | Predicted: 🐦 song bird", overlay)
+        self.assertNotIn("🏷️ True: 🐦 other bird | Predicted: 🐦 other bird", overlay)
         self.assertIn('stroke-width="4"', overlay)
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
         self.assertIn('font-size="16"', overlay)
@@ -1392,7 +1392,7 @@ class LabelReviewTests(unittest.TestCase):
 
     def test_box_overlay_wraps_long_annotation_without_shrinking_text(self):
         row = {
-            "class": "jay",
+            "class": "other bird",
             "manual_label": "pigeon",
             "box": "[0.5, 0.5, 0.4, 0.4]",
         }
@@ -1403,11 +1403,11 @@ class LabelReviewTests(unittest.TestCase):
         annotation = root.find("g")
         text = annotation.find("text")
         self.assertEqual(text.get("font-size"), "16")
-        self.assertEqual(len(text.findall("tspan")), 2)
-        self.assertEqual(annotation.find("rect").get("height"), "48")
+        self.assertEqual(len(text.findall("tspan")), 3)
+        self.assertEqual(annotation.find("rect").get("height"), "72")
         self.assertEqual(
             " ".join(text.itertext()),
-            "🏷️ True: 🐦 pigeon | Predicted: 🐦 jay",
+            "🏷️ True: 🐦 pigeon | Predicted: 🐦 other bird",
         )
 
     def test_accept_prediction_uses_latest_finetuned_class(self):

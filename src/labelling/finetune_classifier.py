@@ -93,10 +93,9 @@ DEEPFAUNE_EQUIVALENT = {
     "racoon": "raccoon",
     "raccoon": "raccoon",
     "pigeon": "bird",
-    "jay": "bird",
+    "other bird": "bird",
     "buzzard": "bird",
     "crow": "bird",
-    "other bird": "bird",
     "song_bird": "bird",
     "woodpecker": "bird",
 }

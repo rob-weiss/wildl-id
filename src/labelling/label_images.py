@@ -146,7 +146,6 @@ WILDLIFE_SPECIES = [
     "fox",
     "hare",
     "squirrel",
-    "jay",
     "other bird",
     "crow",
     "human",
@@ -244,7 +243,7 @@ def map_classifier_to_wildlife(classifier_name):
     ):
         return "squirrel"
     elif "jay" in classifier_name_lower or "geai" in classifier_name_lower:
-        return "jay"
+        return "other bird"
     elif (
         "owl" in classifier_name_lower
         or "chouette" in classifier_name_lower
@@ -273,8 +272,8 @@ def map_classifier_to_wildlife(classifier_name):
         # Domestic cats in wildlife context might be feral, but keep as separate
         return "cat"
     elif "bird" in classifier_name_lower or "oiseau" in classifier_name_lower:
-        # Generic bird - default to jay
-        return "jay"
+        # Generic bird - default to other bird
+        return "other bird"
     elif "deer" in classifier_name_lower or "cerf" in classifier_name_lower:
         # Generic deer - default to roe deer
         return "roe deer"
