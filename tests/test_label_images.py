@@ -10,12 +10,55 @@ import numpy as np
 import pandas as pd
 import torch
 from PIL import Image
+
 from src.labelling import label_data, label_images
 
 wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_labelling_uses_only_actual_output_directory_with_optional_ocr(self):
+        for enable_ocr in (False, True):
+            for custom_output in (False, True):
+                with self.subTest(enable_ocr=enable_ocr, custom_output=custom_output):
+                    with tempfile.TemporaryDirectory() as directory:
+                        root = Path(directory)
+                        classifier = SimpleNamespace(
+                            weights_path=root
+                            / "models/deepfaune_finetuned_test/weights.pt"
+                        )
+                        output = (
+                            root / "custom/predictions.csv" if custom_output else None
+                        )
+                        expected = output or label_data.predictions_path(
+                            root, "deepfaune_finetuned_test"
+                        )
+                        with (
+                            patch.object(label_images, "repo_dir", root),
+                            patch.object(label_images, "image_paths", return_value={}),
+                            patch.object(label_images, "enable_ocr", enable_ocr),
+                            patch.object(label_images, "MACOS_VISION_AVAILABLE", True),
+                            patch.object(label_images.pw_detection, "MegaDetectorV6"),
+                            patch.object(
+                                label_images,
+                                "load_species_classifier",
+                                return_value=classifier,
+                            ),
+                        ):
+                            label_images.process_images_with_pytorch_wildlife(
+                                output_csv_path=output
+                            )
+                        self.assertTrue(expected.parent.is_dir())
+                        self.assertFalse(
+                            (
+                                root
+                                / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
+                            ).exists()
+                        )
+                        self.assertEqual(
+                            (expected.parent / "ocr_failures.txt").is_file(), enable_ocr
+                        )
+
     def test_image_metadata_keeps_quoted_csv_format(self):
         with tempfile.TemporaryDirectory() as directory:
             repo_root = Path(directory)

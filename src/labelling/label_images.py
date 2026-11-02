@@ -796,8 +796,6 @@ def process_images_with_pytorch_wildlife(
         print("WARNING: Classification is disabled or failed to load!")
         print("You will only see 'animal', 'human', 'vehicle', or 'none' as classes.")
 
-    # Create output directories
-    classifier_suffix = "_classified" if use_classification else ""
     classifier_run = (
         classification_model.weights_path.parent.name
         if classification_model is not None
@@ -806,18 +804,6 @@ def process_images_with_pytorch_wildlife(
         if use_classification
         else ""
     )
-    labels_dir = (
-        repo_dir / "labels" / f"labels_{model_version}_{model_name}{classifier_suffix}"
-    )
-    labels_dir.mkdir(parents=True, exist_ok=True)
-
-    # Initialize OCR failures log file in labels_dir
-    ocr_failures_log = labels_dir / "ocr_failures.txt"
-    if enable_ocr:
-        with open(ocr_failures_log, "w", encoding="utf-8") as f:
-            f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
-            f.write("=" * 80 + "\\n")
-
     # Collect all images with location info from images/<year>/<location>/
     indexed_paths = image_paths()
     if image_keys is not None:
@@ -850,6 +836,12 @@ def process_images_with_pytorch_wildlife(
         csv_path = Path(output_csv_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"Writing labels to: {csv_path}")
+
+    ocr_failures_log = csv_path.parent / "ocr_failures.txt"
+    if enable_ocr:
+        with open(ocr_failures_log, "w", encoding="utf-8") as f:
+            f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
+            f.write("=" * 80 + "\\n")
 
     # Define explicit dtypes to avoid FutureWarning about NA entries
     COLUMN_DTYPES = {
