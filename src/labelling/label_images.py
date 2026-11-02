@@ -219,6 +219,7 @@ def map_classifier_to_wildlife(classifier_name):
         return "badger"
     elif (
         "marten" in classifier_name_lower
+        or "mustelid" in classifier_name_lower
         or "martre" in classifier_name_lower
         or "stone marten" in classifier_name_lower
         or "fouine" in classifier_name_lower
@@ -228,8 +229,11 @@ def map_classifier_to_wildlife(classifier_name):
         return "dog"
     elif "fox" in classifier_name_lower or "renard" in classifier_name_lower:
         return "fox"
+    elif "raccoon" in classifier_name_lower:
+        return "raccoon"
     elif (
         "hare" in classifier_name_lower
+        or "lagomorph" in classifier_name_lower
         or "rabbit" in classifier_name_lower
         or "lièvre" in classifier_name_lower
         or "lievre" in classifier_name_lower

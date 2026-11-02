@@ -179,6 +179,36 @@ class AutomaticLabelTests(unittest.TestCase):
             [image["name"] for image in selected], ["unreviewed.jpg", "new.jpg"]
         )
 
+    def test_pretrained_classifier_maps_supported_labels(self):
+        classifier = label_images.SpeciesClassifier.__new__(
+            label_images.SpeciesClassifier
+        )
+        classifier.pretrained = True
+        classifier.model = Mock()
+        image = np.zeros((8, 8, 3), dtype=np.uint8)
+        expected_labels = {
+            "badger": "badger",
+            "fox": "fox",
+            "wild boar": "wild boar",
+            "roe deer": "roe deer",
+            "dog": "dog",
+            "cat": "cat",
+            "squirrel": "squirrel",
+            "raccoon": "raccoon",
+            "lagomorph": "hare",
+            "mustelid": "marten",
+            "bird": "other bird",
+        }
+        for native_label, expected_label in expected_labels.items():
+            with self.subTest(native_label=native_label):
+                classifier.model.single_image_classification.return_value = {
+                    "prediction": native_label,
+                    "confidence": 0.9,
+                }
+                result = classifier.single_image_classification(image, "image.jpg")
+                self.assertEqual(result["prediction"], expected_label)
+                self.assertEqual(result["confidence"], 0.9)
+
     def test_finetuned_classifier_keeps_native_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
