@@ -57,6 +57,10 @@ def add_navigation(current_path: str) -> None:
             box-shadow: 0 0 0 2px #52694b66, 0 6px 16px #214a3a33;
             filter: brightness(1.05);
         }
+        .gallery-thumbnail.visit-highlighted {
+            outline: 3px solid var(--thumbnail-frame-colour);
+            outline-offset: 0;
+        }
         .q-drawer--mini .navigation-header {
             flex-direction: column;
             justify-content: center;

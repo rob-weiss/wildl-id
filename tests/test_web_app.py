@@ -949,6 +949,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         frames[0].style["border"], frames[2].style["border"]
                     )
                     self.assertIn("gallery-thumbnail", frames[0].classes)
+                    for frame in frames:
+                        self.assertEqual(
+                            frame.style["--thumbnail-frame-colour"],
+                            frame.style["border"].split()[-1],
+                        )
+                        hover_events = {
+                            listener.type
+                            for listener in frame._event_listeners.values()
+                        }
+                        self.assertTrue({"mouseenter", "mouseleave"} <= hover_events)
                     self.assertNotEqual(
                         frames[0].style["border"], frames[1].style["border"]
                     )

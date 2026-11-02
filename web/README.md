@@ -40,8 +40,12 @@ never creates or changes labels.
 
 Both galleries frame images from the same visit in the same colour, without
 moving them out of capture-time order. Frames use muted woodland colours;
-hovering over a thumbnail raises its shadow and brightens it without moving
-or resizing the card. Each visit belongs to one site and one
+hovering over a thumbnail brightens that card and raises its shadow. Every
+displayed image in the same visit also gains a 3 px outline matching its frame
+colour, making those frames appear 6 px thick without moving or resizing cards.
+Leaving the thumbnail clears the visit outlines. Ungrouped photos retain only
+the individual hover effect. Matching uses visit IDs, not shared palette colours.
+Each visit belongs to one site and one
 effective species: the manual label when present, otherwise the prediction.
 A gap of **at least 30 minutes** since the previous detection starts another
 visit. Visits can span midnight and last longer than 30 minutes when detections

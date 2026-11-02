@@ -870,12 +870,32 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
         ui.card()
         .tight()
         .classes("w-full gallery-thumbnail")
-        .style(f"border: 3px solid {colour}; border-radius: 6px") as card
+        .style(
+            f"--thumbnail-frame-colour: {colour if visit is not None else '#52694b'}; "
+            f"border: 3px solid {colour}; border-radius: 6px"
+        ) as card
     ):
         if visit is not None:
             card.mark("visit-frame")
             card.props["data-visit-id"] = visit.visit_id
             card.props["data-image-file"] = row["image_file"]
+            card.on(
+                "mouseenter",
+                js_handler="""event => {
+                    const visitId = event.currentTarget.dataset.visitId;
+                    document.querySelectorAll('.gallery-thumbnail[data-visit-id]').forEach(card => {
+                        card.classList.toggle('visit-highlighted', card.dataset.visitId === visitId);
+                    });
+                }""",
+            )
+            card.on(
+                "mouseleave",
+                js_handler="""() => {
+                    document.querySelectorAll('.gallery-thumbnail.visit-highlighted').forEach(card => {
+                        card.classList.remove('visit-highlighted');
+                    });
+                }""",
+            )
             start = visit.started_at.astimezone(CAMERA_TIMEZONE)
             end = visit.ended_at.astimezone(CAMERA_TIMEZONE)
             description = (
