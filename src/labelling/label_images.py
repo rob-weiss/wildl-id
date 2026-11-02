@@ -137,6 +137,7 @@ MEGADETECTOR_CLASS_NAMES = {
     2: "vehicle",
 }
 
+
 def crop_detection(img_pil, bbox):
     """Crop a detected animal from the image for classification.
 

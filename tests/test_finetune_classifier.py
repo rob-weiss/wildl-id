@@ -29,9 +29,9 @@ class FinetuneLabelTests(unittest.TestCase):
             finetune_classifier, "DeepfauneClassifier", return_value=pretrained
         ):
             result = finetune_classifier.build_model(class_names, "cpu")
-        expected_indices = list(range(len(native_names))) + [
-            native_names.index("bird")
-        ] * 2
+        expected_indices = (
+            list(range(len(native_names))) + [native_names.index("bird")] * 2
+        )
         torch.testing.assert_close(
             result.head.weight, old_head.weight[expected_indices]
         )

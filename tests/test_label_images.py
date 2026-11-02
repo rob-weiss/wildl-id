@@ -213,9 +213,26 @@ class AutomaticLabelTests(unittest.TestCase):
 
     def test_classifier_preserves_unmapped_labels(self):
         for label in (
-            "chevreuil", "cerf", "sanglier", "blaireau", "martre", "fouine",
-            "chien", "renard", "lièvre", "lievre", "lapin", "écureuil", "ecureuil",
-            "geai", "chouette", "hibou", "oiseau", "corbeau", "colombe", "humain",
+            "chevreuil",
+            "cerf",
+            "sanglier",
+            "blaireau",
+            "martre",
+            "fouine",
+            "chien",
+            "renard",
+            "lièvre",
+            "lievre",
+            "lapin",
+            "écureuil",
+            "ecureuil",
+            "geai",
+            "chouette",
+            "hibou",
+            "oiseau",
+            "corbeau",
+            "colombe",
+            "humain",
             "chat",
         ):
             with self.subTest(label=label):
