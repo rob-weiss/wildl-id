@@ -410,7 +410,9 @@ Press **Z** to toggle subject focus.
 Images are reviewed in capture order, oldest first; undated images come last.
 
 In **Latest model incorrect**, use **Exclude true labels** to hide selected
-classes from the review queue. The filter uses the current human label, falling
+classes from the review queue. Only classes with unresolved errors are offered;
+selected exclusions remain available so they can be cleared.
+The filter uses the current human label, falling
 back to validation truth when no human label exists. Clear the selection to show
 all classes again. Exclusions stay selected when switching modes but do not
 filter other modes or change saved labels.

@@ -331,7 +331,13 @@ class LabelReview:
     @property
     def true_labels(self):
         return sorted(
-            {label for row in self.rows if (label := self.true_label_for_row(row))}
+            {
+                label
+                for index in self.filtered_indices(
+                    mode="Latest model incorrect", apply_exclusions=False
+                )
+                if (label := self.true_label_for_row(self.rows[index]))
+            }
         )
 
     def set_excluded_true_labels(self, labels):
@@ -340,7 +346,8 @@ class LabelReview:
         }
         self.set_mode(self.mode)
 
-    def filtered_indices(self):
+    def filtered_indices(self, *, mode=None, apply_exclusions=True):
+        mode = self.mode if mode is None else mode
         indices = []
         seen_latest_errors = set()
         for index, row in enumerate(self.rows):
@@ -352,23 +359,26 @@ class LabelReview:
                 image_name not in self.resolved_incorrect
                 and label_data.needs_model_review(row, validation)
             )
-            if self.mode == "Latest model incorrect":
-                if self.true_label_for_row(row) in self.excluded_true_labels:
+            if mode == "Latest model incorrect":
+                if (
+                    apply_exclusions
+                    and self.true_label_for_row(row) in self.excluded_true_labels
+                ):
                     continue
                 if is_latest_error and image_name not in seen_latest_errors:
                     indices.append(index)
                     seen_latest_errors.add(image_name)
                 continue
             if (
-                self.mode == "Unseen"
+                mode == "Unseen"
                 and is_unseen
-                or self.mode == "Latest model incorrect"
+                or mode == "Latest model incorrect"
                 and is_latest_error
-                or self.mode == "Unseen + errors"
+                or mode == "Unseen + errors"
                 and (is_unseen or is_latest_error)
-                or self.mode == "Seen"
+                or mode == "Seen"
                 and not is_unseen
-                or self.mode == "All"
+                or mode == "All"
             ):
                 indices.append(index)
         return sorted(indices, key=self.capture_rank.__getitem__)

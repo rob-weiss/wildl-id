@@ -540,7 +540,7 @@ class LabelReviewTests(unittest.TestCase):
         original = self.csv_path.read_bytes()
         review.set_mode("Latest model incorrect")
         self.assertEqual(set(review.pending), {0, 2})
-        self.assertEqual(review.true_labels, ["bird", "fox", "hare"])
+        self.assertEqual(review.true_labels, ["bird", "hare"])
 
         review.set_excluded_true_labels([" HARE "])
         self.assertEqual(review.excluded_true_labels, {"hare"})
@@ -552,10 +552,26 @@ class LabelReviewTests(unittest.TestCase):
         review.set_excluded_true_labels(["bird", "hare"])
         self.assertEqual(review.pending, [])
         self.assertEqual(review.position, 0)
+        self.assertEqual(review.true_labels, ["bird", "hare"])
 
         review.set_excluded_true_labels([])
         self.assertEqual(set(review.pending), {0, 2})
         self.assertEqual(self.csv_path.read_bytes(), original)
+
+    def test_true_label_options_only_include_unresolved_errors(self):
+        review = LabelReview(self.csv_path)
+        self.assertEqual(review.true_labels, ["hare"])
+
+        review.resolved_incorrect.add("camera1_incorrect.jpg")
+        self.assertEqual(review.true_labels, [])
+
+        review.resolved_incorrect.clear()
+        review.rows[2]["reviewed"] = "true"
+        self.assertEqual(review.true_labels, [])
+
+        review.rows[2]["reviewed"] = ""
+        review.rows[2]["class"] = "hare"
+        self.assertEqual(review.true_labels, [])
 
     def test_true_label_exclusions_do_not_change_other_review_modes(self):
         review = LabelReview(self.csv_path)
@@ -603,11 +619,12 @@ class LabelReviewTests(unittest.TestCase):
 
                 app.change_mode("Latest model incorrect")
                 self.assertTrue(selector.visible)
-                self.assertEqual(set(selector.options), {"bird", "fox", "hare"})
+                self.assertEqual(set(selector.options), {"bird", "hare"})
 
                 selector.set_value(["hare"])
                 self.assertEqual(app.review.pending, [0])
                 self.assertEqual(app.current_index, 0)
+                self.assertEqual(set(selector.options), {"bird", "hare"})
 
                 selector.set_value(["bird", "hare"])
                 self.assertEqual(app.review.pending, [])
