@@ -1045,6 +1045,37 @@ class LabelReviewTests(unittest.TestCase):
         )
         self.assertEqual(root.find("g/text").get("font-size"), "16")
 
+    def test_browser_label_buttons_sort_game_species_first_and_hide_vehicle(self):
+        with self.csv_path.open("a", newline="", encoding="utf-8") as target:
+            csv.writer(target).writerows(
+                [
+                    ["camera1", "deer.jpg", "red deer", "", "red deer"],
+                    ["camera1", "mouflon.jpg", "mouflon", "", "mouflon"],
+                    ["camera1", "custom.jpg", "custom animal", "", ""],
+                ]
+            )
+        app = review_app_module.ReviewApp(self.csv_path)
+        with review_app_module.ui.column() as container:
+            with patch.object(app, "image_path_for", return_value=None):
+                app.build()
+        self.addCleanup(container.delete)
+        labels = [
+            button.text.split(" ", 1)[1].rsplit(" [", 1)[0]
+            for button in app.label_buttons
+        ]
+        available = set(app.review.shortcuts.values())
+        expected = (
+            sorted(available & review_app_module.GAME_SPECIES)
+            + sorted(
+                available
+                - review_app_module.GAME_SPECIES
+                - {"vehicle", "unknown", "none"}
+            )
+            + ["unknown", "none"]
+        )
+        self.assertEqual(labels, expected)
+        self.assertNotIn("vehicle", labels)
+
     def test_browser_label_buttons_include_unique_nonempty_manual_classes(self):
         with self.csv_path.open("a", newline="", encoding="utf-8") as target:
             csv.writer(target).writerows(

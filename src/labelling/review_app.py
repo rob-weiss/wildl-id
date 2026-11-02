@@ -296,7 +296,18 @@ class ReviewApp:
                         )
                     ui.label("🏷️ Labels").classes("font-medium mt-2")
                     with ui.grid(columns=2).classes("w-full gap-2"):
-                        labels = list(self.review.shortcuts.values())
+                        labels = sorted(
+                            (
+                                label
+                                for label in self.review.shortcuts.values()
+                                if label != "vehicle"
+                            ),
+                            key=lambda label: (
+                                label not in GAME_SPECIES,
+                                {"unknown": 1, "none": 2}.get(label, 0),
+                                label.casefold(),
+                            ),
+                        )
                         shortcuts = {
                             label: key for key, label in self.review.shortcuts.items()
                         }
