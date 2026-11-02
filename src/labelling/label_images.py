@@ -211,23 +211,21 @@ def map_classifier_to_wildlife(classifier_name):
     classifier_name_lower = classifier_name.lower()
 
     # Direct matches
-    if "roe deer" in classifier_name_lower or "chevreuil" in classifier_name_lower:
+    if "roe deer" in classifier_name_lower:
         return "roe deer"
-    elif "wild boar" in classifier_name_lower or "sanglier" in classifier_name_lower:
+    elif "wild boar" in classifier_name_lower:
         return "wild boar"
-    elif "badger" in classifier_name_lower or "blaireau" in classifier_name_lower:
+    elif "badger" in classifier_name_lower:
         return "badger"
     elif (
         "marten" in classifier_name_lower
         or "mustelid" in classifier_name_lower
-        or "martre" in classifier_name_lower
         or "stone marten" in classifier_name_lower
-        or "fouine" in classifier_name_lower
     ):
         return "marten"
-    elif "dog" in classifier_name_lower or "chien" in classifier_name_lower:
+    elif "dog" in classifier_name_lower:
         return "dog"
-    elif "fox" in classifier_name_lower or "renard" in classifier_name_lower:
+    elif "fox" in classifier_name_lower:
         return "fox"
     elif "raccoon" in classifier_name_lower:
         return "raccoon"
@@ -235,52 +233,25 @@ def map_classifier_to_wildlife(classifier_name):
         "hare" in classifier_name_lower
         or "lagomorph" in classifier_name_lower
         or "rabbit" in classifier_name_lower
-        or "lièvre" in classifier_name_lower
-        or "lievre" in classifier_name_lower
-        or "lapin" in classifier_name_lower
     ):
         return "hare"
-    elif (
-        "squirrel" in classifier_name_lower
-        or "écureuil" in classifier_name_lower
-        or "ecureuil" in classifier_name_lower
-    ):
+    elif "squirrel" in classifier_name_lower:
         return "squirrel"
-    elif (
-        "jay" in classifier_name_lower
-        or "geai" in classifier_name_lower
-        or (
-            "owl" in classifier_name_lower
-            or "chouette" in classifier_name_lower
-            or "hibou" in classifier_name_lower
-        )
-    ):
+    elif "jay" in classifier_name_lower or "owl" in classifier_name_lower:
         return "other bird"
-    elif (
-        "crow" in classifier_name_lower
-        or "corbeau" in classifier_name_lower
-        or "raven" in classifier_name_lower
-    ):
+    elif "crow" in classifier_name_lower or "raven" in classifier_name_lower:
         return "crow"
-    elif (
-        "pigeon" in classifier_name_lower
-        or "dove" in classifier_name_lower
-        or "colombe" in classifier_name_lower
-    ):
+    elif "pigeon" in classifier_name_lower or "dove" in classifier_name_lower:
         return "pigeon"
-    elif (
-        "human" in classifier_name_lower
-        or "person" in classifier_name_lower
-        or "humain" in classifier_name_lower
-    ):
+    elif "human" in classifier_name_lower or "person" in classifier_name_lower:
         return "human"
-    elif "cat" in classifier_name_lower or "chat" in classifier_name_lower:
+    elif "cat" in classifier_name_lower:
         # Domestic cats in wildlife context might be feral, but keep as separate
         return "cat"
-    elif "bird" in classifier_name_lower or "oiseau" in classifier_name_lower:
+    elif "bird" in classifier_name_lower:
         # Generic bird - default to other bird
         return "other bird"
-    elif "deer" in classifier_name_lower or "cerf" in classifier_name_lower:
+    elif "deer" in classifier_name_lower:
         # Generic deer - default to roe deer
         return "roe deer"
     else:

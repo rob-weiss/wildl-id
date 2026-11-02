@@ -209,6 +209,16 @@ class AutomaticLabelTests(unittest.TestCase):
                 self.assertEqual(result["prediction"], expected_label)
                 self.assertEqual(result["confidence"], 0.9)
 
+    def test_french_classifier_labels_are_unknown(self):
+        for label in (
+            "chevreuil", "cerf", "sanglier", "blaireau", "martre", "fouine",
+            "chien", "renard", "lièvre", "lievre", "lapin", "écureuil", "ecureuil",
+            "geai", "chouette", "hibou", "oiseau", "corbeau", "colombe", "humain",
+            "chat",
+        ):
+            with self.subTest(label=label):
+                self.assertEqual(label_images.map_classifier_to_wildlife(label), "unknown")
+
     def test_finetuned_classifier_keeps_native_labels(self):
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
@@ -226,9 +236,6 @@ class AutomaticLabelTests(unittest.TestCase):
 
     def test_owl_predictions_are_reported_as_other_bird(self):
         self.assertEqual(label_images.map_classifier_to_wildlife("Owl"), "other bird")
-        self.assertEqual(
-            label_images.map_classifier_to_wildlife("Chouette"), "other bird"
-        )
         classifier = label_images.SpeciesClassifier.__new__(
             label_images.SpeciesClassifier
         )
