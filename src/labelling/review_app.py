@@ -23,6 +23,7 @@ from .species import LABEL_EMOJIS
 
 IMAGES_DIR = Path(__file__).resolve().parents[2] / "images"
 
+
 def display_label(label):
     label = str(label).strip()
     emoji = LABEL_EMOJIS.get(label.casefold(), "🐾")
@@ -478,10 +479,7 @@ class ReviewApp:
         self.viewer.update()
 
     def on_image_mouse(self, event: events.MouseEventArguments):
-        if (
-            self.image_mode != "box"
-            or self.cleanup_dialog_open
-        ):
+        if self.image_mode != "box" or self.cleanup_dialog_open:
             return
         if self.current_index is None or self.image_size is None:
             return

@@ -408,7 +408,9 @@ class LabelReview:
         index = self.pending[self.position]
         old_position = self.position
         previous = self.rows[index]["manual_label"]
-        image_name = f"{self.rows[index]['location_id']}_{self.rows[index]['image_file']}"
+        image_name = (
+            f"{self.rows[index]['location_id']}_{self.rows[index]['image_file']}"
+        )
         was_resolved = image_name in self.resolved_incorrect
         self.rows[index]["manual_label"] = label
         try:

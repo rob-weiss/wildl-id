@@ -245,9 +245,7 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(request.get_method(), "PUT")
         self.assertEqual(url.path, "/topic%20x")
         self.assertEqual(query["title"], ["🐗 Wild boars at Madenhäule"])
-        self.assertEqual(
-            query["message"], ["3 🐗 wild boars at 21:00 (30-10-2026)"]
-        )
+        self.assertEqual(query["message"], ["3 🐗 wild boars at 21:00 (30-10-2026)"])
         self.assertEqual(query["tags"], ["boar"])
         self.assertEqual(query["filename"], ["image_0000002.jpg"])
         self.assertEqual(request.data, path.read_bytes())
@@ -257,9 +255,7 @@ class PushAlertTests(unittest.TestCase):
 
         request = alerts.ntfy_request("https://ntfy.sh", "topic", alert)
 
-        self.assertEqual(
-            request.data, "1 🦝 raccoon at 21:00 (30-10-2026)".encode()
-        )
+        self.assertEqual(request.data, "1 🦝 raccoon at 21:00 (30-10-2026)".encode())
         self.assertNotIn("filename", parse_qs(urlsplit(request.full_url).query))
 
 

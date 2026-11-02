@@ -34,9 +34,7 @@ class AutomaticLabelTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                (repo_root / "labels/image_metadata.csv").read_text(
-                    encoding="utf-8"
-                ),
+                (repo_root / "labels/image_metadata.csv").read_text(encoding="utf-8"),
                 '"location_id","image_file","timestamp","timestamp_exif",'
                 '"lighting","temperature_celsius"\n'
                 '"camera","photo.jpg","2026-11-02T12:00:00",'

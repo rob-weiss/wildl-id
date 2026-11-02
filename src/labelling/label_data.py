@@ -188,9 +188,7 @@ def save_image_metadata(repo_dir, rows):
             else previous.get(column, "")
             for column in METADATA_COLUMNS
         }
-    write_records(
-        path, indexed.values(), METADATA_COLUMNS, quoting=csv.QUOTE_ALL
-    )
+    write_records(path, indexed.values(), METADATA_COLUMNS, quoting=csv.QUOTE_ALL)
 
 
 def migrate_human_labels(repo_dir=REPO_DIR):
