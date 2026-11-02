@@ -331,11 +331,7 @@ class LabelReview:
     @property
     def true_labels(self):
         return sorted(
-            {
-                label
-                for row in self.rows
-                if (label := self.true_label_for_row(row))
-            }
+            {label for row in self.rows if (label := self.true_label_for_row(row))}
         )
 
     def set_excluded_true_labels(self, labels):
