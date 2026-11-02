@@ -309,9 +309,9 @@ class LabelReview:
             image_name = f"{row['location_id']}_{row['image_file']}"
             is_unseen = not manual_label
             validation = self.latest_predictions.get(image_name, {})
-            current_label = manual_label or str(
-                validation.get("true_label") or ""
-            ).strip()
+            current_label = (
+                manual_label or str(validation.get("true_label") or "").strip()
+            )
             predicted_label = str(validation.get("predicted_label") or "").strip()
             is_correct_now = (
                 bool(current_label and predicted_label)
@@ -322,7 +322,8 @@ class LabelReview:
                 and image_name not in self.resolved_incorrect
                 and (
                     not self.human_only
-                    or row.get(label_data.REVIEWED_MODEL_COLUMN) != self.latest_model_name
+                    or row.get(label_data.REVIEWED_MODEL_COLUMN)
+                    != self.latest_model_name
                 )
                 and not is_correct_now
             )
@@ -470,9 +471,7 @@ class LabelReview:
             else:
                 self.resolved_incorrect.discard(image_name)
             raise
-        self.history.append(
-            (index, previous, was_resolved, previous_reviewed_model)
-        )
+        self.history.append((index, previous, was_resolved, previous_reviewed_model))
         self.pending = self.filtered_indices()
         if index in self.pending:
             self.position = self.pending.index(index) + 1

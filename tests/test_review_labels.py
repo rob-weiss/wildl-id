@@ -514,9 +514,7 @@ class LabelReviewTests(unittest.TestCase):
 
         saved = review_module.label_data.read_records(human_csv)
         self.assertEqual(saved[0]["reviewed_model"], first_run)
-        self.assertEqual(
-            tuple(saved[0]), review_module.label_data.HUMAN_COLUMNS
-        )
+        self.assertEqual(tuple(saved[0]), review_module.label_data.HUMAN_COLUMNS)
 
         reopened = open_review(first_run)
         reopened.set_mode("Latest model incorrect")
@@ -1194,9 +1192,7 @@ class LabelReviewTests(unittest.TestCase):
                         key=SimpleNamespace(
                             name=" ", space=True, backspace=False, enter=False
                         ),
-                        modifiers=SimpleNamespace(
-                            alt=False, ctrl=False, meta=False
-                        ),
+                        modifiers=SimpleNamespace(alt=False, ctrl=False, meta=False),
                     )
                 )
 

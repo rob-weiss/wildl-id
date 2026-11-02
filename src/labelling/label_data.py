@@ -255,9 +255,7 @@ def load_rows(csv_path):
     with csv_path.open(newline="", encoding="utf-8") as source:
         fieldnames = csv.DictReader(source).fieldnames
         if fieldnames not in (list(LEGACY_HUMAN_COLUMNS), list(HUMAN_COLUMNS)):
-            raise ValueError(
-                "Human-label CSV must use the current or legacy schema"
-            )
+            raise ValueError("Human-label CSV must use the current or legacy schema")
     repo_dir = csv_path.parent.parent
     humans = read_records(csv_path)
     metadata = {
