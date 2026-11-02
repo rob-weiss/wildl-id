@@ -1034,13 +1034,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.write_original_image("labelled.jpg", datetime(2026, 10, 1, 12))
         self.write_original_image("new-arrival.jpg", datetime.now())
         async with self.app_user("/gallery") as user:
-            await user.should_see("1 images · relevant species")
-            relevant = next(iter(user.find(marker="gallery-relevant").elements))
-            relevant.value = False
             await user.should_see("2 images · all images")
             await user.should_see("Unlabelled")
 
-    async def test_gallery_relevant_species_and_boxes_are_on_by_default(self):
+    async def test_gallery_relevant_species_is_first_example_and_boxes_default_on(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class"],
             [
@@ -1061,18 +1058,21 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
         ):
             async with self.app_user("/gallery") as user:
+                await user.should_see("3 images · all images")
+                await user.should_not_see(kind=ui.switch, content="Relevant species only")
+                relevant = next(iter(user.find(kind=ui.button, content="Relevant species only").elements))
+                self.assertEqual(relevant.parent_slot.children[0], relevant)
+                user.find(kind=ui.button, content="Relevant species only").click()
                 await user.should_see("1 images · relevant species")
-                relevant = next(iter(user.find(marker="gallery-relevant").elements))
-                self.assertTrue(relevant.value)
                 boxes = next(iter(user.find(marker="gallery-boxes").elements))
                 self.assertEqual(boxes.props.get("aria-pressed"), "true")
+                user.find("Smart filter").clear()
                 user.find("Smart filter").type("only squirrels").trigger(
                     "keydown.enter"
                 )
                 await user.should_see("1 images · only")
                 user.find("Smart filter").clear()
                 user.find("Smart filter").trigger("keydown.enter")
-                relevant.value = False
                 await user.should_see("3 images · all images")
 
     async def test_home_shows_latest_five_notifications_below_images(self):
@@ -1288,7 +1288,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
         ):
             async with self.app_user("/gallery") as user:
-                await user.should_see("2 images · relevant species")
+                await user.should_see("2 images · all images")
                 user.find("Smart filter").type("only foxes").trigger("keydown.enter")
                 await user.should_see("1 images · only 🦊 fox")
 
@@ -1551,7 +1551,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"WILDL_ID_IMAGE_BASE_URL": base_url}):
             async with self.app_user("/gallery") as user:
                 user.find(marker="gallery-boxes").click()
-                user.find("Smart filter").type("not foxes").trigger("keydown.enter")
+                user.find("Smart filter").type(
+                    "Relevant species only not foxes"
+                ).trigger("keydown.enter")
                 await user.should_see("2 images · relevant species · excluding 🦊 fox")
                 user.find(kind=ui.image, content=boar_url).click()
                 await user.should_see("1 / 2")

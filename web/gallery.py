@@ -298,6 +298,7 @@ NEWEST_FIRST = re.compile(r"\b(?:newest|latest|most\s+recent)\s+first\b")
 @dataclass
 class GalleryFilter:
     labels: set[str] = field(default_factory=set)
+    relevant_only: bool = False
     excluded_labels: set[str] = field(default_factory=set)
     locations: set[str] = field(default_factory=set)
     excluded_locations: set[str] = field(default_factory=set)
@@ -566,6 +567,8 @@ def parse_filter_prompt(prompt, labels=(), locations=(), today=None):
     result = GalleryFilter()
     prompt = _Prompt(prompt)
 
+    if prompt.take(r"\brelevant\s+species(?:\s+only)?\b"):
+        result.relevant_only = True
     if prompt.take(NOT_REVIEWED):
         result.reviewed = False
     if prompt.take(MISCLASSIFIED):
@@ -609,6 +612,8 @@ def filter_rows(rows, gallery_filter, now=None):
     dated, undated = [], []
     for row in rows:
         label = normalize_text(row_label(row))
+        if f.relevant_only and label not in RECENT_SPECIES:
+            continue
         if f.labels and label not in f.labels or label in f.excluded_labels:
             continue
         location = normalize_text(nfc(row.get("location_id") or ""))
@@ -661,6 +666,8 @@ def filter_rows(rows, gallery_filter, now=None):
 def describe_filter(gallery_filter):
     f = gallery_filter
     parts = []
+    if f.relevant_only:
+        parts.append("relevant species")
     if f.labels:
         parts.append("only " + ", ".join(map(display_label, sorted(f.labels))))
     if f.excluded_labels:
@@ -1202,9 +1209,6 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         )
         ui.button("Filter", icon="search", on_click=lambda: apply()).props("no-caps")
         boxes.button("gallery-boxes")
-        relevant_only = ui.switch(
-            "Relevant species only", value=True, on_change=lambda: apply()
-        ).mark("gallery-relevant")
     with ui.expansion("Filter guide", icon="info").classes("w-full"):
         ui.markdown(FILTER_GUIDE).classes("w-full")
     with ui.card().classes("w-full gap-2 border border-green-200 bg-green-50"):
@@ -1264,6 +1268,7 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
                 ).classes("w-full")
         with ui.row().classes("w-full flex-wrap gap-2"):
             for example in (
+                "Relevant species only",
                 "Show only wild boar of the last two weeks",
                 "Only foxes",
                 "Foxes at night in winter",
@@ -1307,18 +1312,6 @@ def build_gallery_page(csv_path, images_dir=None, image_base_url=None, today=Non
         if text.strip() and gallery_filter.is_empty():
             ui.notify("Filter not understood; showing all images", type="warning")
         description = describe_filter(gallery_filter)
-        # Explicitly requested species override the quick filter.
-        if (
-            relevant_only.value
-            and not gallery_filter.labels
-            and gallery_filter.reviewed is not False
-        ):
-            gallery_filter.labels = set(RECENT_SPECIES) - gallery_filter.excluded_labels
-            description = (
-                "relevant species"
-                if description == "all images"
-                else f"relevant species · {description}"
-            )
         matches = filter_rows(rows, gallery_filter)
         items[:] = [
             (row, source)
