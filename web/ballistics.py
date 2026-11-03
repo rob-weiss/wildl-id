@@ -351,6 +351,11 @@ def generate_ballistics_plot_svg(
     with plt.rc_context({"svg.fonttype": "none"}):
         fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(10, 13), sharex=True)
 
+        for ax in (ax1, ax2, ax3, ax4):
+            ax.set_xlim(0, 300)
+            ax.axvline(100, color="gray", linestyle="--", linewidth=0.8, alpha=0.7)
+            ax.axvline(200, color="gray", linestyle="--", linewidth=0.8, alpha=0.7)
+
         # Plot 1: Trajectory (Height deviation from line of sight)
         ax1.plot(
             result.distances,
@@ -362,7 +367,6 @@ def generate_ballistics_plot_svg(
         ax1.axhline(
             0, color="black", linestyle="--", linewidth=0.8, label="Line of sight"
         )
-        ax1.axvline(100, color="red", linestyle=":", label="100m mark")
         ax1.plot(
             100,
             cartridge.zero_height_cm,
@@ -420,6 +424,13 @@ def generate_ballistics_plot_svg(
             color="crimson",
             lw=2,
             label="Kinetic Energy",
+        )
+        ax4.axhline(
+            2000,
+            color="purple",
+            linestyle="--",
+            linewidth=1.2,
+            label="2000 J (German hoofed game min. at 100m)",
         )
         ax4.set_xlabel("Distance (m)", fontsize=12)
         ax4.set_ylabel("Energy (J)", fontsize=11)

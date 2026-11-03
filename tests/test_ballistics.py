@@ -18,15 +18,13 @@ from web.camera_map import Camera, WindHour
 
 class TestBallisticsConfig(unittest.TestCase):
     def test_default_cartridges_include_rws_308_short_rifle(self):
-        cartridges = ballistics.load_cartridges(
-            config_path=Path("/nonexistent/path.json")
-        )
+        cartridges = ballistics.load_cartridges()
         self.assertGreaterEqual(len(cartridges), 8)
 
         rws_308 = cartridges[0]
         self.assertEqual(rws_308.id, "rws-308-win-hit-short-rifle")
         self.assertIn("RWS .308 Win. HIT Short Rifle", rws_308.name)
-        self.assertEqual(rws_308.caliber, ".308 Win")
+        self.assertEqual(rws_308.caliber, ".308 Win.")
         self.assertAlmostEqual(rws_308.bullet_weight_g, 9.7)
         self.assertAlmostEqual(rws_308.muzzle_velocity_mps, 870.0)
         self.assertAlmostEqual(rws_308.ballistic_coefficient, 0.386)
@@ -36,12 +34,15 @@ class TestBallisticsConfig(unittest.TestCase):
         self.assertAlmostEqual(rws_308.zero_height_cm, 4.0)
 
     def test_default_cartridges_include_common_calibers(self):
-        cartridges = ballistics.load_cartridges(
-            config_path=Path("/nonexistent/path.json")
-        )
+        cartridges = ballistics.load_cartridges()
+        names = {c.name for c in cartridges}
+        self.assertTrue(any("Hornady .308 Win. ECX" in name for name in names))
+        self.assertTrue(any("Sellier & Bellot .308 Win." in name for name in names))
+        self.assertTrue(any("Hornady .223 Rem. NTX" in name for name in names))
+        self.assertTrue(any("Hornady .223 Rem. ECX" in name for name in names))
         calibers = {c.caliber for c in cartridges}
         for expected in (
-            ".308 Win",
+            ".308 Win.",
             ".30-06 Spring.",
             "8x57 IS",
             "7x64",
@@ -172,6 +173,7 @@ class TestBallisticsTrajectory(unittest.TestCase):
         self.assertIn("Wind Drift (cm)", svg)
         self.assertIn("Velocity (m/s)", svg)
         self.assertIn("Energy (J)", svg)
+        self.assertIn("2000 J", svg)
 
 
 class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):
