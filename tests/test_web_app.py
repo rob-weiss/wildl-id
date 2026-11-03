@@ -283,6 +283,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             "/visualisations",
             "/predictions",
             "/map",
+            "/ballistics",
             "/status",
         ):
             with self.subTest(path=path):
@@ -313,6 +314,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                             "/visualisations",
                             "/predictions",
                             "/map",
+                            "/ballistics",
                             "/status",
                         },
                     )

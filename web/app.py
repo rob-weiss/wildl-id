@@ -17,6 +17,7 @@ from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from src.labelling.species import pluralize_species, species_emoji
 from web import background, gallery
+from web.ballistics import build_ballistics_page
 from web.camera_map import build_best_seats, build_camera_map_page
 from web.gallery import LOCAL_IMAGE_ROUTE, build_gallery_page, build_recent_gallery
 from web.predictions import build_predictions_page
@@ -149,6 +150,12 @@ def add_navigation(current_path: str) -> None:
                     "/map",
                     "map",
                     "Camera locations and wind for the next three hours.",
+                ),
+                (
+                    "Ballistics",
+                    "/ballistics",
+                    "track_changes",
+                    "Bullet trajectory, velocity, energy, and wind drift.",
                 ),
                 (
                     "Status",
@@ -399,6 +406,13 @@ async def camera_map_page() -> None:
     add_navigation("/map")
     add_brand_logo()
     await build_camera_map_page(DEFAULT_CSV)
+
+
+@ui.page("/ballistics")
+async def ballistics_page() -> None:
+    add_navigation("/ballistics")
+    add_brand_logo()
+    await build_ballistics_page()
 
 
 @ui.page("/status")
