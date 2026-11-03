@@ -10,6 +10,7 @@ from unittest.mock import patch
 import httpx
 import numpy as np
 import pandas as pd
+from nicegui import Client, core, run
 from nicegui.testing import User
 from web import app as web_app
 from web import ballistics
@@ -266,6 +267,13 @@ class TestBallisticsTrajectory(unittest.TestCase):
 
 
 class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):
+    async def asyncTearDown(self):
+        run.reset()
+        Client.instances.clear()
+        Client.auto_index_client = None
+        core.script_mode = False
+        core.script_client = None
+
     async def test_ballistics_page_elements(self):
         cameras = [
             Camera("Seat1", 48.65, 9.00, view_direction=90.0, view_angle=60.0),
