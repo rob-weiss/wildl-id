@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import difflib
 import io
 import json
 import logging
 import math
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -214,6 +216,44 @@ def load_cartridges(config_path: Path | None = None) -> list[Cartridge]:
         except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
             logger.warning("Failed to load ballistics config from %s: %s", path, error)
     return list(DEFAULT_CARTRIDGES)
+
+
+def normalize_search_text(text: str) -> str:
+    """Normalize text by separating units/numbers and stripping non-alphanumeric chars."""
+    separated = re.sub(r"([0-9]+)[,.]?([0-9]*)\s*([a-zA-Z]+)", r"\1 \2 \3", text)
+    return re.sub(r"[^a-z0-9]+", " ", separated.lower()).strip()
+
+
+def matches_fuzzy(label: str, query: str) -> bool:
+    """Return True if all query tokens match or closely match words in label."""
+    norm_query = normalize_search_text(query)
+    tokens = norm_query.split()
+    if not tokens:
+        return True
+    norm_label = normalize_search_text(label)
+    label_words = norm_label.split()
+
+    for token in tokens:
+        if token in norm_label:
+            continue
+        if difflib.get_close_matches(token, label_words, n=1, cutoff=0.7):
+            continue
+        return False
+    return True
+
+
+def filter_cartridges_by_query(
+    options: dict[str, str], query: str
+) -> dict[str, str]:
+    """Filter cartridge options dictionary by fuzzy query."""
+    if not query or not query.strip():
+        return options
+    matched = {
+        cid: label
+        for cid, label in options.items()
+        if matches_fuzzy(label, query)
+    }
+    return matched if matched else options
 
 
 def max_seat_wind_speed(
@@ -655,7 +695,13 @@ async def build_ballistics_page() -> None:
 
         async def on_cartridge_change(event) -> None:
             state["selected_cartridge_id"] = str(event.value)
+            cartridge_select.set_options(cartridge_options)
             await update_view()
+
+        def on_cartridge_input(event) -> None:
+            query = event.args if isinstance(event.args, str) else (event.args[0] if event.args else "")
+            filtered = filter_cartridges_by_query(cartridge_options, query)
+            cartridge_select.set_options(filtered)
 
         async def on_hours_change(event) -> None:
             try:
@@ -672,6 +718,7 @@ async def build_ballistics_page() -> None:
             await update_view()
 
         cartridge_select.on_value_change(on_cartridge_change)
+        cartridge_select.on("input-value", on_cartridge_input)
         hours_input.on_value_change(on_hours_change)
 
         await update_view()

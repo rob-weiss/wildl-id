@@ -89,6 +89,32 @@ class TestBallisticsConfig(unittest.TestCase):
             loaded = ballistics.load_cartridges(config_path=config_path)
             self.assertEqual(len(loaded), len(ballistics.DEFAULT_CARTRIDGES))
 
+    def test_filter_cartridges_by_fuzzy_query(self):
+        options = {
+            "rws-308": "RWS .308 Win. HIT Short Rifle (9.7g / 150gr)",
+            "hornady-308": "Hornady .308 Win. ECX 8,1g/125grs",
+            "sb-308": "Sellier & Bellot .308 Win. Vollmantel 8,0g/124grs",
+            "hornady-223": "Hornady .223 Rem. NTX Bleifrei 2,3g/35grs",
+        }
+
+        # Multi-word query matching words out-of-order
+        matched = ballistics.filter_cartridges_by_query(options, "RWS hit")
+        self.assertEqual(list(matched.keys()), ["rws-308"])
+
+        matched = ballistics.filter_cartridges_by_query(options, "hit 150")
+        self.assertEqual(list(matched.keys()), ["rws-308"])
+
+        # Number and unit query
+        matched = ballistics.filter_cartridges_by_query(options, "vollmantel 8g")
+        self.assertEqual(list(matched.keys()), ["sb-308"])
+
+        # Typo tolerant fuzzy match
+        matched = ballistics.filter_cartridges_by_query(options, "horndy 223")
+        self.assertEqual(list(matched.keys()), ["hornady-223"])
+
+        # Empty query preserves all options
+        self.assertEqual(ballistics.filter_cartridges_by_query(options, ""), options)
+
 
 class TestBallisticsWind(unittest.TestCase):
     def test_max_seat_wind_speed_calculates_max_over_n_hours(self):
