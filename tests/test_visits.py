@@ -103,6 +103,36 @@ class LongestRecentVisitsTests(unittest.TestCase):
         self.assertEqual(result[0].image_count, 2)
 
 
+class TopRecentVisitsTests(unittest.TestCase):
+    def test_returns_three_longest_positive_visits_across_species(self):
+        now = datetime(2026, 11, 2, 12, tzinfo=UTC)
+        rows = [
+            detection(name, time, species, location)
+            for name, time, species, location in (
+                ("fox-a1.jpg", "2026-11-02T10:00:00Z", "fox", "A"),
+                ("fox-a2.jpg", "2026-11-02T10:20:00Z", "fox", "A"),
+                ("fox-b1.jpg", "2026-11-02T11:00:00Z", "fox", "B"),
+                ("fox-b2.jpg", "2026-11-02T11:15:00Z", "fox", "B"),
+                ("badger1.jpg", "2026-11-02T10:00:00Z", "badger", "A"),
+                ("badger2.jpg", "2026-11-02T10:10:00Z", "badger", "A"),
+                ("squirrel1.jpg", "2026-11-02T11:00:00Z", "squirrel", "A"),
+                ("squirrel2.jpg", "2026-11-02T11:05:00Z", "squirrel", "A"),
+                ("boar1.jpg", "2026-11-02T11:00:00Z", "wild boar", "A"),
+                ("boar2.jpg", "2026-11-02T11:00:00Z", "wild boar", "A"),
+            )
+        ]
+
+        result = visits.top_recent_visits(rows, now=now)
+
+        self.assertEqual(
+            [
+                (visit.species, visit.location_id, visit.observed_span_seconds)
+                for visit in result
+            ],
+            [("fox", "A", 1200), ("fox", "B", 900), ("badger", "A", 600)],
+        )
+
+
 class VisitGroupingTests(unittest.TestCase):
     def test_conflicting_image_rows_are_excluded_independent_of_order(self):
         rows = [

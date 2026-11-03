@@ -31,7 +31,7 @@ from src.visits import (
     CAMERA_TIMEZONE,
     exif_datetime,
     group_visits,
-    longest_recent_visits,
+    top_recent_visits,
 )
 
 LOCAL_IMAGE_ROUTE = "/local-images"
@@ -1236,13 +1236,14 @@ def build_recent_gallery(
                 )
 
     def render_longest_sightings(rows):
-        visits = longest_recent_visits(rows)
+        visits = top_recent_visits(rows)
         longest_section.clear()
         longest_section.set_visibility(bool(visits))
         if not visits:
             return
         records = [
             {
+                "visit_id": visit.visit_id,
                 "species": visit.species,
                 "label": display_label(visit.species),
                 "duration": str(timedelta(seconds=visit.observed_span_seconds)),
@@ -1257,7 +1258,7 @@ def build_recent_gallery(
             for visit in visits
         ]
         with longest_section:
-            ui.label("Longest sightings").classes("text-xl font-semibold")
+            ui.label("Longest visits").classes("text-xl font-semibold")
             ui.table(
                 columns=[
                     {"name": field, "label": title, "field": field, "align": "left"}
@@ -1270,7 +1271,7 @@ def build_recent_gallery(
                     )
                 ],
                 rows=records,
-                row_key="species",
+                row_key="visit_id",
                 pagination={"rowsPerPage": 0},
             ).props("flat dense hide-bottom").classes("w-full max-w-full").mark(
                 "longest-sightings-table"

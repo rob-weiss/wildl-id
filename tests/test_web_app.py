@@ -1068,7 +1068,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     )
         self.assertEqual(visit_ids[0], visit_ids[1])
 
-    async def test_home_shows_longest_positive_sighting_per_species_and_refreshes(self):
+    async def test_home_shows_three_longest_positive_visits_and_refreshes(self):
         now = datetime.now(UTC) - timedelta(minutes=1)
         fields = ["location_id", "image_file", "timestamp_exif", "class"]
         rows = [
@@ -1087,6 +1087,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 ("squirrel1.jpg", 15, "squirrel", "camera1"),
                 ("squirrel2.jpg", 10, "squirrel", "camera1"),
                 ("single.jpg", 5, "badger", "camera1"),
+                ("marten1.jpg", 8, "marten", "camera1"),
+                ("marten2.jpg", 5, "marten", "camera1"),
+                ("boar1.jpg", 5, "wild boar", "camera1"),
+                ("boar2.jpg", 5, "wild boar", "camera1"),
                 ("human1.jpg", 20, "human", "camera1"),
                 ("human2.jpg", 10, "human", "camera1"),
             )
@@ -1102,11 +1106,16 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/") as user:
                 table = next(iter(user.find(marker="longest-sightings-table").elements))
                 self.assertEqual(
-                    {row["species"] for row in table.rows}, {"fox", "squirrel"}
+                    [
+                        (row["species"], row["location"], row["duration"])
+                        for row in table.rows
+                    ],
+                    [
+                        ("fox", "camera1", "0:40:00"),
+                        ("fox", "camera2", "0:20:00"),
+                        ("squirrel", "camera1", "0:05:00"),
+                    ],
                 )
-                fox = next(row for row in table.rows if row["species"] == "fox")
-                self.assertEqual(fox["duration"], "0:40:00")
-                self.assertEqual(fox["location"], "camera1")
                 heading = next(
                     iter(user.find(kind=ui.label, content="Best seats now").elements)
                 )
@@ -1117,7 +1126,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 refresh()
                 await user.should_not_see(marker="longest-sightings-table")
-                await user.should_not_see(kind=ui.label, content="Longest sightings")
+                await user.should_not_see(kind=ui.label, content="Longest visits")
 
     async def test_home_species_buttons_count_photos_and_survive_refresh(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()

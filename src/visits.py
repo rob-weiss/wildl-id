@@ -146,7 +146,7 @@ def group_visits(rows):
     )
 
 
-def longest_recent_visits(rows, *, now=None):
+def _recent_positive_visits(rows, now):
     rows = list(rows)
     grouping = group_visits(rows)
     now = now or datetime.now(UTC)
@@ -166,7 +166,7 @@ def longest_recent_visits(rows, *, now=None):
         taken = taken.astimezone(UTC)
         if cutoff <= taken <= now:
             recent_times[key] = taken
-    best = {}
+    candidates = []
     for visit in grouping.visits:
         if visit.species in {"human", "vehicle"}:
             continue
@@ -181,14 +181,35 @@ def longest_recent_visits(rows, *, now=None):
         )
         if candidate.observed_span_seconds <= 0:
             continue
-        previous = best.get(visit.species)
+        candidates.append(candidate)
+    return candidates
+
+
+def longest_recent_visits(rows, *, now=None):
+    best = {}
+    for candidate in _recent_positive_visits(rows, now):
+        previous = best.get(candidate.species)
         if previous is None or (
             candidate.observed_span_seconds,
             candidate.ended_at,
             candidate.visit_id,
         ) > (previous.observed_span_seconds, previous.ended_at, previous.visit_id):
-            best[visit.species] = candidate
+            best[candidate.species] = candidate
     return [best[species] for species in sorted(best)]
+
+
+def top_recent_visits(rows, *, now=None, limit=3):
+    if limit <= 0:
+        return []
+    return sorted(
+        _recent_positive_visits(rows, now),
+        key=lambda visit: (
+            visit.observed_span_seconds,
+            visit.ended_at,
+            visit.visit_id,
+        ),
+        reverse=True,
+    )[:limit]
 
 
 def export_visits(grouping, output_dir):
