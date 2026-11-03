@@ -276,10 +276,10 @@ def get_max_seat_wind(
     locations_path: Path | None = None,
     now: datetime | None = None,
 ) -> tuple[float, int]:
-    """Fetch wind and return (max_effective_crosswind_kmh, located_seat_count).
+    """Fetch wind and return (max_wind_kmh, located_seat_count).
 
-    Considers the worst-case crosswind across all located seats within their
-    respective view arcs/sectors.
+    Calculates worst-case side wind velocity across all seats over next n hours,
+    assuming a 90-degree crosswind angle.
     """
     try:
         path = locations_path or configured_locations_path()
@@ -290,17 +290,7 @@ def get_max_seat_wind(
         if not located:
             return 0.0, 0
         wind_data = fetch_wind(located)
-        now_ts = pd.Timestamp(now or datetime.now(UTC)).tz_convert("UTC")
-
-        crosswinds: list[float] = []
-        for cam in located:
-            seat_hours = wind_data.get(cam.location_id, [])
-            upcoming = [h for h in seat_hours if h.time >= now_ts][:hours_ahead]
-            if not upcoming and seat_hours:
-                upcoming = seat_hours[:hours_ahead]
-            crosswinds.append(max_effective_crosswind_for_camera(cam, upcoming))
-
-        speed = max(crosswinds) if crosswinds else 0.0
+        speed = max_seat_wind_speed(wind_data, hours_ahead, now=now)
         return speed, len(located)
     except Exception as error:
         logger.warning("Could not obtain seat wind: %s", error)
@@ -728,9 +718,9 @@ async def build_ballistics_page() -> None:
                     ui.label(f"{wind_speed:.1f} km/h").classes(
                         "text-xl font-bold text-teal-700"
                     )
-                    ui.label(
-                        f"Seats: {state['seat_count']} · view arc worst case"
-                    ).classes("text-xs text-gray-600")
+                    ui.label(f"Seats: {state['seat_count']} · 90° crosswind").classes(
+                        "text-xs text-gray-600"
+                    )
 
                 with ui.card().classes("flex-1 min-w-44 p-3"):
                     ui.label("Wind Drift @ 100m / 200m").classes(
@@ -792,7 +782,7 @@ async def build_ballistics_page() -> None:
                     },
                     {
                         "name": "wind_drift",
-                        "label": "Wind Drift (view arc)",
+                        "label": "Wind Drift (90°)",
                         "field": "wind_drift",
                         "align": "center",
                     },

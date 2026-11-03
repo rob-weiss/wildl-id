@@ -158,16 +158,13 @@ class TestBallisticsWind(unittest.TestCase):
         self.assertEqual(speed, 0.0)
         self.assertEqual(seats, 0)
 
-    def test_get_max_seat_wind_calculates_worst_case_across_view_arcs(self):
-        cam1 = Camera("Seat_Headwind", 48.0, 9.0, view_direction=0.0, view_angle=60.0)
-        cam2 = Camera("Seat_Crosswind", 48.0, 9.0, view_direction=90.0, view_angle=60.0)
+    def test_get_max_seat_wind_calculates_worst_case_across_seats(self):
+        cam1 = Camera("Seat_1", 48.0, 9.0, view_direction=0.0, view_angle=60.0)
+        cam2 = Camera("Seat_2", 48.0, 9.0, view_direction=90.0, view_angle=60.0)
         now = datetime.now(UTC)
         wind_data = {
-            # Wind from North (0 deg) at 20 km/h:
-            # cam1 view is 0 deg -> max crosswind at FOV edges is 20 * sin(30) = 10 km/h
-            "Seat_Headwind": [WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)],
-            # cam2 view is 90 deg -> 90 deg relative crosswind is directly in FOV -> 20 km/h
-            "Seat_Crosswind": [WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)],
+            "Seat_1": [WindHour(pd.Timestamp(now), 15.0, 0.0, 20.0)],
+            "Seat_2": [WindHour(pd.Timestamp(now), 22.0, 0.0, 30.0)],
         }
         with (
             patch("web.ballistics.read_camera_locations", return_value=[cam1, cam2]),
@@ -175,19 +172,8 @@ class TestBallisticsWind(unittest.TestCase):
         ):
             speed, seats = ballistics.get_max_seat_wind(hours_ahead=1, now=now)
             self.assertEqual(seats, 2)
-            self.assertAlmostEqual(speed, 20.0)
-
-        # When only cam1 exists, max crosswind should be 10 km/h (limited by view arc), not raw 20 km/h
-        with (
-            patch("web.ballistics.read_camera_locations", return_value=[cam1]),
-            patch(
-                "web.ballistics.fetch_wind",
-                return_value={"Seat_Headwind": wind_data["Seat_Headwind"]},
-            ),
-        ):
-            speed, seats = ballistics.get_max_seat_wind(hours_ahead=1, now=now)
-            self.assertEqual(seats, 1)
-            self.assertAlmostEqual(speed, 10.0)
+            # Max speed over all seats assuming 90-degree crosswind
+            self.assertAlmostEqual(speed, 22.0)
 
 
 class TestBallisticsTrajectory(unittest.TestCase):
