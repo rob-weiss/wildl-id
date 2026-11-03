@@ -2168,6 +2168,47 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "1 images · only 🦊 fox, 🐗 wild boar · at camera1"
                 )
 
+    async def test_gallery_automatic_label_filter_selects_predictions_only(self):
+        self.write_csv(
+            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "automatic.jpg",
+                    "timestamp": "2026-11-03T12:00:00",
+                    "class": "none",
+                    "manual_label": "",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "manual.jpg",
+                    "timestamp": "2026-11-02T12:00:00",
+                    "class": "",
+                    "manual_label": "fox",
+                },
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/gallery") as user:
+                user.find(kind=ui.select, content="Review status").click()
+                user.find("Automatically labelled", kind=ui.select).click()
+                await user.should_see("1 images · automatically labelled")
+                self.assertEqual(
+                    user.find("Smart filter").elements.pop().value,
+                    "automatically labelled",
+                )
+                status = next(
+                    element
+                    for element in user.find(kind=ui.select).elements
+                    if element.props.get("label") == "Review status"
+                )
+                self.assertIn("not automatically labelled", status.options)
+                with user.client:
+                    status.set_value("not automatically labelled")
+                await user.should_see("1 images · not automatically labelled")
+
     async def test_gallery_viewer_navigates_filtered_images_and_preserves_aspect(self):
         self.write_csv(
             ["location_id", "image_file", "timestamp", "class"],

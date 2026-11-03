@@ -70,6 +70,8 @@ FILTER_EXAMPLES = {
         "temperature above 10 C": "Above 10 °C",
     },
     "Review status": {
+        "automatically labelled": "Automatically labelled",
+        "not automatically labelled": "Not automatically labelled",
         "unlabelled": "Not yet labelled",
         "manually labelled": "Manually labelled",
         "misclassified": "Misclassified",
@@ -144,8 +146,12 @@ filters skip rows without a valid temperature.
 
 Unreviewed terms include `unreviewed`, `unlabelled`/`unlabeled`, `unchecked`,
 `not [yet] [been] reviewed/labelled/checked`, and `without [a] manual label(s)`.
-Reviewed terms include `reviewed`, `labelled`/`labeled`, `manually labelled`,
+Reviewed terms include `reviewed`, `manually labelled`,
 `verified`, `checked`, and `with [a] manual label(s)`.
+
+`labelled`/`labeled` and `automatically labelled` select images with an automatic
+prediction from the latest model, including `none`. `Not automatically labelled`
+selects images without that prediction, regardless of manual review status.
 
 `misclassified`, `corrected`, or a `wrong`/`incorrect` prediction, classification,
 or label selects pending errors for the latest model: current inference mismatches
@@ -296,9 +302,14 @@ MISCLASSIFIED = re.compile(
     r"|classifications?|labels?))\b"
 )
 REVIEWED = re.compile(
-    r"\b(?:reviewed|manually\s+labell?ed|labell?ed|verified|checked"
+    r"\b(?:reviewed|manually\s+labell?ed|verified|checked"
     r"|with\s+(?:a\s+)?manual\s+labels?)\b"
 )
+NOT_AUTOMATICALLY_LABELLED = re.compile(
+    r"\b(?:not\s+(?:yet\s+)?(?:been\s+)?automatically\s+labell?ed"
+    r"|automatically\s+unlabell?ed)\b"
+)
+AUTOMATICALLY_LABELLED = re.compile(r"\b(?:automatically\s+)?labell?ed\b")
 NIGHT = re.compile(
     r"\b(?:at\s+night|night(?:s|time)?|nocturnal|in\s+the\s+dark|dark)\b"
 )
@@ -328,6 +339,7 @@ class GalleryFilter:
     min_temperature: float | None = None
     max_temperature: float | None = None
     reviewed: bool | None = None
+    automatically_labelled: bool | None = None
     misclassified: bool = False
     oldest_first: bool = False
     limit: int | None = None
@@ -600,12 +612,16 @@ def parse_filter_prompt(prompt, labels=(), locations=(), today=None):
 
     if prompt.take(r"\brelevant\s+species(?:\s+only)?\b"):
         result.relevant_only = True
+    if prompt.take(NOT_AUTOMATICALLY_LABELLED):
+        result.automatically_labelled = False
     if prompt.take(NOT_REVIEWED):
         result.reviewed = False
     if prompt.take(MISCLASSIFIED):
         result.misclassified = True
     if prompt.take(REVIEWED):
         result.reviewed = True
+    if prompt.take(AUTOMATICALLY_LABELLED):
+        result.automatically_labelled = True
     negations = _negation_spans(prompt.text)
 
     _extract_temperature(prompt, result)
@@ -656,6 +672,10 @@ def filter_rows(rows, gallery_filter, now=None):
         manual_label = (row.get("manual_label") or "").strip()
         if f.reviewed is not None and bool(manual_label) != f.reviewed:
             continue
+        if f.automatically_labelled is not None:
+            automatic_label = str(row.get("class") or "").strip()
+            if bool(automatic_label) != f.automatically_labelled:
+                continue
         if f.misclassified:
             if not label_data.needs_model_review(
                 row, row.get("_validation_prediction")
@@ -732,6 +752,12 @@ def describe_filter(gallery_filter):
         parts.append(f"🌡️ < {f.max_temperature:g} °C")
     if f.reviewed is not None:
         parts.append("manually labelled" if f.reviewed else "not yet labelled")
+    if f.automatically_labelled is not None:
+        parts.append(
+            "automatically labelled"
+            if f.automatically_labelled
+            else "not automatically labelled"
+        )
     if f.misclassified:
         parts.append("unreviewed model errors")
     if f.limit:

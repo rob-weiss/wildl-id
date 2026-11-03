@@ -837,6 +837,30 @@ def images_requiring_processing(image_info_list, existing_df, reprocess_missing=
     ]
 
 
+def sort_images_newest_first(images, metadata_rows=()):
+    timestamps = {
+        label_data.image_key(row): row.get("timestamp_exif", "")
+        for row in metadata_rows
+    }
+
+    def sort_key(image):
+        key = nfc(image["location_id"]), image["name"]
+        saved = timestamps.get(key, "")
+        for value in (saved, None):
+            if value is None:
+                value = extract_exif_timestamp(image["path"])
+            try:
+                taken = datetime.fromisoformat(value)
+            except ValueError, TypeError:
+                continue
+            if taken.tzinfo is None:
+                taken = taken.replace(tzinfo=CAMERA_TIMEZONE)
+            return (0, -taken.timestamp(), *key)
+        return (1, 0, *key)
+
+    images.sort(key=sort_key)
+
+
 def process_images_with_pytorch_wildlife(
     camera=None,
     reprocess_missing=False,
@@ -912,8 +936,6 @@ def process_images_with_pytorch_wildlife(
     ]
     locations = {info["location_id"] for info in image_info_list}
 
-    image_info_list.sort(key=lambda x: (x["location_id"], x["name"]))
-
     # Load existing results to avoid reprocessing
     separated = (
         output_csv_path is None or Path(output_csv_path).name == "human_labels.csv"
@@ -974,6 +996,11 @@ def process_images_with_pytorch_wildlife(
         images_to_process = images_requiring_processing(
             image_info_list, existing_df, reprocess_missing=reprocess_missing
         )
+
+    sort_images_newest_first(
+        images_to_process,
+        label_data.read_records(repo_dir / "labels/image_metadata.csv"),
+    )
 
     print(
         f"Found {len(image_info_list)} total images in {len(locations)} locations, "

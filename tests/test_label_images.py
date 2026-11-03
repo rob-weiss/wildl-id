@@ -16,6 +16,35 @@ wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_processing_order_uses_capture_time_and_keeps_undated_last(self):
+        images = [
+            {"location_id": "a", "name": "first.jpg", "path": Path("first.jpg")},
+            {"location_id": "z", "name": "last.jpg", "path": Path("last.jpg")},
+            {"location_id": "b", "name": "undated.jpg", "path": Path("undated.jpg")},
+        ]
+        metadata = [
+            {
+                "location_id": "a",
+                "image_file": "first.jpg",
+                "timestamp_exif": "2026-11-01T12:00:00",
+            },
+        ]
+        with patch.object(
+            label_images,
+            "extract_exif_timestamp",
+            side_effect=lambda path: (
+                "2026-11-03T12:00:00" if path.name == "last.jpg" else ""
+            ),
+        ) as extract:
+            label_images.sort_images_newest_first(images, metadata)
+        self.assertEqual(
+            [image["name"] for image in images],
+            ["last.jpg", "first.jpg", "undated.jpg"],
+        )
+        self.assertNotIn(
+            Path("first.jpg"), [call.args[0] for call in extract.call_args_list]
+        )
+
     def test_extra_detections_need_higher_confidence(self):
         detections = MagicMock()
         detections.__len__.return_value = 3

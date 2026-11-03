@@ -377,6 +377,25 @@ class SmartFilterTests(unittest.TestCase):
         self.assertEqual(parse("not reviewed foxes").labels, {"fox"})
         self.assertIs(parse("manually labelled").reviewed, True)
 
+    def test_automatic_label_status_is_distinct_from_manual_review(self):
+        self.assertIs(parse("labelled").automatically_labelled, True)
+        self.assertIsNone(parse("manually labelled").automatically_labelled)
+        rows = [
+            make_row("detected.jpg", "fox", "2025-01-01T00:00:00"),
+            make_row("empty.jpg", "none", "2025-01-02T00:00:00"),
+            make_row("manual.jpg", "", "2025-01-03T00:00:00", manual_label="fox"),
+            make_row("new.jpg", "", "2025-01-04T00:00:00"),
+        ]
+        self.assertEqual(
+            names(filter_rows(rows, parse("automatically labelled"))),
+            ["empty.jpg", "detected.jpg"],
+        )
+        self.assertEqual(
+            names(filter_rows(rows, parse("not automatically labelled"))),
+            ["new.jpg", "manual.jpg"],
+        )
+        self.assertIn("automatically labelled", describe_filter(parse("labelled")))
+
     def test_misclassified_order_and_limit(self):
         rows = [
             make_row("a.jpg", "fox", "2025-01-01T00:00:00", manual_label="badger"),
