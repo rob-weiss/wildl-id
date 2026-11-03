@@ -363,7 +363,7 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual((result.sent, result.failures), (1, ()))
         message = self.published[0].data.decode()
         self.assertIn("Total: 2 sightings", message)
-        self.assertIn("By species: 1 fox 1 wild boar", message)
+        self.assertIn("By species: 1 fox 🦊, 1 wild boar 🐗", message)
 
     def test_digest_counts_unique_photos_with_manual_labels_and_exact_window(self):
         row = self.row("one.jpg", "2026-10-30 07:00:00", manual="roe deer")
@@ -386,10 +386,10 @@ class DailySummaryTests(unittest.TestCase):
 
         self.assertEqual((result.sent, result.failures, again.sent), (1, (), 0))
         request = self.published[0]
-        self.assertIn("Wendeplatte: 1 roe deer", request.data.decode())
-        self.assertIn("Douglasien: 1 fox", request.data.decode())
+        self.assertIn("Wendeplatte: 1 roe deer 🦌", request.data.decode())
+        self.assertIn("Douglasien: 1 fox 🦊", request.data.decode())
         self.assertIn("Total: 2 sightings", request.data.decode())
-        self.assertIn("By species: 1 fox 1 roe deer", request.data.decode())
+        self.assertIn("By species: 1 fox 🦊, 1 roe deer 🦌", request.data.decode())
         self.assertTrue(
             request.data.decode().startswith(
                 "30-10-2026 07:00 CET - 31-10-2026 07:00 CET\n"
@@ -493,8 +493,8 @@ class DailySummaryTests(unittest.TestCase):
         self.assertEqual((result.sent, result.failures), (1, ()))
         body = self.published[0].data.decode()
         self.assertIn("Total: 9 sightings", body)
-        self.assertIn("Wendeplatte: 1 badger", body)
-        self.assertIn("Douglasien: 1 fox 1 hare", body)
+        self.assertIn("Wendeplatte: 1 badger 🦡", body)
+        self.assertIn("Douglasien: 1 fox 🦊, 1 hare 🐇", body)
         self.assertNotIn("Bird camera", body)
         self.assertNotIn("woodpecker", body)
         self.assertIn("1 roe deer", body)
@@ -535,9 +535,9 @@ class DailySummaryTests(unittest.TestCase):
             self.published[0].data.decode().splitlines()[1:],
             [
                 "Total: 6 sightings in the last 24 hours.",
-                "By species: 3 wild boar 2 roe deer 1 fox",
-                "Douglasien: 1 fox 1 roe deer",
-                "Grenzweg: 3 wild boar 1 roe deer",
+                "By species: 3 wild boars 🐗, 2 roe deer 🦌, 1 fox 🦊",
+                "Douglasien: 1 fox 🦊, 1 roe deer 🦌",
+                "Grenzweg: 3 wild boars 🐗, 1 roe deer 🦌",
             ],
         )
 

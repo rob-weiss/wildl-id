@@ -428,8 +428,8 @@ def send_daily_summary(
         ]:
             if not species_counts:
                 continue
-            details = " ".join(
-                f"{count} {species}"
+            details = ", ".join(
+                f"{count} {pluralize_species(species, count)} {species_emoji(species)}"
                 for species, count in sorted(
                     species_counts.items(), key=lambda item: (-item[1], item[0])
                 )
