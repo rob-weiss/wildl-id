@@ -73,6 +73,7 @@ class RelevantSpeciesTests(unittest.TestCase):
                 "wild boar",
                 "fox",
                 "badger",
+                "bird",
                 "hare",
                 "marten",
                 "raccoon",

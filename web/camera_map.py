@@ -17,7 +17,12 @@ from unicodedata import normalize
 import pandas as pd
 from src.labelling.label_data import DATE_FORMAT, load_rows
 from src.labelling.review_labels import DEFAULT_CSV
-from src.labelling.species import LABEL_EMOJIS, RECENT_SPECIES
+from src.labelling.species import (
+    LABEL_EMOJIS,
+    RECENT_SPECIES,
+    pluralize_species,
+    species_emoji,
+)
 from src.visits import CAMERA_TIMEZONE, exif_datetime
 
 DEFAULT_LOCATIONS = (
@@ -143,8 +148,13 @@ def recent_sighting_counts_by_location(rows, days, now=None):
             and taken is not None
             and cutoff <= taken.astimezone(UTC) <= now
         ):
-            sightings.setdefault(location, set()).add(image_file)
-    return {location: len(images) for location, images in sightings.items()}
+            sightings.setdefault(location, {}).setdefault(species, set()).add(
+                image_file
+            )
+    return {
+        location: {species: len(images) for species, images in counts.items()}
+        for location, counts in sightings.items()
+    }
 
 
 def sighting_icons(species):
@@ -599,33 +609,34 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
                 continue
             center, width = downwind_sector(forecast)
             max_speed = max(hour.speed for hour in forecast)
-            shaft, head = wind_arrow(
-                camera.latitude,
-                camera.longitude,
-                downwind_bearing(forecast[index].direction),
-                max(40.0, forecast[index].speed * 15),
-            )
-            state["arrows"].append(
-                leaflet.generic_layer(
-                    name="polyline",
-                    args=[shaft, {"color": WIND_ARROW_COLOUR, "weight": 3}],
+            if not compact:
+                shaft, head = wind_arrow(
+                    camera.latitude,
+                    camera.longitude,
+                    downwind_bearing(forecast[index].direction),
+                    max(40.0, forecast[index].speed * 15),
                 )
-            )
-            state["arrows"].append(
-                leaflet.generic_layer(
-                    name="polygon",
-                    args=[
-                        head,
-                        {
-                            "color": WIND_ARROW_COLOUR,
-                            "weight": 1,
-                            "fillColor": WIND_ARROW_COLOUR,
-                            "fillOpacity": 1,
-                            "interactive": False,
-                        },
-                    ],
+                state["arrows"].append(
+                    leaflet.generic_layer(
+                        name="polyline",
+                        args=[shaft, {"color": WIND_ARROW_COLOUR, "weight": 3}],
+                    )
                 )
-            )
+                state["arrows"].append(
+                    leaflet.generic_layer(
+                        name="polygon",
+                        args=[
+                            head,
+                            {
+                                "color": WIND_ARROW_COLOUR,
+                                "weight": 1,
+                                "fillColor": WIND_ARROW_COLOUR,
+                                "fillOpacity": 1,
+                                "interactive": False,
+                            },
+                        ],
+                    )
+                )
             state["arrows"].append(
                 leaflet.generic_layer(
                     name="polygon",
@@ -787,27 +798,70 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
             ui.label(
                 f"Largest gap between view and wind over the next {RANKING_HOURS} h"
             ).classes("text-sm text-gray-600")
+            rows = []
             for rank, (camera, gap) in enumerate(ranking, 1):
-                with (
-                    ui.row()
-                    .classes("w-full items-center gap-2 px-3 py-1 rounded")
-                    .style(f"background-color: {arc_colour(gap)}66")
-                    .mark("home-seat-rank")
-                ):
-                    ui.label(
-                        f"{rank}. {camera.location_id} · {gap:.0f}° from the wind arc"
-                    )
-                    ui.html(
-                        sighting_icons(
-                            sightings.get(normalize("NFC", camera.location_id), ())
+                counts = sighting_counts.get(normalize("NFC", camera.location_id), {})
+                breakdown = (
+                    ", ".join(
+                        f"{count} {pluralize_species(species, count)} "
+                        f"{species_emoji(species)}"
+                        for species, count in sorted(
+                            counts.items(), key=lambda item: (-item[1], item[0])
                         )
-                    ).classes("flex flex-wrap gap-1 text-lg").mark("seat-sightings")
-                    count = sighting_counts.get(
-                        normalize("NFC", camera.location_id), 0
                     )
-                    ui.label(
-                        f"{count} sighting{'s' if count != 1 else ''} in the last 24h"
-                    ).classes("text-xs text-gray-600").mark("seat-sighting-count")
+                    or "No sightings"
+                )
+                rows.append(
+                    {
+                        "rank": rank,
+                        "location": camera.location_id,
+                        "gap": f"{gap:.0f}°",
+                        "sightings": breakdown,
+                        "colour": f"{arc_colour(gap)}66",
+                    }
+                )
+            table = ui.table(
+                columns=[
+                    {
+                        "name": "rank",
+                        "label": "Rank",
+                        "field": "rank",
+                        "align": "right",
+                    },
+                    {
+                        "name": "location",
+                        "label": "Camera",
+                        "field": "location",
+                        "align": "left",
+                    },
+                    {
+                        "name": "gap",
+                        "label": "Wind gap",
+                        "field": "gap",
+                        "align": "right",
+                    },
+                    {
+                        "name": "sightings",
+                        "label": "Sightings (in the last 24h)",
+                        "field": "sightings",
+                        "align": "left",
+                    },
+                ],
+                rows=rows,
+                row_key="rank",
+            ).props("flat dense hide-bottom").classes("w-full max-w-full").mark(
+                "home-seat-rankings"
+            )
+            table.add_slot(
+                "body",
+                """
+                <q-tr :props="props" :style="{ backgroundColor: props.row.colour }">
+                    <q-td v-for="col in props.cols" :key="col.name" :props="props">
+                        {{ col.value }}
+                    </q-td>
+                </q-tr>
+                """,
+            )
 
     cameras, wind, sightings, sighting_counts = await _build_camera_map(
         csv_path, compact=True, on_update=render_ranking

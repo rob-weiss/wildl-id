@@ -137,6 +137,11 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 ("camera1", "squirrel.jpg"): "squirrel",
             },
         )
+        protected_birds = empty_images_module.non_game_images(
+            rows, review_app_module.GAME_SPECIES
+        )
+        self.assertNotIn(("camera1", "bird.jpg"), protected_birds)
+        self.assertNotIn(("camera1", "legacy-bird.jpg"), protected_birds)
 
     def test_game_cleanup_removes_related_csv_rows_but_not_training_archives(self):
         data = empty_images_module.label_data
@@ -287,7 +292,6 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 self.assertEqual(
                     table.call_args.kwargs["rows"],
                     [
-                        {"class": "bird", "images": 1},
                         {"class": "cat", "images": 1},
                         {"class": "dog", "images": 1},
                         {"class": "none", "images": 2},
@@ -299,7 +303,7 @@ class RemoveEmptyImagesTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     {call.args[0] for call in buttons.call_args_list},
-                    {"❌ Cancel", "🗑️ Delete 6 images"},
+                    {"❌ Cancel", "🗑️ Delete 5 images"},
                 )
                 self.assertTrue(
                     all(not call.kwargs.get("icon") for call in buttons.call_args_list)

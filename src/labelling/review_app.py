@@ -655,7 +655,7 @@ class ReviewApp:
                 pagination={"rowsPerPage": 0},
             ).props("dense flat hide-bottom").classes("w-full max-h-80 overflow-auto")
             ui.label(
-                "Unlabelled images are kept. Bird, unknown and none labels are included."
+                "Unlabelled images and bird labels are kept. Unknown and none labels are included."
             ).classes("max-w-md")
             ui.label(
                 f"{len(candidates)} original images and their annotations will be permanently deleted. "

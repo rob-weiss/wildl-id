@@ -597,10 +597,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 )
                 await refresh()
                 await user.should_not_see("Seat ranking unavailable")
-                await user.should_see("1. camera1 · 150° from the wind arc")
+                table = next(iter(user.find(marker="home-seat-rankings").elements))
+                self.assertEqual(table.rows[0]["gap"], "150°")
                 await refresh()
-                await user.should_see("1. camera1 · 0° from the wind arc")
-                await user.should_not_see("1. camera1 · 150° from the wind arc")
+                table = next(iter(user.find(marker="home-seat-rankings").elements))
+                self.assertEqual(table.rows[0]["gap"], "0°")
 
     async def test_home_map_below_best_seats_uses_one_day_and_five_wind_hours(self):
         import pandas as pd
@@ -620,6 +621,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     ("recent.jpg", now, "fox"),
                     ("recent.jpg", now, "fox"),
                     ("second.jpg", now - timedelta(minutes=5), "fox"),
+                    ("recent-badger.jpg", now - timedelta(minutes=7), "badger"),
                     ("old.jpg", now - timedelta(days=2), "badger"),
                 )
             ],
@@ -650,16 +652,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_not_see(marker="wind-hour")
                 await user.should_not_see(kind=ui.label, content="Camera map")
                 await user.should_see("next 5 h")
-                sightings = next(iter(user.find(marker="seat-sightings").elements))
-                self.assertIn('data-species="fox"', sightings.content)
-                self.assertNotIn('data-species="badger"', sightings.content)
-                await user.should_see("2 sightings in the last 24h")
+                table = next(iter(user.find(marker="home-seat-rankings").elements))
+                self.assertEqual(
+                    [
+                        (row["rank"], row["location"], row["gap"], row["sightings"])
+                        for row in table.rows
+                    ],
+                    [(1, "camera1", "150°", "2 foxes 🦊, 1 badger 🦡")],
+                )
+                self.assertEqual(table.rows[0]["colour"], "#22c55e66")
+                self.assertNotIn(
+                    "polyline", [layer.to_dict()["type"] for layer in leaflet.layers]
+                )
                 polygons = [
                     layer
                     for layer in leaflet.layers
                     if layer.to_dict()["type"] == "polygon"
                 ]
-                self.assertEqual(len(polygons), 3)
+                self.assertEqual(len(polygons), 2)
                 arc = polygons[-1].to_dict()
                 self.assertEqual(
                     arc["args"][0],
@@ -676,7 +686,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     user.find(marker="home-camera-map").trigger("init", {})
                     label = calls.call_args.args[1]
                     self.assertIn('data-species="fox"', label)
-                    self.assertNotIn('data-species="badger"', label)
+                    self.assertIn('data-species="badger"', label)
                 fetch.assert_called_once()
 
     async def test_map_seat_sightings_match_slider_and_refresh_without_fetching_wind(
