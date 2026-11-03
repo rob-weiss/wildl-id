@@ -158,6 +158,38 @@ class TestBallisticsWind(unittest.TestCase):
         self.assertEqual(speed, 0.0)
         self.assertEqual(seats, 0)
 
+    def test_get_max_seat_wind_calculates_worst_case_across_view_arcs(self):
+        cam1 = Camera("Seat_Headwind", 48.0, 9.0, view_direction=0.0, view_angle=60.0)
+        cam2 = Camera("Seat_Crosswind", 48.0, 9.0, view_direction=90.0, view_angle=60.0)
+        now = datetime.now(UTC)
+        wind_data = {
+            # Wind from North (0 deg) at 20 km/h:
+            # cam1 view is 0 deg -> max crosswind at FOV edges is 20 * sin(30) = 10 km/h
+            "Seat_Headwind": [
+                WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)
+            ],
+            # cam2 view is 90 deg -> 90 deg relative crosswind is directly in FOV -> 20 km/h
+            "Seat_Crosswind": [
+                WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)
+            ],
+        }
+        with (
+            patch("web.ballistics.read_camera_locations", return_value=[cam1, cam2]),
+            patch("web.ballistics.fetch_wind", return_value=wind_data),
+        ):
+            speed, seats = ballistics.get_max_seat_wind(hours_ahead=1, now=now)
+            self.assertEqual(seats, 2)
+            self.assertAlmostEqual(speed, 20.0)
+
+        # When only cam1 exists, max crosswind should be 10 km/h (limited by view arc), not raw 20 km/h
+        with (
+            patch("web.ballistics.read_camera_locations", return_value=[cam1]),
+            patch("web.ballistics.fetch_wind", return_value={"Seat_Headwind": wind_data["Seat_Headwind"]}),
+        ):
+            speed, seats = ballistics.get_max_seat_wind(hours_ahead=1, now=now)
+            self.assertEqual(seats, 1)
+            self.assertAlmostEqual(speed, 10.0)
+
 
 class TestBallisticsTrajectory(unittest.TestCase):
     def test_compute_trajectory_matches_reference_ballistics(self):
@@ -216,7 +248,9 @@ class TestBallisticsTrajectory(unittest.TestCase):
         self.assertAlmostEqual(cw, 20.0)
 
         # Wind blowing from North (0 deg) -> headwind -> min crosswind at 0 deg, max at sector boundary +/-30 deg: sin(30) = 0.5 -> 10 km/h
-        wind_head = [WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 0.0, 30.0)]
+        wind_head = [
+            WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 0.0, 30.0)
+        ]
         cw_head = ballistics.max_effective_crosswind_for_camera(cam, wind_head)
         self.assertAlmostEqual(cw_head, 10.0)
 

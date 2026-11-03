@@ -276,7 +276,11 @@ def get_max_seat_wind(
     locations_path: Path | None = None,
     now: datetime | None = None,
 ) -> tuple[float, int]:
-    """Fetch wind and return (max_wind_kmh, located_seat_count)."""
+    """Fetch wind and return (max_effective_crosswind_kmh, located_seat_count).
+
+    Considers the worst-case crosswind across all located seats within their
+    respective view arcs/sectors.
+    """
     try:
         path = locations_path or configured_locations_path()
         if not path.is_file():
@@ -286,7 +290,17 @@ def get_max_seat_wind(
         if not located:
             return 0.0, 0
         wind_data = fetch_wind(located)
-        speed = max_seat_wind_speed(wind_data, hours_ahead, now=now)
+        now_ts = pd.Timestamp(now or datetime.now(UTC)).tz_convert("UTC")
+
+        crosswinds: list[float] = []
+        for cam in located:
+            seat_hours = wind_data.get(cam.location_id, [])
+            upcoming = [h for h in seat_hours if h.time >= now_ts][:hours_ahead]
+            if not upcoming and seat_hours:
+                upcoming = seat_hours[:hours_ahead]
+            crosswinds.append(max_effective_crosswind_for_camera(cam, upcoming))
+
+        speed = max(crosswinds) if crosswinds else 0.0
         return speed, len(located)
     except Exception as error:
         logger.warning("Could not obtain seat wind: %s", error)
@@ -298,7 +312,11 @@ def max_effective_crosswind_for_camera(
     wind_hours: list,
 ) -> float:
     """Calculate maximum effective crosswind speed in km/h across field of view."""
-    if not camera.has_view or camera.view_direction is None or camera.view_angle is None:
+    if (
+        not camera.has_view
+        or camera.view_direction is None
+        or camera.view_angle is None
+    ):
         return max((float(h.speed) for h in wind_hours), default=0.0)
 
     half_angle = camera.view_angle / 2.0
@@ -313,8 +331,7 @@ def max_effective_crosswind_for_camera(
         for target in (w_dir - 90.0, w_dir + 90.0):
             diff = (target - view_dir + 180.0) % 360.0 - 180.0
             if abs(diff) <= half_angle:
-                if speed > max_cw:
-                    max_cw = speed
+                max_cw = max(max_cw, speed)
                 hit_90 = True
                 break
         if not hit_90:
@@ -323,8 +340,7 @@ def max_effective_crosswind_for_camera(
             sin_l = abs(math.sin(math.radians(w_dir - phi_l)))
             sin_r = abs(math.sin(math.radians(w_dir - phi_r)))
             effective = speed * max(sin_l, sin_r)
-            if effective > max_cw:
-                max_cw = effective
+            max_cw = max(max_cw, effective)
 
     return max_cw
 
@@ -712,7 +728,7 @@ async def build_ballistics_page() -> None:
                     ui.label(f"{wind_speed:.1f} km/h").classes(
                         "text-xl font-bold text-teal-700"
                     )
-                    ui.label(f"Seats: {state['seat_count']} · 90° crosswind").classes(
+                    ui.label(f"Seats: {state['seat_count']} · view arc worst case").classes(
                         "text-xs text-gray-600"
                     )
 
@@ -776,7 +792,7 @@ async def build_ballistics_page() -> None:
                     },
                     {
                         "name": "wind_drift",
-                        "label": "Wind Drift (90°)",
+                        "label": "Wind Drift (view arc)",
                         "field": "wind_drift",
                         "align": "center",
                     },
