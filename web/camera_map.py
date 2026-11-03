@@ -117,6 +117,36 @@ def recent_species_by_location(rows, days, now=None):
     return {location: tuple(sorted(species)) for location, species in sightings.items()}
 
 
+def recent_sighting_counts_by_location(rows, days, now=None):
+    if not 0 <= days <= MAX_SIGHTING_DAYS:
+        raise ValueError(f"Sighting days must be between 0 and {MAX_SIGHTING_DAYS}")
+    if days == 0:
+        return {}
+    now = now or datetime.now(UTC)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=CAMERA_TIMEZONE)
+    now = now.astimezone(UTC)
+    cutoff = now - timedelta(days=days)
+    sightings = {}
+    for row in rows:
+        species = (
+            str(row.get("manual_label") or "").strip()
+            or str(row.get("class") or "").strip()
+        ).casefold()
+        location = normalize("NFC", str(row.get("location_id") or ""))
+        image_file = str(row.get("image_file") or "").strip()
+        taken = exif_datetime(row)
+        if (
+            species in RECENT_SPECIES
+            and location.strip()
+            and image_file
+            and taken is not None
+            and cutoff <= taken.astimezone(UTC) <= now
+        ):
+            sightings.setdefault(location, set()).add(image_file)
+    return {location: len(images) for location, images in sightings.items()}
+
+
 def sighting_icons(species):
     return "".join(
         f'<span role="img" aria-label="{html.escape(name, quote=True)}" '
@@ -367,6 +397,7 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
         "arrows": [],
         "sighting_rows": [],
         "sightings": {},
+        "sighting_counts": {},
         "map_ready": False,
     }
     with ui.column().classes(
@@ -498,12 +529,20 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
                 else "Sightings: off"
             )
         state["sightings"] = recent_species_by_location(state["sighting_rows"], days)
+        state["sighting_counts"] = recent_sighting_counts_by_location(
+            state["sighting_rows"], days
+        )
         if state["map_ready"]:
             label_markers()
         if wind_list is not None:
             render()
         if on_update is not None:
-            on_update(located, state["wind"], state["sightings"])
+            on_update(
+                located,
+                state["wind"],
+                state["sightings"],
+                state["sighting_counts"],
+            )
 
     async def refresh_sightings() -> None:
         try:
@@ -700,7 +739,12 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
             status.set_text("Wind forecast unavailable")
         render()
         if on_update is not None:
-            on_update(located, state["wind"], state["sightings"])
+            on_update(
+                located,
+                state["wind"],
+                state["sightings"],
+                state["sighting_counts"],
+            )
 
     def change_hours() -> None:
         slider.props["max"] = int(hours_select.value) - 1
@@ -718,7 +762,7 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
     await refresh()
     ui.timer(60, refresh_sightings)
     ui.timer(WIND_CACHE_SECONDS, refresh)
-    return located, state["wind"], state["sightings"]
+    return located, state["wind"], state["sightings"], state["sighting_counts"]
 
 
 async def build_camera_map_page(csv_path: Path = DEFAULT_CSV) -> None:
@@ -731,7 +775,7 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
     ui.label("Best seats now").classes("text-xl font-semibold")
     ranking_container = None
 
-    def render_ranking(cameras, wind, sightings):
+    def render_ranking(cameras, wind, sightings, sighting_counts):
         if ranking_container is None:
             return
         ranking_container.clear()
@@ -758,9 +802,15 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
                             sightings.get(normalize("NFC", camera.location_id), ())
                         )
                     ).classes("flex flex-wrap gap-1 text-lg").mark("seat-sightings")
+                    count = sighting_counts.get(
+                        normalize("NFC", camera.location_id), 0
+                    )
+                    ui.label(
+                        f"{count} sighting{'s' if count != 1 else ''} in the last 24h"
+                    ).classes("text-xs text-gray-600").mark("seat-sighting-count")
 
-    cameras, wind, sightings = await _build_camera_map(
+    cameras, wind, sightings, sighting_counts = await _build_camera_map(
         csv_path, compact=True, on_update=render_ranking
     )
     ranking_container = ui.column().classes("w-full gap-2")
-    render_ranking(cameras, wind, sightings)
+    render_ranking(cameras, wind, sightings, sighting_counts)

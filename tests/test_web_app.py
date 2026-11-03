@@ -618,6 +618,8 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 }
                 for name, taken, species in (
                     ("recent.jpg", now, "fox"),
+                    ("recent.jpg", now, "fox"),
+                    ("second.jpg", now - timedelta(minutes=5), "fox"),
                     ("old.jpg", now - timedelta(days=2), "badger"),
                 )
             ],
@@ -651,6 +653,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 sightings = next(iter(user.find(marker="seat-sightings").elements))
                 self.assertIn('data-species="fox"', sightings.content)
                 self.assertNotIn('data-species="badger"', sightings.content)
+                await user.should_see("2 sightings in the last 24h")
                 polygons = [
                     layer
                     for layer in leaflet.layers
@@ -1026,6 +1029,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         user.find(marker="visit-frame").elements,
                         key=lambda frame: frame.id,
                     )
+                    by_image = {
+                        frame.props["data-image-file"]: frame for frame in frames
+                    }
+                    single_description = by_image["boar.jpg"].props["aria-label"]
+                    single_time = (
+                        now - timedelta(minutes=10)
+                    ).astimezone(gallery.CAMERA_TIMEZONE).strftime("%d-%m-%Y %H:%M")
+                    self.assertEqual(single_description.count(single_time), 1)
+                    self.assertNotIn(" – ", single_description)
+                    long_description = by_image["last.jpg"].props["aria-label"]
+                    self.assertIn(" – ", long_description)
+                    self.assertIn("0:20:00", long_description)
                     self.assertEqual(
                         [frame.props["data-image-file"] for frame in frames],
                         ["last.jpg", "boar.jpg", "first.jpg", "old.jpg"],

@@ -903,10 +903,15 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
             )
             start = visit.started_at.astimezone(CAMERA_TIMEZONE)
             end = visit.ended_at.astimezone(CAMERA_TIMEZONE)
+            visit_time = start.strftime(f"{label_data.DATE_FORMAT} %H:%M")
+            if visit.observed_span_seconds > 0:
+                visit_time += (
+                    f" – {end.strftime(f'{label_data.DATE_FORMAT} %H:%M')} · "
+                    f"{timedelta(seconds=visit.observed_span_seconds)}"
+                )
             description = (
                 f"{display_label(visit.species)} · {visit.location_id} · "
-                f"{start.strftime(f'{label_data.DATE_FORMAT} %H:%M')} – "
-                f"{end.strftime(f'{label_data.DATE_FORMAT} %H:%M')} · "
+                f"{visit_time} · "
                 f"{visit.image_count} images"
             )
             card.props["aria-label"] = description
