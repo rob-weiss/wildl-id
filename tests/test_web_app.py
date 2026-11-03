@@ -1044,8 +1044,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     }
                     single_description = by_image["boar.jpg"].props["aria-label"]
                     single_time = (
-                        now - timedelta(minutes=10)
-                    ).astimezone(gallery.CAMERA_TIMEZONE).strftime("%d-%m-%Y %H:%M")
+                        (now - timedelta(minutes=10))
+                        .astimezone(gallery.CAMERA_TIMEZONE)
+                        .strftime("%d-%m-%Y %H:%M")
+                    )
                     self.assertEqual(single_description.count(single_time), 1)
                     self.assertNotIn(" – ", single_description)
                     long_description = by_image["last.jpg"].props["aria-label"]

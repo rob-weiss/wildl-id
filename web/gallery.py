@@ -1178,6 +1178,7 @@ def build_recent_gallery(
                 "unelevated" if active else "outline",
                 remove="outline" if active else "unelevated",
             ).props(f'aria-pressed="{str(active).lower()}"')
+
     def toggle_species(species):
         if species == "all":
             selected_species.clear()

@@ -820,37 +820,40 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
                         "colour": f"{arc_colour(gap)}66",
                     }
                 )
-            table = ui.table(
-                columns=[
-                    {
-                        "name": "rank",
-                        "label": "Rank",
-                        "field": "rank",
-                        "align": "right",
-                    },
-                    {
-                        "name": "location",
-                        "label": "Camera",
-                        "field": "location",
-                        "align": "left",
-                    },
-                    {
-                        "name": "gap",
-                        "label": "Wind gap",
-                        "field": "gap",
-                        "align": "right",
-                    },
-                    {
-                        "name": "sightings",
-                        "label": "Sightings (in the last 24h)",
-                        "field": "sightings",
-                        "align": "left",
-                    },
-                ],
-                rows=rows,
-                row_key="rank",
-            ).props("flat dense hide-bottom").classes("w-full max-w-full").mark(
-                "home-seat-rankings"
+            table = (
+                ui.table(
+                    columns=[
+                        {
+                            "name": "rank",
+                            "label": "Rank",
+                            "field": "rank",
+                            "align": "right",
+                        },
+                        {
+                            "name": "location",
+                            "label": "Camera",
+                            "field": "location",
+                            "align": "left",
+                        },
+                        {
+                            "name": "gap",
+                            "label": "Wind gap",
+                            "field": "gap",
+                            "align": "right",
+                        },
+                        {
+                            "name": "sightings",
+                            "label": "Sightings (in the last 24h)",
+                            "field": "sightings",
+                            "align": "left",
+                        },
+                    ],
+                    rows=rows,
+                    row_key="rank",
+                )
+                .props("flat dense hide-bottom")
+                .classes("w-full max-w-full")
+                .mark("home-seat-rankings")
             )
             table.add_slot(
                 "body",
