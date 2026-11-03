@@ -62,11 +62,7 @@ def cloud_image_url(
     return f"{base_url.rstrip('/')}/{quote(relative_path.as_posix(), safe='/')}"
 
 
-def parse_box(value):
-    try:
-        box = ast.literal_eval(value or "")
-    except ValueError, SyntaxError, TypeError:
-        return None
+def _valid_box(box):
     if not isinstance(box, (list, tuple)) or len(box) != 4:
         return None
     if not all(isinstance(item, (int, float)) and math.isfinite(item) for item in box):
@@ -76,6 +72,32 @@ def parse_box(value):
     return box
 
 
+def parse_box(value):
+    try:
+        box = ast.literal_eval(value or "")
+    except ValueError, SyntaxError, TypeError:
+        return None
+    return _valid_box(box)
+
+
+def parse_boxes(value):
+    try:
+        boxes = ast.literal_eval(value or "")
+    except ValueError, SyntaxError, TypeError:
+        return []
+    if not isinstance(boxes, (list, tuple)):
+        return []
+    return [box for box in boxes if _valid_box(box) is not None]
+
+
+def row_boxes(row):
+    """Labelled box first, then further detections of the same class."""
+    box = parse_box(row.get("box", ""))
+    if box is None:
+        return []
+    return [box, *parse_boxes(row.get("additional_boxes", ""))]
+
+
 def box_overlay_svg(
     row, image_size, prediction=None, display_size=None, zoom_scale=1, show_label=True
 ):
@@ -83,14 +105,12 @@ def box_overlay_svg(
     display_width, display_height = display_size or image_size
     scale_x = image_width / display_width
     scale_y = image_height / display_height
-    box = parse_box(row.get("box", ""))
-    if box is None:
+    boxes = row_boxes(row)
+    if not boxes:
         return ""
-    x_center, y_center, width, height = box
+    x_center, y_center, width, height = boxes[0]
     left = (x_center - width / 2) * image_width
     top = (y_center - height / 2) * image_height
-    box_width = width * image_width
-    box_height = height * image_height
     manual_label = str(row.get("manual_label") or "").strip()
     if prediction:
         true_label = manual_label or prediction["true_label"]
@@ -99,10 +119,13 @@ def box_overlay_svg(
         true_label = manual_label
         predicted_label = row["class"]
     color = bounding_box_color(predicted_label, true_label)
-    outline = (
-        f'<rect x="{left:.1f}" y="{top:.1f}" width="{box_width:.1f}" '
-        f'height="{box_height:.1f}" fill="none" stroke="{color}" '
+    outline = "".join(
+        f'<rect x="{(box_x - box_w / 2) * image_width:.1f}" '
+        f'y="{(box_y - box_h / 2) * image_height:.1f}" '
+        f'width="{box_w * image_width:.1f}" '
+        f'height="{box_h * image_height:.1f}" fill="none" stroke="{color}" '
         f'stroke-width="{4 / zoom_scale:g}" vector-effect="non-scaling-stroke" />'
+        for box_x, box_y, box_w, box_h in boxes
     )
     if not show_label:
         return outline

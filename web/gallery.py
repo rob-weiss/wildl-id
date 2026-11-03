@@ -24,6 +24,7 @@ from src.labelling.review_app import (
     box_overlay_svg,
     cloud_image_url,
     display_label,
+    row_boxes,
 )
 from src.labelling.review_labels import SHORTCUTS, load_validation_predictions
 from src.labelling.species import RECENT_SPECIES
@@ -844,6 +845,13 @@ def annotation_labels(row):
     return preferred_label(row)
 
 
+def animal_count(row):
+    manual, automatic = _manual_and_automatic(row)
+    if (manual or automatic).casefold() in {"", "none", "human", "vehicle"}:
+        return 0
+    return len(row_boxes(row))
+
+
 def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=False):
     image = ui.interactive_image(source).classes(classes)
 
@@ -922,6 +930,15 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
             else ui.image(source).props("fit=contain").classes("w-full cursor-pointer")
         )
         image.on("click", on_click)
+        if count := animal_count(row):
+            with image:
+                ui.label(str(count)).classes(
+                    "absolute top-1 right-1 min-w-6 px-1.5 rounded-full text-center "
+                    "text-xs font-bold text-gray-900 bg-white/70 shadow "
+                    "pointer-events-none"
+                ).props(
+                    f'aria-label="{count} {"animal" if count == 1 else "animals"}"'
+                ).mark("animal-count")
         with ui.card_section().classes("p-2"):
             ui.label(
                 preferred_label(row) if detailed else display_label(row_label(row))

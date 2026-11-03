@@ -1771,6 +1771,49 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("<rect", image.content)
                 self.assertNotIn("<text", image.content)
 
+    async def test_home_thumbnail_shows_animal_count(self):
+        now = (datetime.now() - timedelta(minutes=1)).isoformat()
+        self.write_csv(
+            [
+                "location_id",
+                "image_file",
+                "timestamp",
+                "class",
+                "box",
+                "additional_boxes",
+            ],
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "deer.jpg",
+                    "timestamp": now,
+                    "class": "roe deer",
+                    "box": "[0.5, 0.5, 0.4, 0.2]",
+                    "additional_boxes": "[[0.2, 0.2, 0.1, 0.1], [0.8, 0.8, 0.1, 0.1]]",
+                },
+                {
+                    "location_id": "camera1",
+                    "image_file": "person.jpg",
+                    "timestamp": now,
+                    "class": "human",
+                    "box": "[0.5, 0.5, 0.4, 0.2]",
+                    "additional_boxes": "",
+                },
+            ],
+        )
+        with patch.dict(
+            os.environ, {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"}
+        ):
+            async with self.app_user("/") as user:
+                await user.should_see("🦌 roe deer")
+                counts = user.find(marker="animal-count").elements
+                self.assertEqual([label.text for label in counts], ["3"])
+                images = user.find(kind=ui.interactive_image)
+                images.trigger("loaded", {"width": 1600, "height": 900})
+                self.assertIn(
+                    3, [image.content.count("<rect") for image in images.elements]
+                )
+
     async def test_home_recent_gallery_recovers_from_missing_csv(self):
         with patch.object(gallery.ui, "timer") as timer:
             async with self.app_user("/") as user:

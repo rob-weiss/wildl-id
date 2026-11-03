@@ -16,6 +16,47 @@ wildl_id = import_module("wildl_id")
 
 
 class AutomaticLabelTests(unittest.TestCase):
+    def test_extra_detections_need_higher_confidence(self):
+        detections = MagicMock()
+        detections.__len__.return_value = 3
+        detections.confidence = np.array([0.7, 0.65, 0.9])
+        detections.class_id = np.array([0, 1, 0])
+        detections.xyxy = np.array([[0, 0, 10, 10], [10, 10, 20, 20], [20, 0, 40, 20]])
+        self.assertEqual(
+            label_images.parse_detections(detections, 100, 200),
+            [(0.9, "animal", [0.2, 0.0, 0.2, 0.1])],
+        )
+        parsed = label_images.parse_detections(
+            [
+                {"conf": 0.7, "category": 0, "bbox": [0, 0, 0.1, 0.1]},
+                {"conf": 0.65, "category": 1, "bbox": [0.1, 0.1, 0.1, 0.1]},
+                {"conf": 0.85, "category": 0, "bbox": [0.2, 0, 0.2, 0.2]},
+            ],
+            100,
+            100,
+        )
+        self.assertEqual([detection[0] for detection in parsed], [0.85])
+        self.assertEqual(label_images.parse_detections([], 100, 100), [])
+        self.assertEqual(
+            label_images.parse_detections(
+                [{"conf": 0.5, "category": 0, "bbox": [0, 0, 1, 1]}], 10, 10
+            ),
+            [],
+        )
+
+    def test_majority_class_keeps_best_detection_first(self):
+        labelled = [
+            ("fox", 0.9, 0.95, [0, 0, 0.1, 0.1]),
+            ("roe deer", 0.8, 0.9, [0.1, 0, 0.1, 0.1]),
+            ("roe deer", 0.7, 0.85, [0.2, 0, 0.1, 0.1]),
+        ]
+        kept = label_images.majority_detections(labelled)
+        self.assertEqual([detection[0] for detection in kept], ["roe deer"] * 2)
+        self.assertEqual(kept[0][2], 0.9)
+        tie = label_images.majority_detections(labelled[:2])
+        self.assertEqual([detection[0] for detection in tie], ["fox"])
+        self.assertEqual(label_images.majority_detections([]), [])
+
     def test_labelling_uses_only_actual_output_directory_with_optional_ocr(self):
         for enable_ocr in (False, True):
             for custom_output in (False, True):
@@ -380,10 +421,10 @@ class AutomaticLabelTests(unittest.TestCase):
             original = csv_path.read_bytes()
             detector = Mock()
             detections = MagicMock()
-            detections.__len__.return_value = 1
-            detections.confidence = np.array([0.95])
-            detections.class_id = np.array([0])
-            detections.xyxy = np.array([[4, 4, 36, 36]])
+            detections.__len__.return_value = 2
+            detections.confidence = np.array([0.85, 0.95])
+            detections.class_id = np.array([0, 0])
+            detections.xyxy = np.array([[0, 0, 20, 20], [4, 4, 36, 36]])
             detector.single_image_detection.return_value = {
                 "detections": detections,
             }
@@ -451,6 +492,11 @@ class AutomaticLabelTests(unittest.TestCase):
             self.assertEqual(updated.loc["missing.jpg", "manual_label"], "dog")
             self.assertEqual(updated.loc["missing.jpg", "class"], "fox")
             self.assertTrue((reviewed["box"] != "[0.1, 0.1, 0.1, 0.1]").all())
+            self.assertEqual(updated.loc["new.jpg", "box"], "[0.5, 0.5, 0.8, 0.8]")
+            self.assertEqual(
+                updated.loc["new.jpg", "additional_boxes"], "[[0.25, 0.25, 0.5, 0.5]]"
+            )
+            self.assertEqual(float(updated.loc["new.jpg", "confidence"]), 0.95)
             backups = list(csv_path.parent.glob("*.before-relabel-*.bak"))
             self.assertEqual(len(backups), 1)
             self.assertEqual(backups[0].read_bytes(), original)

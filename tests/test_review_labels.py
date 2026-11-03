@@ -1618,6 +1618,26 @@ class LabelReviewTests(unittest.TestCase):
         self.assertNotIn("Predicted:", overlay)
         self.assertNotIn("🐾", overlay)
 
+    def test_box_overlay_draws_additional_boxes_without_labels(self):
+        overlay = review_app_module.box_overlay_svg(
+            {
+                "class": "roe deer",
+                "manual_label": "",
+                "box": "[0.5, 0.5, 0.2, 0.2]",
+                "additional_boxes": "[[0.2, 0.2, 0.1, 0.1], [0.8, 0.8, 0.1, 0.1]]",
+            },
+            (400, 300),
+        )
+        root = ET.fromstring(f"<svg>{overlay}</svg>")
+
+        self.assertEqual(len(root.findall("rect")), 3)
+        self.assertEqual(len(root.findall("g")), 1)
+        self.assertEqual(root.find("rect").get("x"), "160.0")
+        self.assertEqual(
+            review_app_module.row_boxes({"box": "", "additional_boxes": "[[0.5]]"}),
+            [],
+        )
+
     def test_box_overlay_keeps_annotation_size_in_display_pixels(self):
         row = {
             "class": "fox",

@@ -30,6 +30,7 @@ PREDICTION_COLUMNS = (
     "image_file",
     "class",
     "box",
+    "additional_boxes",
     "confidence",
     "classification_confidence",
     "classifier_model",
