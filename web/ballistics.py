@@ -728,9 +728,9 @@ async def build_ballistics_page() -> None:
                     ui.label(f"{wind_speed:.1f} km/h").classes(
                         "text-xl font-bold text-teal-700"
                     )
-                    ui.label(f"Seats: {state['seat_count']} · view arc worst case").classes(
-                        "text-xs text-gray-600"
-                    )
+                    ui.label(
+                        f"Seats: {state['seat_count']} · view arc worst case"
+                    ).classes("text-xs text-gray-600")
 
                 with ui.card().classes("flex-1 min-w-44 p-3"):
                     ui.label("Wind Drift @ 100m / 200m").classes(

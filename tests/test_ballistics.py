@@ -165,13 +165,9 @@ class TestBallisticsWind(unittest.TestCase):
         wind_data = {
             # Wind from North (0 deg) at 20 km/h:
             # cam1 view is 0 deg -> max crosswind at FOV edges is 20 * sin(30) = 10 km/h
-            "Seat_Headwind": [
-                WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)
-            ],
+            "Seat_Headwind": [WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)],
             # cam2 view is 90 deg -> 90 deg relative crosswind is directly in FOV -> 20 km/h
-            "Seat_Crosswind": [
-                WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)
-            ],
+            "Seat_Crosswind": [WindHour(pd.Timestamp(now), 20.0, 0.0, 30.0)],
         }
         with (
             patch("web.ballistics.read_camera_locations", return_value=[cam1, cam2]),
@@ -184,7 +180,10 @@ class TestBallisticsWind(unittest.TestCase):
         # When only cam1 exists, max crosswind should be 10 km/h (limited by view arc), not raw 20 km/h
         with (
             patch("web.ballistics.read_camera_locations", return_value=[cam1]),
-            patch("web.ballistics.fetch_wind", return_value={"Seat_Headwind": wind_data["Seat_Headwind"]}),
+            patch(
+                "web.ballistics.fetch_wind",
+                return_value={"Seat_Headwind": wind_data["Seat_Headwind"]},
+            ),
         ):
             speed, seats = ballistics.get_max_seat_wind(hours_ahead=1, now=now)
             self.assertEqual(seats, 1)
