@@ -1167,9 +1167,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(badger.visible)
                 await user.should_not_see("roe deer (0)")
                 await user.should_not_see(marker="recent-species-unlabelled")
-                summary = next(
-                    iter(user.find(marker="recent-species-summary").elements)
-                )
+                await user.should_not_see(marker="recent-species-summary")
                 full_gallery_link = next(
                     iter(user.find(marker="recent-full-gallery").elements)
                 )
@@ -1183,7 +1181,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(review_link.text, "Review labels")
                 self.assertEqual(review_link.props.get("href"), "/review")
                 self.assertIs(review_link.parent_slot, full_gallery_link.parent_slot)
-                self.assertLess(summary.id, full_gallery_link.id)
                 self.assertLess(full_gallery_link.id, status.id)
                 user.find(marker="recent-species-fox").click()
                 await user.should_see("3 images")

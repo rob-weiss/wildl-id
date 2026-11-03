@@ -1130,9 +1130,6 @@ def build_recent_gallery(
                     .mark(f"recent-species-{species.replace(' ', '-')}")
                 )
             boxes.button("recent-boxes").props("dense")
-        species_summary = (
-            ui.label().classes("text-sm text-gray-700").mark("recent-species-summary")
-        )
         with ui.row().classes("items-center gap-4"):
             ui.link("View full gallery", "/gallery").mark("recent-full-gallery")
             ui.link("Review labels", "/review").mark("recent-review-labels")
@@ -1176,15 +1173,6 @@ def build_recent_gallery(
                 "unelevated" if active else "outline",
                 remove="outline" if active else "unelevated",
             ).props(f'aria-pressed="{str(active).lower()}"')
-        species_summary.set_text(
-            " · ".join(
-                f"{species_names[species]}: {counts[species]}"
-                for species in species_names
-                if counts[species]
-            )
-            or "No sightings in the last 24 hours"
-        )
-
     def toggle_species(species):
         if species == "all":
             selected_species.clear()
