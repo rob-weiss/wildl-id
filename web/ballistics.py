@@ -178,6 +178,8 @@ class BallisticResult:
     energies_j: np.ndarray
     windages_cm: np.ndarray
     gee_distance_m: float
+    max_height_cm: float
+    max_height_distance_m: float
     e0_j: float
     e100_j: float
     v0_mps: float
@@ -325,6 +327,10 @@ def compute_trajectory(
     idx_200 = int(np.abs(distances - 200.0).argmin())
     idx_300 = int(np.abs(distances - 300.0).argmin())
 
+    max_idx = int(np.argmax(heights_cm))
+    max_height_cm = float(heights_cm[max_idx])
+    max_height_distance_m = float(distances[max_idx])
+
     return BallisticResult(
         distances=distances,
         heights_cm=heights_cm,
@@ -332,6 +338,8 @@ def compute_trajectory(
         energies_j=energies_j,
         windages_cm=windages_cm,
         gee_distance_m=gee_distance_m,
+        max_height_cm=max_height_cm,
+        max_height_distance_m=max_height_distance_m,
         e0_j=float(energies_j[0]),
         e100_j=float(energies_j[idx_100]),
         v0_mps=float(velocities_mps[0]),
@@ -488,8 +496,10 @@ async def build_ballistics_page() -> None:
                         options=cartridge_options,
                         value=state["selected_cartridge_id"],
                         label="Hunting Caliber / Cartridge",
+                        with_input=True,
                     )
                     .classes("flex-grow min-w-72")
+                    .props("use-input fill-input hide-selected")
                     .mark("ballistics-cartridge-select")
                 )
 
@@ -549,6 +559,17 @@ async def build_ballistics_page() -> None:
                         "text-xl font-bold text-orange-600"
                     )
                     ui.label(f"+{cartridge.zero_height_cm:.1f} cm @ 100 m").classes(
+                        "text-xs text-gray-600"
+                    )
+
+                with ui.card().classes("flex-1 min-w-44 p-3"):
+                    ui.label("Max Trajectory Height").classes(
+                        "text-xs text-gray-500 uppercase"
+                    )
+                    ui.label(f"+{result.max_height_cm:.1f} cm").classes(
+                        "text-xl font-bold text-emerald-700"
+                    )
+                    ui.label(f"@ {result.max_height_distance_m:.0f} m").classes(
                         "text-xs text-gray-600"
                     )
 

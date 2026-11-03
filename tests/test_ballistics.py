@@ -147,6 +147,9 @@ class TestBallisticsTrajectory(unittest.TestCase):
         # Sighting at 100m is +4.0 cm
         idx_100 = int(np.abs(result.distances - 100.0).argmin())
         self.assertAlmostEqual(result.heights_cm[idx_100], 4.0, delta=0.2)
+        # Max trajectory height
+        self.assertAlmostEqual(result.max_height_cm, 4.08, delta=0.2)
+        self.assertAlmostEqual(result.max_height_distance_m, 110.0, delta=10.0)
         # Without wind, windage is 0 everywhere
         self.assertAlmostEqual(result.wind_drift_100m_cm, 0.0, places=3)
         self.assertAlmostEqual(result.wind_drift_200m_cm, 0.0, places=3)
@@ -211,6 +214,7 @@ class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):
                     await user.should_see("Wind Horizon (hours)")
                     await user.should_see("Muzzle Energy (E0)")
                     await user.should_see("GEE / MRD")
+                    await user.should_see("Max Trajectory Height")
                     await user.should_see("Ballistic Drop Table")
 
                     # Verify SVG and table exist
