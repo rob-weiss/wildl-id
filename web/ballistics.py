@@ -272,7 +272,9 @@ def compute_trajectory(
     )
     ammo = pbc.Ammo(dm, Velocity.MPS(cartridge.muzzle_velocity_mps))
 
-    weapon_base = pbc.Weapon(sight_height=Distance.Centimeter(cartridge.sight_height_cm))
+    weapon_base = pbc.Weapon(
+        sight_height=Distance.Centimeter(cartridge.sight_height_cm)
+    )
     base_zero = calc.zero_angle(
         pbc.Shot(weapon=weapon_base, ammo=ammo),
         Distance.Meter(cartridge.zero_distance_m),
@@ -357,7 +359,9 @@ def generate_ballistics_plot_svg(
             lw=2,
             label=f"Trajectory (+{cartridge.zero_height_cm:.1f}cm @ {cartridge.zero_distance_m:.0f}m)",
         )
-        ax1.axhline(0, color="black", linestyle="--", linewidth=0.8, label="Line of sight")
+        ax1.axhline(
+            0, color="black", linestyle="--", linewidth=0.8, label="Line of sight"
+        )
         ax1.axvline(100, color="red", linestyle=":", label="100m mark")
         ax1.plot(
             100,
@@ -445,9 +449,7 @@ async def build_ballistics_page() -> None:
     }
 
     # Fetch initial wind in background
-    wind_speed, seats = await run.io_bound(
-        get_max_seat_wind, state["forecast_hours"]
-    )
+    wind_speed, seats = await run.io_bound(get_max_seat_wind, state["forecast_hours"])
     state["wind_speed_kmh"] = wind_speed
     state["seat_count"] = seats
 
@@ -494,9 +496,7 @@ async def build_ballistics_page() -> None:
             )
             wind_speed = state["wind_speed_kmh"]
 
-            result = await run.cpu_bound(
-                compute_trajectory, cartridge, wind_speed
-            )
+            result = await run.cpu_bound(compute_trajectory, cartridge, wind_speed)
             state["result"] = result
             svg_content = await run.cpu_bound(
                 generate_ballistics_plot_svg, cartridge, result, wind_speed
@@ -507,14 +507,18 @@ async def build_ballistics_page() -> None:
             metrics_container.clear()
             with metrics_container:
                 with ui.card().classes("flex-1 min-w-44 p-3"):
-                    ui.label("Muzzle Energy (E0)").classes("text-xs text-gray-500 uppercase")
-                    ui.label(f"{result.e0_j:.0f} J").classes("text-xl font-bold")
-                    ui.label(f"v0: {result.v0_mps:.0f} m/s · {cartridge.bullet_weight_g:.1f} g").classes(
-                        "text-xs text-gray-600"
+                    ui.label("Muzzle Energy (E0)").classes(
+                        "text-xs text-gray-500 uppercase"
                     )
+                    ui.label(f"{result.e0_j:.0f} J").classes("text-xl font-bold")
+                    ui.label(
+                        f"v0: {result.v0_mps:.0f} m/s · {cartridge.bullet_weight_g:.1f} g"
+                    ).classes("text-xs text-gray-600")
 
                 with ui.card().classes("flex-1 min-w-44 p-3"):
-                    ui.label("Energy @ 100m (E100)").classes("text-xs text-gray-500 uppercase")
+                    ui.label("Energy @ 100m (E100)").classes(
+                        "text-xs text-gray-500 uppercase"
+                    )
                     ui.label(f"{result.e100_j:.0f} J").classes("text-xl font-bold")
                     ui.label(f"v100: {result.v100_mps:.0f} m/s").classes(
                         "text-xs text-gray-600"
@@ -522,7 +526,9 @@ async def build_ballistics_page() -> None:
 
                 with ui.card().classes("flex-1 min-w-44 p-3"):
                     ui.label("GEE / MRD").classes("text-xs text-gray-500 uppercase")
-                    ui.label(f"~{result.gee_distance_m:.0f} m").classes("text-xl font-bold text-orange-600")
+                    ui.label(f"~{result.gee_distance_m:.0f} m").classes(
+                        "text-xl font-bold text-orange-600"
+                    )
                     ui.label(f"+{cartridge.zero_height_cm:.1f} cm @ 100 m").classes(
                         "text-xs text-gray-600"
                     )
@@ -531,7 +537,9 @@ async def build_ballistics_page() -> None:
                     ui.label(f"Max Side Wind ({state['forecast_hours']}h)").classes(
                         "text-xs text-gray-500 uppercase"
                     )
-                    ui.label(f"{wind_speed:.1f} km/h").classes("text-xl font-bold text-teal-700")
+                    ui.label(f"{wind_speed:.1f} km/h").classes(
+                        "text-xl font-bold text-teal-700"
+                    )
                     ui.label(f"Seats: {state['seat_count']} · 90° crosswind").classes(
                         "text-xs text-gray-600"
                     )
@@ -570,15 +578,40 @@ async def build_ballistics_page() -> None:
                         }
                     )
                 columns = [
-                    {"name": "distance", "label": "Distance", "field": "distance", "align": "center"},
-                    {"name": "trajectory", "label": "Trajectory", "field": "trajectory", "align": "center"},
-                    {"name": "velocity", "label": "Velocity", "field": "velocity", "align": "center"},
-                    {"name": "energy", "label": "Energy", "field": "energy", "align": "center"},
-                    {"name": "wind_drift", "label": "Wind Drift (90°)", "field": "wind_drift", "align": "center"},
+                    {
+                        "name": "distance",
+                        "label": "Distance",
+                        "field": "distance",
+                        "align": "center",
+                    },
+                    {
+                        "name": "trajectory",
+                        "label": "Trajectory",
+                        "field": "trajectory",
+                        "align": "center",
+                    },
+                    {
+                        "name": "velocity",
+                        "label": "Velocity",
+                        "field": "velocity",
+                        "align": "center",
+                    },
+                    {
+                        "name": "energy",
+                        "label": "Energy",
+                        "field": "energy",
+                        "align": "center",
+                    },
+                    {
+                        "name": "wind_drift",
+                        "label": "Wind Drift (90°)",
+                        "field": "wind_drift",
+                        "align": "center",
+                    },
                 ]
-                ui.table(columns=columns, rows=rows, row_key="distance").classes("w-full").props(
-                    "flat bordered dense"
-                ).mark("ballistics-table")
+                ui.table(columns=columns, rows=rows, row_key="distance").classes(
+                    "w-full"
+                ).props("flat bordered dense").mark("ballistics-table")
 
         async def on_cartridge_change(event) -> None:
             state["selected_cartridge_id"] = str(event.value)
@@ -587,8 +620,7 @@ async def build_ballistics_page() -> None:
         async def on_hours_change(event) -> None:
             try:
                 hours = int(event.value)
-                if hours < 1:
-                    hours = 1
+                hours = max(hours, 1)
                 state["forecast_hours"] = hours
             except (ValueError, TypeError):
                 return

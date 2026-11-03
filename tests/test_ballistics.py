@@ -7,11 +7,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import httpx
 import numpy as np
 import pandas as pd
-from nicegui import ui
 from nicegui.testing import User
-import httpx
 from web import app as web_app
 from web import ballistics
 from web.camera_map import Camera, WindHour
@@ -19,7 +18,9 @@ from web.camera_map import Camera, WindHour
 
 class TestBallisticsConfig(unittest.TestCase):
     def test_default_cartridges_include_rws_308_short_rifle(self):
-        cartridges = ballistics.load_cartridges(config_path=Path("/nonexistent/path.json"))
+        cartridges = ballistics.load_cartridges(
+            config_path=Path("/nonexistent/path.json")
+        )
         self.assertGreaterEqual(len(cartridges), 8)
 
         rws_308 = cartridges[0]
@@ -35,9 +36,20 @@ class TestBallisticsConfig(unittest.TestCase):
         self.assertAlmostEqual(rws_308.zero_height_cm, 4.0)
 
     def test_default_cartridges_include_common_calibers(self):
-        cartridges = ballistics.load_cartridges(config_path=Path("/nonexistent/path.json"))
+        cartridges = ballistics.load_cartridges(
+            config_path=Path("/nonexistent/path.json")
+        )
         calibers = {c.caliber for c in cartridges}
-        for expected in (".308 Win", ".30-06 Spring.", "8x57 IS", "7x64", "9.3x62", ".300 Win. Mag.", "6.5 Creedmoor", ".223 Rem."):
+        for expected in (
+            ".308 Win",
+            ".30-06 Spring.",
+            "8x57 IS",
+            "7x64",
+            "9.3x62",
+            ".300 Win. Mag.",
+            "6.5 Creedmoor",
+            ".223 Rem.",
+        ):
             self.assertIn(expected, calibers)
 
     def test_load_cartridges_uses_config_file_when_present(self):
@@ -96,11 +108,17 @@ class TestBallisticsWind(unittest.TestCase):
         }
 
         # 2 hours horizon: 12:00 and 13:00 -> max speed is 22.0
-        self.assertAlmostEqual(ballistics.max_seat_wind_speed(wind_data, hours_ahead=2, now=now), 22.0)
+        self.assertAlmostEqual(
+            ballistics.max_seat_wind_speed(wind_data, hours_ahead=2, now=now), 22.0
+        )
         # 3 hours horizon: 12:00, 13:00, 14:00 -> max speed is 25.0 (from Seat2 at 14:00)
-        self.assertAlmostEqual(ballistics.max_seat_wind_speed(wind_data, hours_ahead=3, now=now), 25.0)
+        self.assertAlmostEqual(
+            ballistics.max_seat_wind_speed(wind_data, hours_ahead=3, now=now), 25.0
+        )
         # 4 hours horizon: includes 15:00 -> max speed is 35.0 (from Seat1 at 15:00)
-        self.assertAlmostEqual(ballistics.max_seat_wind_speed(wind_data, hours_ahead=4, now=now), 35.0)
+        self.assertAlmostEqual(
+            ballistics.max_seat_wind_speed(wind_data, hours_ahead=4, now=now), 35.0
+        )
 
     def test_max_seat_wind_speed_empty(self):
         self.assertEqual(ballistics.max_seat_wind_speed({}, 5), 0.0)
@@ -144,7 +162,9 @@ class TestBallisticsTrajectory(unittest.TestCase):
     def test_generate_ballistics_plot_svg(self):
         cartridge = ballistics.DEFAULT_CARTRIDGES[0]
         result = ballistics.compute_trajectory(cartridge, wind_speed_kmh=15.0)
-        svg = ballistics.generate_ballistics_plot_svg(cartridge, result, wind_speed_kmh=15.0)
+        svg = ballistics.generate_ballistics_plot_svg(
+            cartridge, result, wind_speed_kmh=15.0
+        )
 
         self.assertIn("<svg", svg)
         self.assertIn("Ballistic Curves: RWS .308 Win. HIT Short Rifle", svg)
