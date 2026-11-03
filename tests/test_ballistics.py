@@ -197,6 +197,8 @@ class TestBallisticsTrajectory(unittest.TestCase):
         )
 
         self.assertIn("<svg", svg)
+        self.assertIn('width="100%"', svg)
+        self.assertIn('height="auto"', svg)
         self.assertIn("Ballistic Curves: RWS .308 Win. HIT Short Rifle", svg)
         self.assertIn("Trajectory (cm)", svg)
         self.assertIn("Wind Drift (cm)", svg)
@@ -205,12 +207,50 @@ class TestBallisticsTrajectory(unittest.TestCase):
         self.assertIn("2000 J", svg)
         self.assertIn("+4 cm limit", svg)
 
+    def test_max_effective_crosswind_for_camera(self):
+        # Camera facing North (0 deg) with 60 deg FOV (-30 deg to +30 deg)
+        cam = Camera("Seat_North", 48.0, 9.0, view_direction=0.0, view_angle=60.0)
+        # Wind blowing from East (90 deg) -> perpendicular to North (0 deg) is 90 deg -> relative crosswind is 100%
+        wind = [WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 90.0, 30.0)]
+        cw = ballistics.max_effective_crosswind_for_camera(cam, wind)
+        self.assertAlmostEqual(cw, 20.0)
+
+        # Wind blowing from North (0 deg) -> headwind -> min crosswind at 0 deg, max at sector boundary +/-30 deg: sin(30) = 0.5 -> 10 km/h
+        wind_head = [WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 0.0, 30.0)]
+        cw_head = ballistics.max_effective_crosswind_for_camera(cam, wind_head)
+        self.assertAlmostEqual(cw_head, 10.0)
+
+    def test_compute_seat_drift_table(self):
+        cartridge = ballistics.DEFAULT_CARTRIDGES[0]
+        cam1 = Camera("Seat_1", 48.0, 9.0, view_direction=0.0, view_angle=60.0)
+        cam2 = Camera("Seat_NoView", 48.0, 9.0)  # no view direction
+        wind_data = {
+            "Seat_1": [
+                WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 90.0, 30.0)
+            ],
+            "Seat_NoView": [
+                WindHour(pd.Timestamp("2026-11-03 12:00:00+00:00"), 20.0, 90.0, 30.0)
+            ],
+        }
+
+        with (
+            patch("web.ballistics.read_camera_locations", return_value=[cam1, cam2]),
+            patch("web.ballistics.fetch_wind", return_value=wind_data),
+        ):
+            table = ballistics.compute_seat_drift_table(cartridge, hours_ahead=1)
+            self.assertEqual(len(table), 1)
+            row = table[0]
+            self.assertEqual(row["seat"], "Seat_1")
+            self.assertEqual(row["max_crosswind"], "20.0 km/h")
+            self.assertIn("cm", row["drift_50m"])
+            self.assertIn("cm", row["drift_100m"])
+
 
 class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):
     async def test_ballistics_page_elements(self):
         cameras = [
-            Camera("Seat1", 48.65, 9.00),
-            Camera("Seat2", 48.66, 9.01),
+            Camera("Seat1", 48.65, 9.00, view_direction=90.0, view_angle=60.0),
+            Camera("Seat2", 48.66, 9.01, view_direction=180.0, view_angle=45.0),
         ]
         now = datetime.now(UTC)
         fake_wind = {
@@ -242,10 +282,14 @@ class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):
                     await user.should_see("GEE / MRD")
                     await user.should_see("Max Trajectory Height")
                     await user.should_see("Ballistic Drop Table")
+                    await user.should_see("Seat Maximum Wind Drift")
 
-                    # Verify SVG and table exist
+                    # Verify SVG and tables exist
                     svgs = user.find(marker="ballistics-svg").elements
                     self.assertEqual(len(svgs), 1)
 
                     tables = user.find(marker="ballistics-table").elements
                     self.assertEqual(len(tables), 1)
+
+                    seat_tables = user.find(marker="ballistics-seat-table").elements
+                    self.assertEqual(len(seat_tables), 1)

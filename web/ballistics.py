@@ -242,16 +242,12 @@ def matches_fuzzy(label: str, query: str) -> bool:
     return True
 
 
-def filter_cartridges_by_query(
-    options: dict[str, str], query: str
-) -> dict[str, str]:
+def filter_cartridges_by_query(options: dict[str, str], query: str) -> dict[str, str]:
     """Filter cartridge options dictionary by fuzzy query."""
     if not query or not query.strip():
         return options
     matched = {
-        cid: label
-        for cid, label in options.items()
-        if matches_fuzzy(label, query)
+        cid: label for cid, label in options.items() if matches_fuzzy(label, query)
     }
     return matched if matched else options
 
@@ -295,6 +291,98 @@ def get_max_seat_wind(
     except Exception as error:
         logger.warning("Could not obtain seat wind: %s", error)
         return 0.0, 0
+
+
+def max_effective_crosswind_for_camera(
+    camera: Camera,
+    wind_hours: list,
+) -> float:
+    """Calculate maximum effective crosswind speed in km/h across field of view."""
+    if not camera.has_view or camera.view_direction is None or camera.view_angle is None:
+        return max((float(h.speed) for h in wind_hours), default=0.0)
+
+    half_angle = camera.view_angle / 2.0
+    view_dir = camera.view_direction
+    max_cw = 0.0
+
+    for h in wind_hours:
+        speed = float(h.speed)
+        w_dir = float(h.direction)
+        # Check if 90-degree relative crosswind angle falls inside the field of view
+        hit_90 = False
+        for target in (w_dir - 90.0, w_dir + 90.0):
+            diff = (target - view_dir + 180.0) % 360.0 - 180.0
+            if abs(diff) <= half_angle:
+                if speed > max_cw:
+                    max_cw = speed
+                hit_90 = True
+                break
+        if not hit_90:
+            phi_l = view_dir - half_angle
+            phi_r = view_dir + half_angle
+            sin_l = abs(math.sin(math.radians(w_dir - phi_l)))
+            sin_r = abs(math.sin(math.radians(w_dir - phi_r)))
+            effective = speed * max(sin_l, sin_r)
+            if effective > max_cw:
+                max_cw = effective
+
+    return max_cw
+
+
+def compute_seat_drift_table(
+    cartridge: Cartridge,
+    hours_ahead: int,
+    locations_path: Path | None = None,
+    now: datetime | None = None,
+) -> list[dict[str, str]]:
+    """Compute maximum wind drift for each seat at 50m and 100m for next n hours."""
+    try:
+        path = locations_path or configured_locations_path()
+        if not path.is_file():
+            return []
+        cameras = read_camera_locations(path)
+        view_cameras = [c for c in cameras if c.located and c.has_view]
+        if not view_cameras:
+            return []
+        wind_data = fetch_wind(view_cameras)
+        now_ts = pd.Timestamp(now or datetime.now(UTC)).tz_convert("UTC")
+
+        rows = []
+        for cam in view_cameras:
+            seat_hours = wind_data.get(cam.location_id, [])
+            upcoming = [h for h in seat_hours if h.time >= now_ts][:hours_ahead]
+            if not upcoming and seat_hours:
+                upcoming = seat_hours[:hours_ahead]
+
+            max_cw = max_effective_crosswind_for_camera(cam, upcoming)
+            if max_cw > 0:
+                traj = compute_trajectory(
+                    cartridge,
+                    wind_speed_kmh=max_cw,
+                    max_distance_m=100.0,
+                    step_m=1.0,
+                )
+                idx_50 = int(np.abs(traj.distances - 50.0).argmin())
+                idx_100 = int(np.abs(traj.distances - 100.0).argmin())
+                drift_50 = abs(traj.windages_cm[idx_50])
+                drift_100 = abs(traj.windages_cm[idx_100])
+            else:
+                drift_50 = 0.0
+                drift_100 = 0.0
+
+            rows.append(
+                {
+                    "seat": cam.location_id,
+                    "view": f"{cam.view_direction:.0f}° (FOV {cam.view_angle:.0f}°)",
+                    "max_crosswind": f"{max_cw:.1f} km/h",
+                    "drift_50m": f"{drift_50:.1f} cm",
+                    "drift_100m": f"{drift_100:.1f} cm",
+                }
+            )
+        return rows
+    except Exception as error:
+        logger.warning("Could not compute seat drift table: %s", error)
+        return []
 
 
 def compute_trajectory(
@@ -497,7 +585,11 @@ def generate_ballistics_plot_svg(
         buffer = io.StringIO()
         fig.savefig(buffer, format="svg", bbox_inches="tight")
         plt.close(fig)
-        return buffer.getvalue()
+        svg_text = buffer.getvalue()
+        # Make SVG responsive while preserving aspect ratio
+        svg_text = re.sub(r'width="[^"]+"', 'width="100%"', svg_text, count=1)
+        svg_text = re.sub(r'height="[^"]+"', 'height="auto"', svg_text, count=1)
+        return svg_text
 
 
 async def build_ballistics_page() -> None:
@@ -556,8 +648,8 @@ async def build_ballistics_page() -> None:
                 )
 
         metrics_container = ui.row().classes("w-full gap-4 flex-wrap")
-        plot_container = ui.column().classes("w-full items-center")
-        table_container = ui.column().classes("w-full")
+        plot_container = ui.card().classes("w-full p-2 sm:p-4 overflow-hidden")
+        table_container = ui.column().classes("w-full gap-6")
 
         async def update_view() -> None:
             cartridge = cartridge_by_id.get(
@@ -638,12 +730,12 @@ async def build_ballistics_page() -> None:
             # Render Plot
             plot_container.clear()
             with plot_container:
-                ui.html(svg_content).classes("w-full max-w-4xl").mark("ballistics-svg")
+                ui.html(svg_content).classes("w-full block").mark("ballistics-svg")
 
             # Render Table
             table_container.clear()
             with table_container:
-                ui.label("Ballistic Drop Table").classes("text-lg font-semibold mt-2")
+                ui.label("Ballistic Drop Table").classes("text-lg font-semibold")
                 table_distances = [0, 50, 100, 150, 200, 250, 300]
                 rows = []
                 for dist in table_distances:
@@ -693,15 +785,71 @@ async def build_ballistics_page() -> None:
                     "w-full"
                 ).props("flat bordered dense").mark("ballistics-table")
 
+                # Seat wind drift table
+                seat_rows = await run.io_bound(
+                    compute_seat_drift_table,
+                    cartridge,
+                    state["forecast_hours"],
+                )
+                if seat_rows:
+                    ui.label(
+                        f"Seat Maximum Wind Drift ({state['forecast_hours']}h Forecast)"
+                    ).classes("text-lg font-semibold mt-4")
+                    seat_columns = [
+                        {
+                            "name": "seat",
+                            "label": "Seat / Stand",
+                            "field": "seat",
+                            "align": "left",
+                        },
+                        {
+                            "name": "view",
+                            "label": "View Direction / FOV",
+                            "field": "view",
+                            "align": "center",
+                        },
+                        {
+                            "name": "max_crosswind",
+                            "label": "Max Crosswind",
+                            "field": "max_crosswind",
+                            "align": "center",
+                        },
+                        {
+                            "name": "drift_50m",
+                            "label": "Max Drift @ 50m",
+                            "field": "drift_50m",
+                            "align": "center",
+                        },
+                        {
+                            "name": "drift_100m",
+                            "label": "Max Drift @ 100m",
+                            "field": "drift_100m",
+                            "align": "center",
+                        },
+                    ]
+                    ui.table(
+                        columns=seat_columns, rows=seat_rows, row_key="seat"
+                    ).classes("w-full").props("flat bordered dense").mark(
+                        "ballistics-seat-table"
+                    )
+
         async def on_cartridge_change(event) -> None:
             state["selected_cartridge_id"] = str(event.value)
             cartridge_select.set_options(cartridge_options)
             await update_view()
 
         def on_cartridge_input(event) -> None:
-            query = event.args if isinstance(event.args, str) else (event.args[0] if event.args else "")
+            query = (
+                event.args
+                if isinstance(event.args, str)
+                else (event.args[0] if event.args else "")
+            )
             filtered = filter_cartridges_by_query(cartridge_options, query)
             cartridge_select.set_options(filtered)
+
+        def on_cartridge_popup_show() -> None:
+            cartridge_select.set_options(cartridge_options)
+            cartridge_select.run_method("updateInputValue", "")
 
         async def on_hours_change(event) -> None:
             try:
@@ -719,6 +867,7 @@ async def build_ballistics_page() -> None:
 
         cartridge_select.on_value_change(on_cartridge_change)
         cartridge_select.on("input-value", on_cartridge_input)
+        cartridge_select.on("popup-show", on_cartridge_popup_show)
         hours_input.on_value_change(on_hours_change)
 
         await update_view()
