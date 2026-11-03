@@ -174,6 +174,7 @@ class TestBallisticsTrajectory(unittest.TestCase):
         self.assertIn("Velocity (m/s)", svg)
         self.assertIn("Energy (J)", svg)
         self.assertIn("2000 J", svg)
+        self.assertIn("+4 cm limit", svg)
 
 
 class TestBallisticsWebPage(unittest.IsolatedAsyncioTestCase):

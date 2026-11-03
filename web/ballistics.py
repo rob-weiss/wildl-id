@@ -367,6 +367,14 @@ def generate_ballistics_plot_svg(
         ax1.axhline(
             0, color="black", linestyle="--", linewidth=0.8, label="Line of sight"
         )
+        ax1.axhline(
+            4,
+            color="firebrick",
+            linestyle="--",
+            linewidth=0.9,
+            alpha=0.8,
+            label="+4 cm limit",
+        )
         ax1.plot(
             100,
             cartridge.zero_height_cm,
