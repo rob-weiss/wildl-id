@@ -8,6 +8,8 @@ import re
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from src.labelling.label_data import format_datetime
 from zoneinfo import ZoneInfo
 
 LOG_PATH = Path(__file__).resolve().parents[2] / "logs" / "push_alerts.csv"
@@ -75,17 +77,25 @@ def _attachment_details(row, path):
 
 
 def _display_message(title, message):
+    if not isinstance(message, str):
+        return message
+    timestamp = message
     match = re.fullmatch(
-        r"\d+ (?P<species>.+) at (?P<timestamp>\d{2}:\d{2} \(\d{2}-\d{2}-\d{4}\))",
+        r"\d+ (?P<species>.+) at (?P<timestamp>.+)",
         message,
     )
-    if match and title.casefold().startswith(f"{match['species']} at ".casefold()):
+    if match:
+        if not title.casefold().startswith(f"{match['species']} at ".casefold()):
+            return message
+        timestamp = match["timestamp"]
+    try:
+        parsed = datetime.strptime(timestamp, "🕒 %d. %b %y %H:%M")
+    except ValueError:
         try:
-            datetime.strptime(match["timestamp"], "%H:%M (%d-%m-%Y)")
+            parsed = datetime.strptime(timestamp, "%H:%M (%d-%m-%Y)")
         except ValueError:
             return message
-        return match["timestamp"]
-    return message
+    return format_datetime(parsed)
 
 
 def record_notification(title, message, sent, path=None, *, image_path=None):

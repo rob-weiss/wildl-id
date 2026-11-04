@@ -26,6 +26,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.ticker import FuncFormatter
 import seaborn as sns
 from astral import LocationInfo
 from astral.sun import sun
@@ -209,8 +210,8 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
     if len(df_valid) > 0:
         date_range = df_valid["date"].max() - df_valid["date"].min()
         print(
-            f"Date range: {df_valid['date'].min():{label_data.DATE_FORMAT}} to "
-            f"{df_valid['date'].max():{label_data.DATE_FORMAT}} ({date_range.days} days)"
+            f"Date range: {label_data.format_date(df_valid['date'].min())} to "
+            f"{label_data.format_date(df_valid['date'].max())} ({date_range.days} days)"
         )
         # Check for potential duplicates
         duplicates = df_valid.groupby("timestamp").size()
@@ -572,7 +573,9 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
                 ax.legend(loc="upper right", fontsize=8)
                 ax.grid(True, alpha=0.3)
                 ax.xaxis.set_major_formatter(
-                    mdates.DateFormatter(label_data.DATE_FORMAT)
+                    FuncFormatter(
+                        lambda value, _: label_data.format_date(mdates.num2date(value))
+                    )
                 )
                 ax.xaxis.set_major_locator(mdates.AutoDateLocator())
                 ax.tick_params(axis="x", rotation=45)
@@ -1337,8 +1340,8 @@ def main(csv_path: Path | None = None, output_dir: Path | None = None) -> bool:
         "Images with Timestamps": len(df_valid),
         "Unique Species": df["class"].nunique(),
         "Unique Locations": df["location_id"].nunique(),
-        "Date Range": f"{df_valid['date'].min():{label_data.DATE_FORMAT}} to "
-        f"{df_valid['date'].max():{label_data.DATE_FORMAT}}"
+        "Date Range": f"{label_data.format_date(df_valid['date'].min())} to "
+        f"{label_data.format_date(df_valid['date'].max())}"
         if len(df_valid) > 0
         else "N/A",
         "Most Common Species": species_counts.index[0]

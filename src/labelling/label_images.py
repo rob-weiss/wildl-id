@@ -27,7 +27,6 @@ import logging
 import os
 import time
 import warnings
-from collections import Counter, defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from io import StringIO
@@ -68,7 +67,7 @@ repo_dir = Path(__file__).resolve().parents[2]
 model_version = "MegaDetectorV6"
 model_name = "MDV6-yolov10-e"  # Best accuracy
 
-detection_threshold = 0.6  # Minimum MegaDetector confidence for the best detection
+detection_threshold = 0.4  # Minimum MegaDetector confidence for the best detection
 # Further boxes need more confidence: a missed animal beats a false positive.
 additional_detection_threshold = 0.8
 
@@ -191,20 +190,20 @@ def classify_detection(img_pil, bbox, megadetector_class, classifier, image_file
     return "animal", None
 
 
-def majority_detections(labelled):
-    """Keep detections of the most frequent label, best detection first.
+def detections_for_primary_class(labelled):
+    """Keep detections matching the class of the highest-confidence detection.
 
     `labelled` holds (label, classification confidence, confidence, bbox) tuples
-    sorted by detection confidence. Ties go to the higher summed confidence.
+    ordered by detection confidence.
     """
     if not labelled:
         return []
-    counts = Counter(label for label, *_ in labelled)
-    totals = defaultdict(float)
-    for label, _, confidence, _ in labelled:
-        totals[label] += confidence
-    winner = max(counts, key=lambda label: (counts[label], totals[label]))
-    return [detection for detection in labelled if detection[0] == winner]
+    winner = max(labelled, key=lambda detection: detection[2])[0]
+    return sorted(
+        (detection for detection in labelled if detection[0] == winner),
+        key=lambda detection: detection[2],
+        reverse=True,
+    )
 
 
 def yolo_box(bbox):
@@ -657,7 +656,7 @@ def process_images_with_pytorch_wildlife(
                     if isinstance(detection_result, dict)
                     else None
                 )
-                labelled = majority_detections(
+                labelled = detections_for_primary_class(
                     [
                         (
                             *classify_detection(

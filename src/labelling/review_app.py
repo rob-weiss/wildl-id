@@ -41,6 +41,8 @@ def format_annotation(true_label, predicted_label):
     if true_label:
         if not predicted_label:
             return f"🏷️ True: {display_label(true_label)}"
+        if true_label.casefold() == predicted_label.casefold():
+            return display_label(true_label)
         return (
             f"🏷️ True: {display_label(true_label)} | "
             f"Predicted: {display_label(predicted_label)}"

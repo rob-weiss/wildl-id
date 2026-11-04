@@ -927,20 +927,20 @@ class LabelReviewTests(unittest.TestCase):
         with patch.object(review_module, "image_paths", return_value={}):
             review = LabelReview(human)
         review.set_mode("Latest model incorrect")
-        expected = {"inference.jpg", "validation.jpg"}
+        expected = {"inference.jpg"}
         self.assertEqual(
             {review.rows[index]["image_file"] for index in review.pending}, expected
         )
         self.assertEqual(gallery_names(), expected)
         self.assertEqual(review.latest_model_name, run)
         review.choose("fox")
-        self.assertEqual(gallery_names(), {"validation.jpg"})
+        self.assertEqual(gallery_names(), set())
         with patch.object(review_module, "image_paths", return_value={}):
             reopened = LabelReview(human)
         reopened.set_mode("Latest model incorrect")
         self.assertEqual(
             [reopened.rows[index]["image_file"] for index in reopened.pending],
-            ["validation.jpg"],
+            [],
         )
         review.undo()
         self.assertEqual(gallery_names(), expected)
@@ -1613,6 +1613,12 @@ class LabelReviewTests(unittest.TestCase):
         self.assertIn('vector-effect="non-scaling-stroke"', overlay)
         self.assertIn('font-size="16"', overlay)
 
+    def test_matching_true_and_predicted_labels_show_class_only(self):
+        self.assertEqual(
+            review_app_module.format_annotation("fox", "FOX"),
+            "🦊 fox",
+        )
+
     def test_box_overlay_omits_prediction_when_latest_model_has_none(self):
         overlay = review_app_module.box_overlay_svg(
             {
@@ -1900,19 +1906,19 @@ class LabelReviewTests(unittest.TestCase):
 
         self.assertEqual(review.pending, [0])
         review.set_mode("Latest model incorrect")
-        self.assertEqual(review.pending, [1, 2])
+        self.assertEqual(review.pending, [2])
         review.set_mode("Unseen + errors")
-        self.assertEqual(review.pending, [0, 1, 2])
-        self.assertEqual(review.pending[review.position], 1)
+        self.assertEqual(review.pending, [0, 2])
+        self.assertEqual(review.pending[review.position], 2)
         review.set_mode("Seen")
         self.assertEqual(review.pending, [1, 2])
-        self.assertEqual(review.position, 0)
+        self.assertEqual(review.position, 1)
         review.set_mode("All")
         self.assertEqual(review.pending, [0, 1, 2])
         review.position = 2
         review.set_mode("Latest model incorrect")
-        self.assertEqual(review.pending, [1, 2])
-        self.assertEqual(review.position, 1)
+        self.assertEqual(review.pending, [2])
+        self.assertEqual(review.position, 0)
 
     def test_gui_dropdown_selects_review_mode(self):
         image_dir = self.csv_path.parent / "images"

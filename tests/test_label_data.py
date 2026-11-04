@@ -51,12 +51,23 @@ class LabelDataTests(unittest.TestCase):
             ({"manual_label": "fox", "class": "unknown"}, None, False),
             ({"manual_label": "", "class": "hare"}, None, False),
             ({"manual_label": "fox", "class": "hare", "reviewed": "true"}, None, False),
-            ({"manual_label": "fox", "class": "fox"}, {"status": "incorrect"}, True),
+            ({"manual_label": "fox", "class": "fox"}, {"status": "incorrect"}, False),
             (
                 {"manual_label": "fox", "class": "fox"},
                 {"true_label": "fox", "predicted_label": "hare", "status": "incorrect"},
+                False,
+            ),
+            (
+                {"manual_label": "fox", "class": "fox"},
+                {"true_label": "fox", "predicted_label": "raccoon", "status": "incorrect"},
+                False,
+            ),
+            (
+                {"manual_label": "fox", "class": "unknown"},
+                {"true_label": "fox", "predicted_label": "hare", "status": "incorrect"},
                 True,
             ),
+            ({"manual_label": "unknown", "class": "roe deer"}, None, False),
             (
                 {"manual_label": "fox", "class": "fox", "reviewed": "true"},
                 {"true_label": "fox", "predicted_label": "hare", "status": "incorrect"},

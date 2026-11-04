@@ -189,7 +189,7 @@ class VisualizationCustomPathTests(unittest.TestCase):
         summary = (self.output_dir / "summary_statistics.txt").read_text(
             encoding="utf-8"
         )
-        self.assertIn("01-04-2024", summary)
+        self.assertIn("1. Apr 24", summary)
         self.assertIn("fox", summary)
 
     def test_missing_custom_csv_preserves_existing_output(self):

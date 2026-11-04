@@ -13,6 +13,7 @@ import httpx
 from nicegui import run, ui
 from nicegui.testing.user import User
 from PIL import Image
+from src.labelling.label_data import format_datetime
 from web import app as web_app
 from web import background, gallery
 
@@ -334,7 +335,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Running (pid 4242)")
             await user.should_see("Labelling 24 / 100 images · about 02:26 left")
             await user.should_see("Downloaded 2 images; skipped 1 duplicates")
-            await user.should_see("Last activity 01-11-2026 16:45")
+            await user.should_see("Last activity 🕒 1. Nov 26 16:45")
             await user.should_see("Web app: running (pid 7)")
             switch = next(iter(user.find(marker="automatic-runs").elements))
             self.assertTrue(switch.value)
@@ -374,7 +375,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             async with self.app_user("/status") as user:
                 await user.should_see("Notification status")
                 await user.should_see("Configured")
-                await user.should_see("Last run 01-11-2026 13:30")
+                await user.should_see("Last run 🕒 1. Nov 26 13:30")
                 await user.should_see("2 sent")
                 await user.should_see("1 failure")
                 await user.should_see("Keychain topic missing")
@@ -542,7 +543,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "within 30°, green when further away."
                 )
                 await user.should_see("Missing coordinates")
-                await user.should_see("Sat 31-10-2026 13:00 CET")
+                await user.should_see("🕒 31. Oct 26 13:00 CET")
                 leaflet = next(iter(user.find(marker="camera-map").elements))
                 kinds = [layer.to_dict()["type"] for layer in leaflet.layers]
                 self.assertEqual(kinds.count("polyline"), 1)
@@ -561,7 +562,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 hours.set_value(3)
                 self.assertEqual(slider.props["max"], 2)
                 slider.set_value(2)
-                await user.should_see("Sat 31-10-2026 15:00 CET")
+                await user.should_see("🕒 31. Oct 26 15:00 CET")
                 self.assertEqual(len(user.find(marker="seat-rank").elements), 1)
 
     async def test_home_seat_ranking_recovers_and_tracks_map_wind_refresh(self):
@@ -872,7 +873,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 slider = next(iter(user.find(marker="wind-hour").elements))
                 self.assertEqual(slider.props["max"], 2)
                 slider.set_value(2)
-                await user.should_see("Sat 31-10-2026 15:00 CET")
+                await user.should_see("🕒 31. Oct 26 15:00 CET")
 
     async def test_camera_map_without_coordinates_is_safe(self):
         from web import camera_map
@@ -1050,13 +1051,13 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     single_time = (
                         (now - timedelta(minutes=10))
                         .astimezone(gallery.CAMERA_TIMEZONE)
-                        .strftime("%d-%m-%Y %H:%M")
+                        .strftime("🕒 %-d. %b %y %H:%M")
                     )
                     self.assertEqual(single_description.count(single_time), 1)
                     self.assertNotIn(" – ", single_description)
                     long_description = by_image["last.jpg"].props["aria-label"]
                     self.assertIn(" – ", long_description)
-                    self.assertIn("0:20:00", long_description)
+                    self.assertIn("20 minutes", long_description)
                     self.assertEqual(
                         [frame.props["data-image-file"] for frame in frames],
                         ["last.jpg", "boar.jpg", "first.jpg", "old.jpg"],
@@ -1074,6 +1075,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     )
                     self.assertIn("gallery-thumbnail", frames[0].classes)
                     for frame in frames:
+                        self.assertIn("overflow-hidden", frame.classes)
                         self.assertEqual(
                             frame.style["--thumbnail-frame-colour"],
                             frame.style["border"].split()[-1],
@@ -1142,9 +1144,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         for row in table.rows
                     ],
                     [
-                        ("fox", "camera1", "0:40:00"),
-                        ("fox", "camera2", "0:20:00"),
-                        ("squirrel", "camera1", "0:05:00"),
+                        ("fox", "camera1", "40 minutes"),
+                        ("fox", "camera2", "20 minutes"),
+                        ("squirrel", "camera1", "5 minutes"),
                     ],
                 )
                 self.assertEqual(
@@ -1299,6 +1301,130 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 "loaded", {"width": 800, "height": 1200}
             )
             self.assertEqual(viewer.style.get("width"), "min(85vw, 40vh)")
+
+    async def test_temperature_appears_on_home_and_gallery_thumbnails_and_carousels(self):
+        labels_dir = self.root / "labels"
+        predictions_path = labels_dir / "labels_model" / "predictions.csv"
+        metadata_path = labels_dir / "image_metadata.csv"
+        predictions_path.parent.mkdir(parents=True)
+        now = datetime.now(gallery.CAMERA_TIMEZONE)
+        rows = [
+            {
+                "location_id": "camera1",
+                "image_file": name,
+                "timestamp_exif": (now - timedelta(minutes=minutes)).isoformat(),
+                "class": "fox",
+            }
+            for name, minutes in (
+                ("no-temperature.jpg", 0),
+                ("warm.jpg", 1),
+                ("cool.jpg", 2),
+            )
+        ]
+        with predictions_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        metadata_rows = [
+            {
+                "location_id": row["location_id"],
+                "image_file": row["image_file"],
+                "temperature_celsius": temperature,
+            }
+            for row, temperature in zip(rows, ("", "10", "7.6"))
+        ]
+        with metadata_path.open("w", newline="", encoding="utf-8") as target:
+            writer = csv.DictWriter(target, fieldnames=metadata_rows[0].keys())
+            writer.writeheader()
+            writer.writerows(metadata_rows)
+
+        with (
+            patch.object(web_app, "DEFAULT_CSV", predictions_path),
+            patch.dict(
+                os.environ,
+                {"WILDL_ID_IMAGE_BASE_URL": "https://cdn.example.test/images"},
+            ),
+            patch.object(gallery.ui, "timer"),
+        ):
+            for path, caption_marker, next_marker in (
+                ("/", "recent-image-caption", "recent-image-next"),
+                ("/gallery", "gallery-image-caption", "gallery-image-next"),
+            ):
+                async with self.app_user(path) as user:
+                    thumbnail_details = user.find(marker="thumbnail-info")
+                    self.assertEqual(len(thumbnail_details.elements), 3)
+                    self.assertTrue(
+                        all(
+                            "whitespace-pre-line" in label.classes
+                            for label in thumbnail_details.elements
+                        )
+                    )
+                    warm_timestamp = now - timedelta(minutes=1)
+                    cool_timestamp = now - timedelta(minutes=2)
+                    warm_details = (
+                        f"🦊 fox\u00a0\u00a0\u00a0📍 camera1\n"
+                        f"{format_datetime(warm_timestamp)}\u00a0\u00a0\u00a0🌡️ 10 °C"
+                    )
+                    cool_details = (
+                        f"🦊 fox\u00a0\u00a0\u00a0📍 camera1\n"
+                        f"{format_datetime(cool_timestamp)}\u00a0\u00a0\u00a0🌡️ 8 °C"
+                    )
+                    missing_temperature_details = (
+                        f"🦊 fox\u00a0\u00a0\u00a0📍 camera1\n{format_datetime(now)}"
+                    )
+                    self.assertEqual(
+                        {label.text for label in thumbnail_details.elements},
+                        {
+                            missing_temperature_details,
+                            warm_details,
+                            cool_details,
+                        },
+                    )
+                    self.assertTrue(
+                        all(" · 📍" not in label.text for label in thumbnail_details.elements)
+                    )
+                    tooltip_texts = {
+                        tooltip.text for tooltip in user.find(kind=ui.tooltip).elements
+                    }
+                    self.assertTrue(
+                        any("🌡️ 10 °C" in text for text in tooltip_texts)
+                    )
+                    self.assertTrue(
+                        any(
+                            format_datetime(warm_timestamp) in text
+                            for text in tooltip_texts
+                        )
+                    )
+                    self.assertTrue(
+                        any(format_datetime(now) in text for text in tooltip_texts)
+                    )
+
+                    thumbnails = user.find(kind=ui.interactive_image)
+                    thumbnails.click()
+                    caption = next(
+                        iter(user.find(marker=caption_marker).elements)
+                    )
+                    self.assertNotIn("\n", caption.text)
+                    self.assertIn(
+                        "🦊 fox\u00a0\u00a0\u00a0📍 camera1\u00a0\u00a0\u00a0"
+                        + format_datetime(now),
+                        caption.text,
+                    )
+                    self.assertNotIn("🦊 fox · 📍", caption.text)
+                    user.find(marker=next_marker).click()
+                    self.assertIn(
+                        "🦊 fox\u00a0\u00a0\u00a0📍 camera1\u00a0\u00a0\u00a0"
+                        + format_datetime(warm_timestamp)
+                        + "\u00a0\u00a0\u00a0🌡️ 10 °C",
+                        caption.text,
+                    )
+                    user.find(marker=next_marker).click()
+                    self.assertIn(
+                        "🦊 fox\u00a0\u00a0\u00a0📍 camera1\u00a0\u00a0\u00a0"
+                        + format_datetime(cool_timestamp)
+                        + "\u00a0\u00a0\u00a0🌡️ 8 °C",
+                        caption.text,
+                    )
 
     async def test_home_hides_job_progress_when_idle(self):
         async with self.app_user("/") as user:
@@ -1589,8 +1715,10 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(notification_log, "LOG_PATH", log_path):
             async with self.app_user("/") as user:
                 await user.should_see("🐗 Wild boar at Grenzweg")
-                await user.should_see("20:10 (02-11-2026)")
-                await user.should_not_see("1 🐗 wild boar at 20:10 (02-11-2026)")
+                await user.should_see("🕒 2. Nov 26 20:10")
+                await user.should_not_see(
+                    "1 🐗 wild boar at 20:10 (02-11-2026)"
+                )
 
     async def test_home_notification_shows_exact_cached_ntfy_image(self):
         log_path = self.root / "push_alerts.csv"
@@ -1648,6 +1776,13 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertTrue(source.endswith("/camera1/correct.jpg"))
+        self.assertIsNone(
+            web_app.notification_image_source(
+                {**notice, "message": None},
+                rows,
+                gallery.image_paths(self.source_images),
+            )
+        )
 
     def test_legacy_notification_image_requires_unique_site_species_and_capture_time(
         self,
@@ -1722,7 +1857,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             [{"location_id": "camera1", "image_file": "recent.jpg", "class": "fox"}],
         )
         async with self.app_user("/") as user:
-            await user.should_see(f"camera1 · {taken:%d-%m-%Y %H:%M}")
+            await user.should_see(
+                f"🦊 fox\u00a0\u00a0\u00a0📍 camera1\n{format_datetime(taken)}"
+            )
 
     async def test_home_hides_unlabelled_photos_and_does_not_create_labels(self):
         self.write_original_image("recent.jpg", datetime.now() - timedelta(minutes=1))
@@ -1956,7 +2093,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "box": "",
+                    "box": "[0.5, 0.5, 0.4, 0.4]",
                     "manual_label": "fox",
                 }
             ],
@@ -2005,12 +2142,29 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_see("🦊 fox")
                 await user.should_not_see("Automatic:")
                 user.find(kind=ui.interactive_image).click()
-                await user.should_see("Manual: 🦊 fox · Automatic: 🐗 wild boar")
+                await user.should_see(
+                    "🏷️ True: 🦊 fox | Predicted: 🐗 wild boar"
+                )
+                await user.should_not_see("Manual:")
                 await user.should_not_see("Automatic: 🐇 hare")
+                overlay = next(
+                    iter(user.find(marker="gallery-viewer-image").elements)
+                )
+                self.assertIn(
+                    "🏷️ True: 🦊 fox | Predicted: 🐗 wild boar",
+                    overlay.content,
+                )
 
     async def test_gallery_viewer_states_single_label_when_labels_agree(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp_exif", "class", "manual_label"],
+            [
+                "location_id",
+                "image_file",
+                "timestamp_exif",
+                "class",
+                "manual_label",
+                "box",
+            ],
             [
                 {
                     "location_id": "camera1",
@@ -2018,6 +2172,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "fox",
                     "manual_label": "fox",
+                    "box": "[0.5, 0.5, 0.4, 0.4]",
                 }
             ],
         )
@@ -2026,8 +2181,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         ):
             async with self.app_user("/gallery") as user:
                 user.find(kind=ui.interactive_image).click()
-                await user.should_see("1 / 1 · 🦊 fox · camera1")
+                await user.should_see(
+                    "1 / 1 · 🦊 fox\u00a0\u00a0\u00a0📍 camera1"
+                    "\u00a0\u00a0\u00a0🕒 1. Jan 25"
+                )
                 await user.should_not_see("Manual:")
+                await user.should_not_see("Predicted:")
+                overlay = next(
+                    iter(user.find(marker="gallery-viewer-image").elements)
+                )
+                self.assertIn("<tspan", overlay.content)
+                self.assertIn("🦊 fox", overlay.content)
+                self.assertNotIn("True:", overlay.content)
+                self.assertNotIn("Predicted:", overlay.content)
 
     async def test_gallery_example_applies_filter(self):
         self.write_csv(

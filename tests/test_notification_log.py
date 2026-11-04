@@ -116,7 +116,7 @@ class NotificationLogTests(unittest.TestCase):
             [f"Recent {index}" for index in range(7)] + ["Boundary"],
         )
 
-    def test_legacy_species_body_displays_only_capture_timestamp_without_rewriting_log(
+    def test_legacy_species_body_uses_shared_timestamp_without_rewriting_log(
         self,
     ):
         sent = datetime(2026, 11, 2, 19, 14, tzinfo=UTC)
@@ -131,21 +131,38 @@ class NotificationLogTests(unittest.TestCase):
         recent = notification_log.recent_notifications(5, self.path)
 
         self.assertEqual(recent[0]["title"], "🐗 Wild boar at Grenzweg")
-        self.assertEqual(recent[0]["message"], "20:10 (02-11-2026)")
+        self.assertEqual(recent[0]["message"], "🕒 2. Nov 26 20:10")
         self.assertEqual(self.path.read_bytes(), original)
 
     def test_summary_and_unrelated_bodies_are_not_shortened(self):
         sent = datetime(2026, 11, 2, 19, 14, tzinfo=UTC)
-        for title, message in (
-            ("Wildl-ID daily summary", "Total: 3 sightings\nBy species: 3 wild boar"),
-            ("Test notification", "1 wild boar at 20:10 (02-11-2026)"),
-            ("🐗 Wild boar at Grenzweg", "20:10 (02-11-2026)"),
+        for title, message, expected in (
+            (
+                "Wildl-ID daily summary",
+                "Total: 3 sightings\nBy species: 3 wild boar",
+                "Total: 3 sightings\nBy species: 3 wild boar",
+            ),
+            (
+                "Test notification",
+                "1 wild boar at 20:10 (02-11-2026)",
+                "1 wild boar at 20:10 (02-11-2026)",
+            ),
+            (
+                "🐗 Wild boar at Grenzweg",
+                "20:10 (02-11-2026)",
+                "🕒 2. Nov 26 20:10",
+            ),
+            (
+                "🐗 Wild boar at Grenzweg",
+                "🕒 2. Nov 26 20:10",
+                "🕒 2. Nov 26 20:10",
+            ),
         ):
             with self.subTest(title=title):
                 notification_log.record_notification(title, message, sent, self.path)
                 self.assertEqual(
                     notification_log.recent_notifications(1, self.path)[0]["message"],
-                    message,
+                    expected,
                 )
 
     def test_notification_status_is_saved_and_read(self):

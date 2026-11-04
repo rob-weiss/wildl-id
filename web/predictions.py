@@ -454,13 +454,13 @@ async def build_predictions_page(csv_path: Path) -> None:
                 result.local_timezone
             )
             dates.set_text(
-                f"{first:{label_data.DATE_FORMAT} %H:%M %Z} to "
-                f"{last:{label_data.DATE_FORMAT} %H:%M %Z}"
+                f"{label_data.format_datetime(first)} {first:%Z} to "
+                f"{label_data.format_datetime(last)} {last:%Z}"
             )
             latest = result.latest_record.tz_convert(result.local_timezone)
             provenance.set_text(
-                f"Last record {latest:{label_data.DATE_FORMAT} %H:%M %Z} | "
-                f"Model cutoff {result.training_cutoff:{label_data.DATE_FORMAT}}"
+                f"Last record {label_data.format_datetime(latest)} {latest:%Z} | "
+                f"Model cutoff {label_data.format_date(result.training_cutoff)}"
             )
             status.set_text(
                 "Forecast ready: continuous operation assumed"

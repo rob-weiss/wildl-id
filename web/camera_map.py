@@ -15,7 +15,7 @@ from pathlib import Path
 from unicodedata import normalize
 
 import pandas as pd
-from src.labelling.label_data import DATE_FORMAT, load_rows
+from src.labelling.label_data import format_datetime, load_rows
 from src.labelling.review_labels import DEFAULT_CSV
 from src.labelling.species import (
     LABEL_EMOJIS,
@@ -600,10 +600,9 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
                 continue
             forecast = hours[:window]
             if forecast and hour_label is not None:
+                local_time = forecast[index].time.tz_convert(LOCAL_TIMEZONE)
                 hour_label.set_text(
-                    forecast[index]
-                    .time.tz_convert(LOCAL_TIMEZONE)
-                    .strftime(f"%a {DATE_FORMAT} %H:%M %Z")
+                    f"{format_datetime(local_time)} {local_time:%Z}"
                 )
             if not forecast:
                 continue

@@ -7,16 +7,25 @@ import os
 import re
 import shutil
 import tempfile
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from unicodedata import normalize
 
 REPO_DIR = Path(__file__).resolve().parents[2]
-DATE_FORMAT = "%d-%m-%Y"
 LEGACY_HUMAN_COLUMNS = ("location_id", "image_file", "box", "manual_label")
 REVIEWED_MODEL_COLUMN = "reviewed_model"
 HUMAN_COLUMNS = LEGACY_HUMAN_COLUMNS
 REVIEWED_HUMAN_COLUMNS = (*HUMAN_COLUMNS, REVIEWED_MODEL_COLUMN)
+
+
+def format_date(value: date) -> str:
+    return f"{value.day}. {value:%b %y}"
+
+
+def format_datetime(value: datetime) -> str:
+    return f"🕒 {format_date(value)} {value:%H:%M}"
+
+
 METADATA_COLUMNS = (
     "location_id",
     "image_file",
@@ -124,10 +133,14 @@ def needs_model_review(row, validation=None):
         return False
     manual = str(row.get("manual_label") or "").strip().casefold()
     predicted = str(row.get("class") or "").strip().casefold()
-    if manual and predicted not in {"", "unknown"} and manual != predicted:
-        return True
+    if manual not in {"", "unknown"} and predicted not in {"", "unknown"}:
+        return manual != predicted
     validation = validation or {}
-    current = manual or str(validation.get("true_label") or "").strip().casefold()
+    current = (
+        manual
+        if manual not in {"", "unknown"}
+        else str(validation.get("true_label") or "").strip().casefold()
+    )
     validated = str(validation.get("predicted_label") or "").strip().casefold()
     if validation.get("status") == "incorrect" and not validated:
         return True

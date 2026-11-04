@@ -13,6 +13,7 @@ from urllib.parse import quote
 from nicegui import ui
 from PIL import Image
 from src.labelling import label_data
+from src.labelling.label_data import format_date, format_datetime
 from src.labelling.organize_images import (
     capture_time_from_exif,
     image_paths,
@@ -24,6 +25,7 @@ from src.labelling.review_app import (
     box_overlay_svg,
     cloud_image_url,
     display_label,
+    format_annotation,
     row_boxes,
 )
 from src.labelling.review_labels import SHORTCUTS, load_validation_predictions
@@ -155,10 +157,11 @@ selects images without that prediction, regardless of manual review status.
 
 `misclassified`, `corrected`, or a `wrong`/`incorrect` prediction, classification,
 or label selects pending errors for the latest model: current inference mismatches
-and unresolved saved validation errors. Images marked reviewed for that model are
-excluded, matching **Latest model incorrect** in the reviewer. A new model starts
-a fresh queue. Forms such as `wrongly predicted` and `incorrectly classified` are
-also accepted.
+and saved validation errors when no usable current prediction exists. A matching
+current inference takes precedence over stale validation results. Images marked
+reviewed for that model are excluded, matching **Latest model incorrect** in the
+reviewer. A new model starts a fresh queue. Forms such as `wrongly predicted` and
+`incorrectly classified` are also accepted.
 
 ### Order and result count
 
@@ -735,8 +738,8 @@ def describe_filter(gallery_filter):
     if f.excluded_locations:
         parts.append("not at " + ", ".join(sorted(f.excluded_locations)))
     if f.start or f.end:
-        start = f.start.strftime(label_data.DATE_FORMAT) if f.start else "…"
-        end = f.end.strftime(label_data.DATE_FORMAT) if f.end else "…"
+        start = format_date(f.start) if f.start else "…"
+        end = format_date(f.end) if f.end else "…"
         parts.append(f"📅 {start} – {end}")
     if f.hours is not None:
         parts.append(f"last {f.hours} hours")
@@ -885,11 +888,7 @@ def preferred_label(row):
 
 def annotation_labels(row):
     manual, automatic = _manual_and_automatic(row)
-    if manual and automatic and normalize_text(manual) != normalize_text(automatic):
-        return (
-            f"Manual: {display_label(manual)} · Automatic: {display_label(automatic)}"
-        )
-    return preferred_label(row)
+    return format_annotation(manual, automatic) or "Unlabelled"
 
 
 def animal_count(row):
@@ -919,17 +918,59 @@ def boxed_image(row, source, classes, display_size=(320, 180), fit_viewport=Fals
     return image
 
 
+def format_temperature(row):
+    try:
+        temperature = float(row.get("temperature_celsius") or "")
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(temperature):
+        return None
+    return f"🌡️ {temperature:.0f} °C"
+
+
+def format_observed_span(seconds):
+    total_minutes = max(0, int(seconds // 60))
+    hours, minutes = divmod(total_minutes, 60)
+    parts = []
+    if hours:
+        parts.append(f"{hours} hour{'s' if hours != 1 else ''}")
+    if minutes:
+        parts.append(f"{minutes} minute{'s' if minutes != 1 else ''}")
+    return " ".join(parts) or "0 minutes"
+
+
+def image_details(row):
+    taken = row_datetime(row)
+    capture_time = format_datetime(taken) if taken else "unknown date"
+    details = f"📍 {row['location_id']} · {capture_time}"
+    if temperature := format_temperature(row):
+        details += f" · {temperature}"
+    return details
+
+
+def image_caption(row, label=None):
+    taken = row_datetime(row)
+    capture_time = format_datetime(taken) if taken else "unknown date"
+    first_line = (
+        f"{label or display_label(row_label(row))}\u00a0\u00a0\u00a0"
+        f"📍 {row['location_id']}"
+    )
+    second_line = capture_time
+    if temperature := format_temperature(row):
+        second_line += f"\u00a0\u00a0\u00a0{temperature}"
+    return f"{first_line}\n{second_line}"
+
+
 def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
     taken = row_datetime(row)
-    when = (
-        taken.strftime(f"{label_data.DATE_FORMAT} %H:%M") if taken else "unknown date"
-    )
+    details = image_details(row)
+    label = preferred_label(row) if detailed else display_label(row_label(row))
     visit = row.get("_visit")
     colour = row.get("_visit_colour", "transparent")
     with (
         ui.card()
         .tight()
-        .classes("w-full gallery-thumbnail")
+        .classes("w-full gallery-thumbnail overflow-hidden")
         .style(
             f"--thumbnail-frame-colour: {colour if visit is not None else '#52694b'}; "
             f"border: 3px solid {colour}; border-radius: 6px"
@@ -958,19 +999,25 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
             )
             start = visit.started_at.astimezone(CAMERA_TIMEZONE)
             end = visit.ended_at.astimezone(CAMERA_TIMEZONE)
-            visit_time = start.strftime(f"{label_data.DATE_FORMAT} %H:%M")
+            visit_time = format_datetime(start)
             if visit.observed_span_seconds > 0:
                 visit_time += (
-                    f" – {end.strftime(f'{label_data.DATE_FORMAT} %H:%M')} · "
-                    f"{timedelta(seconds=visit.observed_span_seconds)}"
+                    f" – {format_datetime(end)} · "
+                    f"{format_observed_span(visit.observed_span_seconds)}"
                 )
             description = (
                 f"{display_label(visit.species)} · {visit.location_id} · "
-                f"{visit_time} · "
-                f"{visit.image_count} images"
+                f"{visit_time} · {visit.image_count} images"
             )
-            card.props["aria-label"] = description
-            card.tooltip(description)
+            if taken := row_datetime(row):
+                if taken not in (start, end):
+                    description += f" · capture {format_datetime(taken)}"
+            if temperature := format_temperature(row):
+                description += f" · {temperature}"
+        else:
+            description = f"{display_label(row_label(row))} · {details}"
+        card.props["aria-label"] = description
+        card.tooltip(description)
         image = (
             boxed_image(row, source, "w-full cursor-pointer")
             if show_boxes
@@ -987,10 +1034,9 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
                     f'aria-label="{count} {"animal" if count == 1 else "animals"}"'
                 ).mark("animal-count")
         with ui.card_section().classes("p-2"):
-            ui.label(
-                preferred_label(row) if detailed else display_label(row_label(row))
-            ).classes("font-medium")
-            ui.label(f"{row['location_id']} · {when}").classes("text-xs text-gray-600")
+            ui.label(image_caption(row, label)).classes(
+                "text-xs text-gray-600 whitespace-pre-line"
+            ).mark("thumbnail-info")
 
 
 class BoxToggle:
@@ -1047,7 +1093,7 @@ def build_image_viewer(items, boxes, compact=False):
 
     with ui.dialog() as dialog, ui.card().classes("max-w-[95vw] max-h-[95vh]"):
         viewer = ui.column().classes("w-full gap-0")
-        caption = ui.label()
+        caption = ui.label().mark(f"{marker}-caption")
         with ui.row().classes("w-full items-center justify-between gap-2"):
             previous_button = (
                 ui.button(
@@ -1124,16 +1170,14 @@ def build_image_viewer(items, boxes, compact=False):
         elif viewer_image.source != source:
             viewer_image.set_source(source)
         update_overlay()
-        taken = row_datetime(row)
-        when = (
-            taken.strftime(f"{label_data.DATE_FORMAT} %H:%M")
-            if taken
-            else "unknown date"
-        )
         labels = annotation_labels(row)
-        caption.set_text(
-            f"{index + 1} / {len(visible_items)} · {labels} · {row['location_id']} · {when}"
+        caption_text = f"{index + 1} / {len(visible_items)} · "
+        caption_text += (
+            image_caption(row, labels)
+            .replace("\n", "\u00a0\u00a0\u00a0")
         )
+        caption_text = caption_text.replace(" · 🌡️ ", "\u00a0\u00a0\u00a0🌡️ ")
+        caption.set_text(caption_text)
         previous_button.set_enabled(index > 0)
         next_button.set_enabled(index < len(visible_items) - 1)
         dialog.open()
@@ -1305,14 +1349,12 @@ def build_recent_gallery(
                 "species": visit.species,
                 "label": display_label(visit.species),
                 "image_count": visit.image_count,
-                "duration": str(timedelta(seconds=visit.observed_span_seconds)),
+                "duration": format_observed_span(visit.observed_span_seconds),
                 "location": visit.location_id,
-                "started": visit.started_at.astimezone(CAMERA_TIMEZONE).strftime(
-                    f"{label_data.DATE_FORMAT} %H:%M"
+                "started": format_datetime(
+                    visit.started_at.astimezone(CAMERA_TIMEZONE)
                 ),
-                "ended": visit.ended_at.astimezone(CAMERA_TIMEZONE).strftime(
-                    f"{label_data.DATE_FORMAT} %H:%M"
-                ),
+                "ended": format_datetime(visit.ended_at.astimezone(CAMERA_TIMEZONE)),
             }
             for visit in visits
         ]

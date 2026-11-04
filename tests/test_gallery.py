@@ -49,6 +49,11 @@ def names(rows):
 
 
 class VisitFrameTests(unittest.TestCase):
+    def test_observed_span_uses_hours_and_minutes_without_seconds(self):
+        self.assertEqual(gallery.format_observed_span(87 * 60 + 59), "1 hour 27 minutes")
+        self.assertEqual(gallery.format_observed_span(60), "1 minute")
+        self.assertEqual(gallery.format_observed_span(0), "0 minutes")
+
     def test_calendar_filters_use_berlin_dates_for_utc_exif(self):
         row = make_row("new-year.jpg", "fox", "2023-12-31T23:30:00Z")
 
@@ -415,6 +420,15 @@ class SmartFilterTests(unittest.TestCase):
             make_row("a.jpg", "", "2025-01-01T00:00:00", manual_label="badger"),
             make_row("b.jpg", "unknown", "2025-01-02T00:00:00", manual_label="fox"),
             make_row("c.jpg", "fox", "2025-01-03T00:00:00", manual_label="bird"),
+            {
+                **make_row("d.jpg", "fox", "2025-01-04T00:00:00", manual_label="fox"),
+                "_validation_prediction": {
+                    "true_label": "fox",
+                    "predicted_label": "hare",
+                    "status": "incorrect",
+                },
+            },
+            make_row("e.jpg", "roe deer", "2025-01-05T00:00:00", manual_label="unknown"),
         ]
 
         self.assertEqual(names(filter_rows(rows, parse("misclassified"))), ["c.jpg"])
@@ -429,7 +443,7 @@ class SmartFilterTests(unittest.TestCase):
         description = describe_filter(parse("wild boar of the last two weeks"))
 
         self.assertIn("wild boar", description)
-        self.assertIn("16-10-2026 – 30-10-2026", description)
+        self.assertIn("16. Oct 26 – 30. Oct 26", description)
 
 
 class ImageSourceTests(unittest.TestCase):

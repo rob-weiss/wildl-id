@@ -18,7 +18,7 @@ from PIL import Image
 
 try:
     from ..labelling import label_data
-    from ..labelling.label_data import DATE_FORMAT
+    from ..labelling.label_data import format_datetime
     from ..labelling.organize_images import IMAGES_DIR, image_paths
     from ..labelling.species import (
         RECENT_SPECIES,
@@ -29,7 +29,7 @@ try:
 except ImportError:
     from alerting import notification_log
     from labelling import label_data
-    from labelling.label_data import DATE_FORMAT
+    from labelling.label_data import format_datetime
     from labelling.organize_images import IMAGES_DIR, image_paths
     from labelling.species import (
         RECENT_SPECIES,
@@ -238,7 +238,7 @@ def alert_text(alert):
     species = pluralize_species(alert.species, alert.count)
     emoji = species_emoji(alert.species)
     title = f"{emoji} {species.capitalize()} at {alert.location}"
-    message = f"{local_time:%H:%M} ({local_time:{DATE_FORMAT}})"
+    message = format_datetime(local_time)
     return title, message
 
 
@@ -419,7 +419,8 @@ def send_daily_summary(
         total = sum(species_totals.values())
         local_start = start.astimezone(LOCAL_TIME)
         lines = [
-            f"{local_start:{DATE_FORMAT} %H:%M %Z} - {scheduled:{DATE_FORMAT} %H:%M %Z}",
+            f"{format_datetime(local_start)} {local_start:%Z} - "
+            f"{format_datetime(scheduled)} {scheduled:%Z}",
             f"Total: {total} {'sighting' if total == 1 else 'sightings'} in the last 24 hours.",
         ]
         for label, species_counts in [

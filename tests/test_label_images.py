@@ -68,23 +68,32 @@ class AutomaticLabelTests(unittest.TestCase):
         self.assertEqual(label_images.parse_detections([], 100, 100), [])
         self.assertEqual(
             label_images.parse_detections(
-                [{"conf": 0.5, "category": 0, "bbox": [0, 0, 1, 1]}], 10, 10
+                [{"conf": 0.39, "category": 0, "bbox": [0, 0, 1, 1]}], 10, 10
             ),
             [],
         )
 
-    def test_majority_class_keeps_best_detection_first(self):
+    def test_primary_detection_accepts_lower_confidence(self):
+        parsed = label_images.parse_detections(
+            [{"conf": 0.45, "category": 0, "bbox": [0, 0, 1, 1]}],
+            10,
+            10,
+        )
+
+        self.assertEqual(len(parsed), 1)
+
+    def test_highest_confidence_detection_selects_image_class(self):
         labelled = [
             ("fox", 0.9, 0.95, [0, 0, 0.1, 0.1]),
             ("roe deer", 0.8, 0.9, [0.1, 0, 0.1, 0.1]),
             ("roe deer", 0.7, 0.85, [0.2, 0, 0.1, 0.1]),
         ]
-        kept = label_images.majority_detections(labelled)
-        self.assertEqual([detection[0] for detection in kept], ["roe deer"] * 2)
-        self.assertEqual(kept[0][2], 0.9)
-        tie = label_images.majority_detections(labelled[:2])
+        kept = label_images.detections_for_primary_class(labelled)
+        self.assertEqual([detection[0] for detection in kept], ["fox"])
+        self.assertEqual(kept[0][2], 0.95)
+        tie = label_images.detections_for_primary_class(labelled[:2])
         self.assertEqual([detection[0] for detection in tie], ["fox"])
-        self.assertEqual(label_images.majority_detections([]), [])
+        self.assertEqual(label_images.detections_for_primary_class([]), [])
 
     def test_labelling_uses_only_actual_output_directory_without_ocr_artifacts(self):
         self.assertFalse(hasattr(label_images, "enable_ocr"))

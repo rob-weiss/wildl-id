@@ -118,11 +118,11 @@ class PushAlertTests(unittest.TestCase):
             [
                 (
                     "🦝 Raccoons at Douglasien",
-                    "20:56 (30-10-2026)",
+                    "🕒 30. Oct 26 20:56",
                 ),
                 (
                     "🐗 Wild boar at Wendeplatte",
-                    "20:55 (30-10-2026)",
+                    "🕒 30. Oct 26 20:55",
                 ),
             ],
         )
@@ -133,21 +133,21 @@ class PushAlertTests(unittest.TestCase):
                 alerts.Alert("Wendeplatte", "wild boar", 1, NOW, None),
                 (
                     "🐗 Wild boar at Wendeplatte",
-                    "21:00 (30-10-2026)",
+                    "🕒 30. Oct 26 21:00",
                 ),
             ),
             (
                 alerts.Alert("Douglasien", "raccoon", 2, NOW, None),
                 (
                     "🦝 Raccoons at Douglasien",
-                    "21:00 (30-10-2026)",
+                    "🕒 30. Oct 26 21:00",
                 ),
             ),
             (
                 alerts.Alert("Madenhäule", "roe deer", 3, NOW, None),
                 (
                     "🦌 Roe deer at Madenhäule",
-                    "21:00 (30-10-2026)",
+                    "🕒 30. Oct 26 21:00",
                 ),
             ),
         )
@@ -246,7 +246,7 @@ class PushAlertTests(unittest.TestCase):
         self.assertEqual(request.get_method(), "PUT")
         self.assertEqual(url.path, "/topic%20x")
         self.assertEqual(query["title"], ["🐗 Wild boars at Madenhäule"])
-        self.assertEqual(query["message"], ["21:00 (30-10-2026)"])
+        self.assertEqual(query["message"], ["🕒 30. Oct 26 21:00"])
         self.assertNotIn("tags", query)
         self.assertEqual(query["filename"], ["image_0000002.jpg"])
         self.assertEqual(request.data, path.read_bytes())
@@ -256,7 +256,7 @@ class PushAlertTests(unittest.TestCase):
 
         request = alerts.ntfy_request("https://ntfy.sh", "topic", alert)
 
-        self.assertEqual(request.data, b"21:00 (30-10-2026)")
+        self.assertEqual(request.data, "🕒 30. Oct 26 21:00".encode())
         self.assertNotIn("tags", parse_qs(urlsplit(request.full_url).query))
         self.assertNotIn("filename", parse_qs(urlsplit(request.full_url).query))
 
@@ -396,7 +396,7 @@ class DailySummaryTests(unittest.TestCase):
         self.assertIn("By species: 1 fox 🦊, 1 roe deer 🦌", request.data.decode())
         self.assertTrue(
             request.data.decode().startswith(
-                "30-10-2026 07:00 CET - 31-10-2026 07:00 CET\n"
+                "🕒 30. Oct 26 07:00 CET - 🕒 31. Oct 26 07:00 CET\n"
             )
         )
         logged = notification_log.recent_notifications(5, self.notification_log)

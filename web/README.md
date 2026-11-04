@@ -26,11 +26,16 @@ home page; browse them in the Gallery. Capture times come only from
 has no valid time. Camera filenames and file modification times are not used.
 `temperature_celsius` is a historical Open-Meteo estimate interpolated from
 hourly values to the capture time, not a camera sensor reading. Thumbnails show
-the manual label, or the automatic label when there is none. Boxes appear when
-present.
+the manual label, or the automatic label when there is none, with location on
+the first line and capture time plus available temperature on the second:
+`🦊 fox   📍 Location` then `🕒 2. Nov 26 14:25   🌡️ 5 °C`. Temperatures round
+to whole degrees. Hover details include visit and capture details. Boxes appear
+when present.
 Click an image to
 enlarge it. The viewer has previous/next controls and an image counter;
-left/right arrow keys navigate and Escape closes it. Navigation covers all
+the caption stays on one line and uses extra spacing between species, location,
+and capture time. The count separator and temperature separator remain. Left/right
+arrow keys navigate and Escape closes it. Navigation covers all
 matching images, including other thumbnail pages. An open viewer keeps its
 image list stable during refresh; reopen it to browse the latest results.
 The gallery reloads the CSV and image availability every minute
@@ -46,6 +51,7 @@ the span, even when a visit began earlier. Single-photo and zero-span visits,
 people and vehicles are omitted; an empty summary stays hidden. Ties select
 the most recent visit. The table refreshes with the gallery and does not change
 when thumbnail species filters change. Observed span is not proven dwell time.
+Visit spans display hours and minutes without seconds.
 
 Immediate species notifications show one emoji in the title and only the capture
 time and date in the body. They omit ntfy emoji tags to avoid duplicate icons.

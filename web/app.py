@@ -12,7 +12,7 @@ from nicegui import ui
 from src.alerting import notification_log
 from src.alerting.push_alerts import CAMERA_TIME
 from src.background import job_control
-from src.labelling.label_data import DATE_FORMAT, image_key
+from src.labelling.label_data import format_datetime, image_key
 from src.labelling.review_app import IMAGES_DIR, ReviewApp
 from src.labelling.review_labels import DEFAULT_CSV
 from src.labelling.species import pluralize_species, species_emoji
@@ -294,9 +294,16 @@ def notification_image_source(
     if notification.get("attachment_recorded"):
         return None
     try:
-        datetime.strptime(notification["message"], f"%H:%M ({DATE_FORMAT})")
-    except ValueError, TypeError:
-        return None
+        message_time = datetime.strptime(
+            notification.get("message"), "🕒 %d. %b %y %H:%M"
+        )
+    except (ValueError, TypeError):
+        try:
+            message_time = datetime.strptime(
+                notification.get("message"), "%H:%M (%d-%m-%Y)"
+            )
+        except (ValueError, TypeError):
+            return None
     matches = {}
     for row in rows:
         try:
@@ -306,9 +313,8 @@ def notification_image_source(
         if taken.tzinfo is None:
             taken = taken.replace(tzinfo=CAMERA_TIME)
         taken = taken.astimezone(LOCAL_TIMEZONE)
-        if (
-            taken is None
-            or taken.strftime(f"%H:%M ({DATE_FORMAT})") != notification["message"]
+        if taken.strftime("%d-%m-%Y %H:%M") != message_time.strftime(
+            "%d-%m-%Y %H:%M"
         ):
             continue
         species = gallery.row_label(row).strip().casefold()
@@ -367,7 +373,7 @@ def build_recent_notifications() -> None:
                             ui.image(source).props(
                                 'fit=contain alt="Notification image"'
                             ).classes("w-full max-h-80").mark("notification-image")
-                    ui.label(f"{sent:{DATE_FORMAT} %H:%M}").classes(
+                    ui.label(format_datetime(sent)).classes(
                         "text-xs text-gray-600"
                     )
 
@@ -463,7 +469,7 @@ def mail_job_details() -> None:
         for event in status.events:
             ui.label(event).classes("text-sm text-gray-700")
     if status.last_activity:
-        ui.label(f"Last activity {status.last_activity:{DATE_FORMAT} %H:%M}").classes(
+        ui.label(f"Last activity {format_datetime(status.last_activity)}").classes(
             "text-xs text-gray-600"
         )
 
@@ -493,7 +499,7 @@ def build_notification_status() -> None:
                 "font-medium"
             )
             checked = status["checked"].astimezone(LOCAL_TIMEZONE)
-            ui.label(f"Last run {checked:{DATE_FORMAT} %H:%M}").classes("text-sm")
+            ui.label(f"Last run {format_datetime(checked)}").classes("text-sm")
             ui.label(f"{status['sent']} sent in last run").classes("text-sm")
             failures = status["failures"]
             if failures:
