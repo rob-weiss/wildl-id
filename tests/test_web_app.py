@@ -244,18 +244,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             await user.should_see("Wildlife label review")
             await user.should_see("fox")
             await user.should_see("Remove irrelevant")
+            toggle = next(iter(user.find(marker="navigation-toggle").elements))
             buttons = user.find(kind=ui.button).elements
-            self.assertTrue(all(not button.props.get("icon") for button in buttons))
+            self.assertTrue(
+                all(not button.props.get("icon") for button in buttons if button is not toggle)
+            )
             captions = {button.text for button in buttons}
             self.assertNotIn("🗑️ Remove empty", captions)
             self.assertNotIn("🗑️ Remove unknown", captions)
-            toggle = next(iter(user.find(marker="navigation-toggle").elements))
-            self.assertEqual(toggle.text, "➡️")
+            self.assertEqual(toggle.props.get("icon"), "chevron_right")
             user.find(marker="navigation-toggle").click()
-            self.assertEqual(toggle.text, "⬅️")
-            self.assertIsNone(toggle.props.get("icon"))
+            self.assertEqual(toggle.props.get("icon"), "chevron_left")
             user.find(marker="navigation-toggle").click()
-            self.assertEqual(toggle.text, "➡️")
+            self.assertEqual(toggle.props.get("icon"), "chevron_right")
             mode = next(iter(user.find(kind=ui.select, content="Review mode").elements))
             self.assertEqual(mode.options, ["Unseen", "Latest model incorrect"])
 
@@ -601,6 +602,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 await user.should_not_see("Seat ranking unavailable")
                 table = next(iter(user.find(marker="home-seat-rankings").elements))
                 self.assertEqual(table.rows[0]["gap"], "150°")
+                self.assertEqual(
+                    [column["label"] for column in table.columns if column["name"] == "sightings"],
+                    ["Sightings in the last 24h"],
+                )
+                await user.should_not_see("Sightings (in the last 24h)")
                 await refresh()
                 table = next(iter(user.find(marker="home-seat-rankings").elements))
                 self.assertEqual(table.rows[0]["gap"], "0°")
@@ -1145,6 +1151,9 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                         ("squirrel", "camera1", "0:05:00"),
                     ],
                 )
+                self.assertEqual(
+                    [row["image_count"] for row in table.rows], [3, 2, 2]
+                )
                 heading = next(
                     iter(user.find(kind=ui.label, content="Best seats now").elements)
                 )
@@ -1578,7 +1587,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         notification_log.record_notification(
             "🐗 Wild boar at Grenzweg",
             "1 🐗 wild boar at 20:10 (02-11-2026)",
-            datetime(2026, 11, 2, 19, 14, tzinfo=UTC),
+            datetime.now(UTC) - timedelta(minutes=1),
             log_path,
         )
         with patch.object(notification_log, "LOG_PATH", log_path):

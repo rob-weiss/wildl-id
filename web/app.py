@@ -86,10 +86,7 @@ def add_navigation(current_path: str) -> None:
                 f'aria-label="{"Expand" if collapsed else "Collapse"} navigation" '
                 f"aria-expanded={str(not collapsed).lower()}"
             )
-            if current_path == "/review":
-                toggle.set_text("➡️" if collapsed else "⬅️")
-            else:
-                toggle.props(f"icon={'chevron_right' if collapsed else 'chevron_left'}")
+            toggle.props(f"icon={'chevron_right' if collapsed else 'chevron_left'}")
 
         # Fixed height keeps the navigation items in place when toggling.
         with (
@@ -110,8 +107,7 @@ def add_navigation(current_path: str) -> None:
                 ).classes("w-40")
             toggle = (
                 ui.button(
-                    "➡️" if current_path == "/review" else "",
-                    icon=None if current_path == "/review" else "chevron_right",
+                    icon="chevron_right",
                     on_click=toggle_navigation,
                 )
                 .props('flat round aria-label="Expand navigation" aria-expanded=false')

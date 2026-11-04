@@ -1283,6 +1283,7 @@ def build_recent_gallery(
                 "visit_id": visit.visit_id,
                 "species": visit.species,
                 "label": display_label(visit.species),
+                "image_count": visit.image_count,
                 "duration": str(timedelta(seconds=visit.observed_span_seconds)),
                 "location": visit.location_id,
                 "started": visit.started_at.astimezone(CAMERA_TIMEZONE).strftime(
@@ -1301,6 +1302,7 @@ def build_recent_gallery(
                     {"name": field, "label": title, "field": field, "align": "left"}
                     for field, title in (
                         ("label", "Species"),
+                        ("image_count", "Images"),
                         ("duration", "Observed span"),
                         ("location", "Site"),
                         ("started", "First seen"),

@@ -843,7 +843,7 @@ async def build_best_seats(csv_path: Path = DEFAULT_CSV) -> None:
                         },
                         {
                             "name": "sightings",
-                            "label": "Sightings (in the last 24h)",
+                            "label": "Sightings in the last 24h",
                             "field": "sightings",
                             "align": "left",
                         },
