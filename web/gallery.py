@@ -959,7 +959,7 @@ def gallery_card(row, source, on_click, show_boxes=False, detailed=False):
         if count := animal_count(row):
             with image:
                 ui.label(str(count)).classes(
-                    "absolute top-1 right-1 min-w-6 px-1.5 rounded-full text-center "
+                    "absolute top-1 right-1 min-w-6 !py-0 px-1.5 rounded-full text-center "
                     "text-xs font-bold text-gray-900 bg-white/70 shadow "
                     "pointer-events-none"
                 ).props(
