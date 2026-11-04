@@ -563,6 +563,53 @@ class CanonicalMetadataTests(unittest.TestCase):
         self.assertEqual(row["confidence"], "0.95")
         self.assertEqual(row["reviewed"], "true")
 
+    def test_human_label_gallery_uses_canonical_metadata(self):
+        repository = self.predictions_csv.parents[2]
+        human_csv = self.labels_dir / "human_labels.csv"
+        label_data.write_records(
+            human_csv,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "box": "",
+                    "manual_label": "fox",
+                }
+            ],
+            label_data.HUMAN_COLUMNS,
+        )
+        label_data.write_records(
+            self.metadata_csv,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "lighting": "dark",
+                    "temperature_celsius": "7",
+                }
+            ],
+            label_data.METADATA_COLUMNS,
+        )
+        prediction_path = label_data.predictions_path(repository)
+        label_data.write_records(
+            prediction_path,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "class": "fox",
+                    "lighting": "bright",
+                    "temperature_celsius": "20",
+                }
+            ],
+            label_data.PREDICTION_COLUMNS,
+        )
+
+        [row] = gallery.load_rows(human_csv)
+
+        self.assertEqual(row["lighting"], "dark")
+        self.assertEqual(row["temperature_celsius"], "7")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -796,14 +796,20 @@ def load_rows(csv_path):
             image_name = f"{row['location_id']}_{row['image_file']}"
             if image_name in validation:
                 row["_validation_prediction"] = validation[image_name]
-        return rows
-    with Path(csv_path).open(newline="", encoding="utf-8") as source:
-        reader = csv.DictReader(source)
-        if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or []):
-            raise ValueError("CSV needs location_id, image_file, and class columns")
-        rows = list(reader)
+    else:
+        with csv_path.open(newline="", encoding="utf-8") as source:
+            reader = csv.DictReader(source)
+            if not {"location_id", "image_file", "class"}.issubset(
+                reader.fieldnames or []
+            ):
+                raise ValueError("CSV needs location_id, image_file, and class columns")
+            rows = list(reader)
 
-    metadata_path = csv_path.parent.parent / "image_metadata.csv"
+    metadata_path = (
+        csv_path.parent / "image_metadata.csv"
+        if csv_path.name == "human_labels.csv"
+        else csv_path.parent.parent / "image_metadata.csv"
+    )
     metadata = {
         label_data.image_key(row): row
         for row in label_data.read_records(metadata_path)
