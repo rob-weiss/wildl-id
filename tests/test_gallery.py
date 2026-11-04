@@ -4,6 +4,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from web import gallery
+from src.labelling import label_data
 from web.gallery import (
     FILTER_EXAMPLES,
     LOCAL_IMAGE_ROUTE,
@@ -460,6 +461,107 @@ class ImageSourceTests(unittest.TestCase):
             "https://cdn.example.test/images/2025/Douglasien/fox.jpg",
         )
         self.assertIsNone(image_source(row, {}, self.images_dir, None))
+
+
+class CanonicalMetadataTests(unittest.TestCase):
+    def setUp(self):
+        temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary_directory.cleanup)
+        self.labels_dir = Path(temporary_directory.name) / "labels"
+        self.predictions_csv = (
+            self.labels_dir / "labels_model" / "predictions.csv"
+        )
+        self.metadata_csv = self.labels_dir / "image_metadata.csv"
+
+    def test_prediction_gallery_uses_canonical_metadata(self):
+        prediction = {
+            "location_id": "Madenha\u0308ule",
+            "image_file": "fox.jpg",
+            "class": "fox",
+            "box": "[0.1, 0.2, 0.3, 0.4]",
+            "confidence": "0.95",
+            "lighting": "bright",
+            "temperature_celsius": "20",
+            "reviewed": "true",
+        }
+        label_data.write_records(
+            self.predictions_csv, [prediction], label_data.PREDICTION_COLUMNS
+        )
+        label_data.write_records(
+            self.metadata_csv,
+            [
+                {
+                    "location_id": "Madenhäule",
+                    "image_file": "fox.jpg",
+                    "lighting": "dark",
+                    "temperature_celsius": "7",
+                }
+            ],
+            label_data.METADATA_COLUMNS,
+        )
+
+        [row] = gallery.load_rows(self.predictions_csv)
+
+        self.assertEqual(row["lighting"], "dark")
+        self.assertEqual(row["temperature_celsius"], "7")
+        self.assertEqual(row["class"], "fox")
+        self.assertEqual(row["box"], prediction["box"])
+        self.assertEqual(row["confidence"], "0.95")
+        self.assertEqual(row["reviewed"], "true")
+
+    def test_blank_canonical_metadata_overrides_prediction_values(self):
+        prediction = {
+            "location_id": "camera1",
+            "image_file": "fox.jpg",
+            "class": "fox",
+            "lighting": "bright",
+            "temperature_celsius": "20",
+        }
+        label_data.write_records(
+            self.predictions_csv, [prediction], label_data.PREDICTION_COLUMNS
+        )
+        label_data.write_records(
+            self.metadata_csv,
+            [
+                {
+                    "location_id": "camera1",
+                    "image_file": "fox.jpg",
+                    "lighting": "",
+                    "temperature_celsius": "",
+                }
+            ],
+            label_data.METADATA_COLUMNS,
+        )
+
+        [row] = gallery.load_rows(self.predictions_csv)
+
+        self.assertEqual(row["lighting"], "")
+        self.assertEqual(row["temperature_celsius"], "")
+
+    def test_prediction_without_metadata_has_blank_lighting(self):
+        prediction = {
+            "location_id": "camera1",
+            "image_file": "fox.jpg",
+            "class": "fox",
+            "box": "[0.1, 0.2, 0.3, 0.4]",
+            "confidence": "0.95",
+            "lighting": "bright",
+            "reviewed": "true",
+        }
+        label_data.write_records(
+            self.predictions_csv, [prediction], label_data.PREDICTION_COLUMNS
+        )
+        label_data.write_records(
+            self.metadata_csv, [], label_data.METADATA_COLUMNS
+        )
+
+        [row] = gallery.load_rows(self.predictions_csv)
+
+        self.assertEqual(row["lighting"], "")
+        self.assertEqual(row["class"], "fox")
+        self.assertEqual(row["box"], prediction["box"])
+        self.assertEqual(row["confidence"], "0.95")
+        self.assertEqual(row["reviewed"], "true")
 
 
 if __name__ == "__main__":

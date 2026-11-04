@@ -784,6 +784,7 @@ def image_source(row, local_images, images_dir, base_url):
 
 
 def load_rows(csv_path):
+    csv_path = Path(csv_path)
     if Path(csv_path).name == "human_labels.csv":
         repo_dir = Path(csv_path).parent.parent
         run_name = label_data.predictions_path(repo_dir).parent.name.removeprefix(
@@ -800,7 +801,21 @@ def load_rows(csv_path):
         reader = csv.DictReader(source)
         if not {"location_id", "image_file", "class"}.issubset(reader.fieldnames or []):
             raise ValueError("CSV needs location_id, image_file, and class columns")
-        return list(reader)
+        rows = list(reader)
+
+    metadata_path = csv_path.parent.parent / "image_metadata.csv"
+    metadata = {
+        label_data.image_key(row): row
+        for row in label_data.read_records(metadata_path)
+    }
+    for row in rows:
+        canonical = metadata.get(label_data.image_key(row))
+        if canonical is None:
+            row["lighting"] = ""
+            continue
+        for column in ("lighting", "temperature_celsius"):
+            row[column] = canonical.get(column, "")
+    return rows
 
 
 def rows_with_originals(rows, local_images):
