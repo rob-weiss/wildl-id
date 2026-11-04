@@ -394,7 +394,7 @@ def send_daily_summary(
                 "summary CSV needs location_id, image_file, and class columns"
             )
         for row in rows:
-            stamp = (row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+            stamp = (row.get("timestamp_exif") or "").strip()
             if not stamp:
                 continue
             try:

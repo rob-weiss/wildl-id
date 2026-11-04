@@ -8,7 +8,6 @@ Main approach:
 - Detects animals, persons, and vehicles in camera trap images
 - Processes images from wildlife camera directory structure
 - Outputs results compatible with labelling.py format
-- OCR support: macOS Vision (primary) with EasyOCR fallback
 
 Dependencies:
 - PytorchWildlife
@@ -16,16 +15,8 @@ Dependencies:
 - pandas
 - opencv-python
 - matplotlib
-- pyobjc-framework-Vision pyobjc-framework-Quartz (for macOS Vision OCR)
-- easyocr (optional, for OCR fallback)
 
 pip install PytorchWildlife torch pandas opencv-python matplotlib pillow lightning omegaconf pyarrow
-
-# For macOS Vision OCR (macOS only):
-pip install pyobjc-framework-Vision pyobjc-framework-Quartz
-
-# For EasyOCR fallback (cross-platform):
-pip install easyocr
 
 Usage:
     python detect_animals.py
@@ -34,13 +25,11 @@ Usage:
 import gc
 import logging
 import os
-import re
-import sys
 import time
 import warnings
 from collections import Counter, defaultdict
 from contextlib import redirect_stderr, redirect_stdout
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -72,7 +61,7 @@ except ImportError:
     from organize_images import image_paths, nfc
     from species import normalize_species
 
-# Configuration (must be defined before OCR framework checks)
+# Configuration
 repo_dir = Path(__file__).resolve().parents[2]
 # MegaDetector model options: "MegaDetectorV5" or "MegaDetectorV6"
 # MegaDetectorV6 versions: "MDV6-yolov9-c", "MDV6-yolov9-e", "MDV6-yolov10-c", "MDV6-yolov10-e", "MDV6-rtdetr-c"
@@ -86,53 +75,6 @@ additional_detection_threshold = 0.8
 # Enable species classification (uses DeepFaune classifier for European wildlife)
 use_classification = True
 classification_threshold = 0.1  # Minimum confidence for classification
-
-# Enable OCR for timestamp/temperature extraction (disable to save memory)
-enable_ocr = False
-
-# Enable OCR fallback: if macOS Vision fails, try EasyOCR
-# Requires: pip install easyocr
-enable_ocr_fallback = True
-
-# OCR Framework availability checks
-# macOS Vision is only available on macOS — skip the import entirely on other platforms
-# to avoid "ModuleNotFoundError: No module named 'objc'" on Windows/Linux.
-if sys.platform == "darwin":
-    try:
-        import Vision
-        from Foundation import NSURL
-        from Quartz import CIImage
-
-        MACOS_VISION_AVAILABLE = True
-    except ImportError:
-        MACOS_VISION_AVAILABLE = False
-        print("Warning: macOS Vision not available (PyObjC not installed)")
-        if enable_ocr and not enable_ocr_fallback:
-            print("Error: OCR enabled but no OCR framework available. Install with:")
-            print("  pip install pyobjc-framework-Vision pyobjc-framework-Quartz")
-            print("  or enable EasyOCR fallback: pip install easyocr")
-            sys.exit(1)
-else:
-    MACOS_VISION_AVAILABLE = False
-
-# Try to import EasyOCR for fallback
-try:
-    import easyocr
-
-    EASYOCR_AVAILABLE = True
-except ImportError:
-    EASYOCR_AVAILABLE = False
-
-# Check OCR availability
-if enable_ocr:
-    if not MACOS_VISION_AVAILABLE and not EASYOCR_AVAILABLE:
-        print("Error: OCR enabled but no OCR framework available.")
-        print("Install one of the following:")
-        print(
-            "  macOS Vision: pip install pyobjc-framework-Vision pyobjc-framework-Quartz"
-        )
-        print("  EasyOCR:      pip install easyocr")
-        sys.exit(1)
 
 # MegaDetector class names
 # MegaDetector detects: animal, person, vehicle
@@ -287,360 +229,17 @@ def map_classifier_to_wildlife(classifier_name):
     return normalize_species(classifier_name)
 
 
-def extract_text_from_image(image_path):
-    """Extract text from an image using macOS Vision framework or EasyOCR fallback.
-
-    Parameters
-    ----------
-    image_path : Path
-        Path to the image file.
-
-    Returns
-    -------
-    str
-        Extracted text as a string.
-    """
-    # Try macOS Vision first if available
-    if MACOS_VISION_AVAILABLE:
-        try:
-            # Create image URL
-            image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
-
-            # Create CIImage
-            ci_image = CIImage.imageWithContentsOfURL_(image_url)
-            if ci_image is None:
-                raise Exception("Could not create CIImage from file")
-
-            # Create text recognition request
-            request = Vision.VNRecognizeTextRequest.alloc().init()
-            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-            request.setUsesLanguageCorrection_(True)
-            request.setRecognitionLanguages_(["en-US"])
-
-            # Create request handler
-            handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
-                ci_image, None
-            )
-
-            # Perform request
-            success = handler.performRequests_error_([request], None)
-
-            if not success[0]:
-                raise Exception("Vision request failed")
-
-            # Extract text from results
-            results = request.results()
-            if not results:
-                raise Exception("No text detected")
-
-            # Combine all recognized text
-            text_lines = []
-            for observation in results:
-                text = observation.text()
-                text_lines.append(text)
-
-            text = "\n".join(text_lines)
-            if text:
-                return text
-            else:
-                raise Exception("Empty text result")
-
-        except Exception as e:
-            if enable_ocr_fallback and EASYOCR_AVAILABLE:
-                print(f"    macOS Vision failed ({e}), trying EasyOCR fallback...")
-            else:
-                print(f"    OCR error: {e}")
-                return ""
-
-    # Fall back to EasyOCR if macOS Vision failed or is not available
-    if enable_ocr_fallback and EASYOCR_AVAILABLE:
-        try:
-            # Initialize EasyOCR reader (cached globally for performance)
-            if not hasattr(extract_text_from_image, "easyocr_reader"):
-                print("    Initializing EasyOCR reader (one-time setup)...")
-                extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"],
-                    gpu=torch.cuda.is_available() or torch.backends.mps.is_available(),
-                )
-
-            # Read text from image
-            result = extract_text_from_image.easyocr_reader.readtext(
-                str(image_path), detail=0
-            )
-
-            # Combine all detected text
-            text = "\n".join(result)
-            return text
-
-        except Exception as e:
-            print(f"    EasyOCR error: {e}")
-            return ""
-
-    return ""
 
 
-def parse_camera_metadata(
-    ocr_text, image_path=None, ocr_failures_log=None, camera="seissiger"
-):
-    """Parse timestamp and temperature from camera metadata text.
-
-    Supported formats:
-    SEISSIGER (slash-separated, DD/MM/YYYY) — default:
-      SEISSIGER
-      WILDKAMERA®
-      10/08/2024 16:28:22
-      • 025°C
-    ZEISS (dot-separated, weekday prefix):
-      ZEISS
-      AMPHIKANZEL
-      • 3°C
-      Mo 10.11.2025 07:41:41
-
-    Parameters
-    ----------
-    ocr_text : str
-        Text extracted from image via OCR.
-    image_path : Path, optional
-        Path to the image file (for logging failures).
-    ocr_failures_log : Path, optional
-        Path to the OCR failures log file.
-
-    Returns
-    -------
-    dict
-        Dictionary with 'timestamp' and 'temperature_celsius' keys.
-    """
-    timestamp = None
-    temperature = None
-
-    try:
-        # Normalize linebreaks to spaces for more robust parsing
-        normalized_text = re.sub(r"\s+", " ", ocr_text)
-
-        # Replace common OCR artifacts before temperature parsing
-        # Replace letter O with 0 when followed by C (e.g., "OC" -> "0C")
-        normalized_text = re.sub(
-            r"\bO(?=\s*[°С]?C)", "0", normalized_text, flags=re.IGNORECASE
-        )
-        # Replace Cyrillic characters that look like temperature numbers/units
-        normalized_text = (
-            normalized_text.replace("б", "6").replace("С", "C").replace("з", "3")
-        )
-
-        # Parse temperature (e.g., "3°C", "-5°C", "15°C", "-12°C", "• 3°C", "-1°", "12C", "-1C", "025°C", "006*C")
-        # Match the number immediately before °C, *C, or C, regardless of what precedes it
-        # Uses \D (non-digit) or start of string to avoid matching numbers that aren't temperatures
-        # Allow optional leading zeros and asterisk in place of degree symbol
-        temp_match = re.search(
-            r"(?:^|\D)-?0*(\d{1,2})\s*(?:[°*]?C|°)", normalized_text, re.IGNORECASE
-        )
-        if temp_match:
-            temperature = int(temp_match.group(1))
-        else:
-            # Debug: show what we're trying to parse if temperature pattern doesn't match
-            if normalized_text and (
-                "°" in normalized_text or "C" in normalized_text
-            ):  # Likely contains a temperature
-                print(
-                    f"    Temperature pattern did not match in: '{normalized_text[:100]}'"
-                )
-                # Log to file with image path
-                if image_path and ocr_failures_log:
-                    with open(ocr_failures_log, "a", encoding="utf-8") as f:
-                        f.write(f"\n[TEMP FAIL] {image_path.name}\n")
-                        f.write(f"Image Path: {image_path.resolve()}\n")
-                        f.write(f"OCR Text: {normalized_text}\n")
-                        f.write(f"Original: {ocr_text}\n")
-
-        # Parse timestamp
-        # Zeiss format: weekday DD.MM.YYYY HH:MM:SS (e.g. "Mo 10.11.2025 07:41:41")
-        # Seissiger format: DD/MM/YYYY HH:MM:SS (colons, dots, or asterisks as separators)
-        is_seissiger = camera.lower() == "seissiger"
-        if is_seissiger:
-            date_match = re.search(
-                r"(\d{1,2})/(\d{1,2})/(\d{4})\s+(\d{1,2})[:.* ](\d{2})[:.* ](\d{2})",
-                normalized_text,
-            )
-        else:
-            # Zeiss: allow OCR artifacts between weekday abbreviation, date, and time
-            date_match = re.search(
-                r"\w+\s*.*?(\d{1,2})\.(\d{1,2})\.(\d{4}).*?(\d{1,2}):(\d{2}):(\d{2})",
-                normalized_text,
-            )
-        if date_match:
-            day, month, year, hour, minute, second = date_match.groups()
-            try:
-                dt = datetime(
-                    int(year), int(month), int(day), int(hour), int(minute), int(second)
-                )
-                timestamp = dt.isoformat()
-            except ValueError as ve:
-                print(
-                    f"    Invalid date/time values: day={day}, month={month}, year={year}, "
-                    f"hour={hour}, minute={minute}, second={second} - {ve}"
-                )
-        else:
-            # Debug: show what we're trying to parse if date pattern doesn't match
-            if normalized_text and "202" in normalized_text:  # Likely contains a date
-                print(f"    Date pattern did not match in: '{normalized_text[:100]}'")
-                # Log to file with image path
-                if image_path and ocr_failures_log:
-                    with open(ocr_failures_log, "a", encoding="utf-8") as f:
-                        f.write(f"\n[DATE FAIL] {image_path.name}\n")
-                        f.write(f"Image Path: {image_path.resolve()}\n")
-                        f.write(f"OCR Text: {normalized_text}\n")
-                        f.write(f"Original: {ocr_text}\n")
-    except Exception as e:
-        print(f"    Metadata parsing error: {e}")
-
-    return {
-        "timestamp": timestamp,
-        "temperature_celsius": temperature,
-    }
 
 
-def extract_metadata_ocr(image_path, ocr_failures_log=None, camera=None):
-    """Extract timestamp and temperature from image using macOS OCR with EasyOCR fallback.
-
-    Tries macOS Vision first, then falls back to EasyOCR if:
-    1. macOS Vision fails to extract text, OR
-    2. Extracted text cannot be fully parsed (missing timestamp OR temperature)
-
-    Parameters
-    ----------
-    image_path : Path
-        Path to the image file.
-    ocr_failures_log : Path, optional
-        Path to the OCR failures log file.
-
-    Returns
-    -------
-    dict
-        Dictionary with 'timestamp' and 'temperature_celsius' keys.
-    """
-    # Try macOS Vision first if available
-    if MACOS_VISION_AVAILABLE:
-        try:
-            # Create image URL
-            image_url = NSURL.fileURLWithPath_(str(image_path.absolute()))
-
-            # Create CIImage
-            ci_image = CIImage.imageWithContentsOfURL_(image_url)
-            if ci_image is None:
-                raise Exception("Could not create CIImage from file")
-
-            # Create text recognition request
-            request = Vision.VNRecognizeTextRequest.alloc().init()
-            request.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
-            request.setUsesLanguageCorrection_(True)
-            request.setRecognitionLanguages_(["en-US"])
-
-            # Create request handler
-            handler = Vision.VNImageRequestHandler.alloc().initWithCIImage_options_(
-                ci_image, None
-            )
-
-            # Perform request
-            success = handler.performRequests_error_([request], None)
-
-            if not success[0]:
-                raise Exception("Vision request failed")
-
-            # Extract text from results
-            results = request.results()
-            if not results:
-                raise Exception("No text detected")
-
-            # Combine all recognized text
-            text_lines = []
-            for observation in results:
-                text = observation.text()
-                text_lines.append(text)
-
-            ocr_text = "\n".join(text_lines)
-            if not ocr_text:
-                raise Exception("Empty text result")
-
-            # Try to parse the extracted text
-            metadata = parse_camera_metadata(
-                ocr_text, image_path, ocr_failures_log, camera
-            )
-
-            # Check if parsing was successful (both fields extracted)
-            if (
-                metadata["timestamp"] is not None
-                and metadata["temperature_celsius"] is not None
-            ):
-                return metadata
-            else:
-                # Parsing failed - at least one field missing
-                if enable_ocr_fallback and EASYOCR_AVAILABLE:
-                    print(
-                        "    macOS Vision text incomplete, trying EasyOCR fallback..."
-                    )
-                else:
-                    return metadata  # Return partial result
-
-        except Exception as e:
-            if enable_ocr_fallback and EASYOCR_AVAILABLE:
-                print(f"    macOS Vision failed ({e}), trying EasyOCR fallback...")
-            else:
-                return {"timestamp": None, "temperature_celsius": None}
-
-    # Fall back to EasyOCR if macOS Vision failed or parsing failed
-    if enable_ocr_fallback and EASYOCR_AVAILABLE:
-        try:
-            # Initialize EasyOCR reader (cached globally for performance)
-            if not hasattr(extract_text_from_image, "easyocr_reader"):
-                print("    Initializing EasyOCR reader (one-time setup)...")
-                extract_text_from_image.easyocr_reader = easyocr.Reader(
-                    ["en"],
-                    gpu=torch.cuda.is_available() or torch.backends.mps.is_available(),
-                )
-
-            # Read text from image
-            result = extract_text_from_image.easyocr_reader.readtext(
-                str(image_path), detail=0
-            )
-
-            # Combine all detected text
-            ocr_text = "\n".join(result)
-
-            # Parse the EasyOCR result
-            metadata = parse_camera_metadata(
-                ocr_text, image_path, ocr_failures_log, camera
-            )
-
-            # Check if EasyOCR parsing was successful
-            missing_fields = []
-            if metadata["timestamp"] is None:
-                missing_fields.append("timestamp")
-            if metadata["temperature_celsius"] is None:
-                missing_fields.append("temperature")
-
-            if missing_fields:
-                print(
-                    f"    ⚠️  Both OCR methods failed to extract: {', '.join(missing_fields)}"
-                )
-
-            return metadata
-
-        except Exception as e:
-            print(f"    EasyOCR error: {e}")
-            return {"timestamp": None, "temperature_celsius": None}
-
-    # No OCR available or all attempts failed
-    return {"timestamp": None, "temperature_celsius": None}
 
 
 CAMERA_TIMEZONE = ZoneInfo("Europe/Berlin")
 
 
-TIMESTAMP_TOLERANCE = timedelta(minutes=1)
-
-
 def extract_exif_timestamp(image_path):
-    """Read the EXIF capture time as German local wall time (same format as OCR).
+    """Read the EXIF capture time as German local wall time.
 
     Returns "" if the file or timestamp is missing.
     """
@@ -660,37 +259,8 @@ def extract_exif_timestamp(image_path):
         return ""
 
 
-def in_dst_transition(dt):
-    """True if a naive local time is ambiguous or non-existent due to a DST switch."""
-    return (
-        dt.replace(tzinfo=CAMERA_TIMEZONE, fold=0).utcoffset()
-        != dt.replace(tzinfo=CAMERA_TIMEZONE, fold=1).utcoffset()
-    )
 
 
-def resolve_exif_timestamp(exif_ts, ocr_ts, image_path, ocr_failures_log=None):
-    """Validate the EXIF timestamp against the OCR timestamp and return the value to store.
-
-    Mismatches beyond TIMESTAMP_TOLERANCE are logged and the EXIF value is kept.
-    During DST transition hours the OCR timestamp is used.
-    """
-    if not exif_ts or not ocr_ts:
-        return exif_ts
-    exif_dt = datetime.fromisoformat(exif_ts)
-    ocr_dt = datetime.fromisoformat(ocr_ts)
-    if in_dst_transition(exif_dt) or in_dst_transition(ocr_dt):
-        return ocr_ts
-    if abs(exif_dt - ocr_dt) > TIMESTAMP_TOLERANCE:
-        print(
-            f"    ⚠️  Timestamp mismatch for {image_path}: EXIF={exif_ts}, OCR={ocr_ts}"
-        )
-        if ocr_failures_log:
-            with open(ocr_failures_log, "a", encoding="utf-8") as f:
-                f.write(f"\n[TIMESTAMP MISMATCH] {image_path.name}\n")
-                f.write(f"Image Path: {image_path.resolve()}\n")
-                f.write(f"EXIF: {exif_ts}\n")
-                f.write(f"OCR: {ocr_ts}\n")
-    return exif_ts
 
 
 def detect_lighting(img_input, dim=10, thresh=0.5):
@@ -822,7 +392,7 @@ def images_requiring_processing(image_info_list, existing_df, reprocess_missing=
             inferred = str(row.get("classifier_model") or "").strip()
             metadata_complete = all(
                 pd.notna(row.get(field)) and str(row.get(field, "")).strip()
-                for field in ("timestamp", "temperature_celsius")
+                for field in ("timestamp_exif", "temperature_celsius")
             )
             if manual or (
                 automatic
@@ -881,18 +451,6 @@ def process_images_with_pytorch_wildlife(
     if torch.backends.mps.is_available():
         device = "mps"
     print(f"Using device: {device}")
-
-    # Print OCR framework being used
-    if enable_ocr:
-        if MACOS_VISION_AVAILABLE:
-            ocr_framework = "macOS Vision"
-            if enable_ocr_fallback and EASYOCR_AVAILABLE:
-                ocr_framework += " (with EasyOCR fallback)"
-        elif EASYOCR_AVAILABLE:
-            ocr_framework = "EasyOCR"
-        else:
-            ocr_framework = "None"
-        print(f"Using OCR framework: {ocr_framework}")
 
     # Load MegaDetector model
     print(f"Loading {model_version} {model_name} model...")
@@ -953,16 +511,9 @@ def process_images_with_pytorch_wildlife(
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     print(f"Writing labels to: {csv_path}")
 
-    ocr_failures_log = csv_path.parent / "ocr_failures.txt"
-    if enable_ocr:
-        with open(ocr_failures_log, "w", encoding="utf-8") as f:
-            f.write(f"OCR Parsing Failures Log - {datetime.now().isoformat()}\\n")
-            f.write("=" * 80 + "\\n")
-
     # Define explicit dtypes to avoid FutureWarning about NA entries
     COLUMN_DTYPES = {
         "location_id": str,
-        "timestamp": str,
         "timestamp_exif": str,
         "image_file": str,
         "class": str,
@@ -979,6 +530,7 @@ def process_images_with_pytorch_wildlife(
     existing_df = None
     if csv_path.exists():
         existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
+        existing_df = existing_df.drop(columns="timestamp", errors="ignore")
         if not separated and "manual_label" not in existing_df:
             existing_df["manual_label"] = ""
 
@@ -1026,6 +578,7 @@ def process_images_with_pytorch_wildlife(
             new_rows_df = new_rows_df.drop(columns="manual_label")
         if csv_path.exists():
             existing_df = pd.read_csv(csv_path, keep_default_na=False, dtype=str)
+            existing_df = existing_df.drop(columns="timestamp", errors="ignore")
             if not separated and "manual_label" not in existing_df:
                 existing_df["manual_label"] = ""
         if existing_df is not None and len(existing_df) > 0:
@@ -1132,13 +685,7 @@ def process_images_with_pytorch_wildlife(
                 # Detect lighting using already-loaded PIL image (inside with block)
                 lighting, brightness_value = detect_lighting(img_pil)
 
-                # Extract metadata using OCR (only if enabled, still needs file path for Vision API)
-                if enable_ocr:
-                    metadata = extract_metadata_ocr(
-                        image_path, ocr_failures_log, camera
-                    )
-                else:
-                    metadata = {"timestamp": None, "temperature_celsius": None}
+                exif_timestamp = extract_exif_timestamp(image_path)
         except (Exception, KeyboardInterrupt) as e:
             save_results()
             if isinstance(e, KeyboardInterrupt):
@@ -1149,13 +696,7 @@ def process_images_with_pytorch_wildlife(
 
         result_dict = {
             "location_id": location_id,
-            "timestamp": metadata["timestamp"] if metadata["timestamp"] else "",
-            "timestamp_exif": resolve_exif_timestamp(
-                extract_exif_timestamp(image_path),
-                metadata["timestamp"] or "",
-                image_path,
-                ocr_failures_log,
-            ),
+            "timestamp_exif": exif_timestamp,
             "image_file": image_file,
             "class": img_class,
             "box": str(box) if box is not None else "",
@@ -1165,9 +706,7 @@ def process_images_with_pytorch_wildlife(
             "classification_confidence": float(classification_confidence)
             if classification_confidence is not None
             else 0.0,
-            "temperature_celsius": float(metadata["temperature_celsius"])
-            if metadata["temperature_celsius"] is not None
-            else np.nan,
+            "temperature_celsius": np.nan,
             "manual_label": "",
             "classifier_model": classifier_run,
         }
@@ -1188,11 +727,6 @@ def process_images_with_pytorch_wildlife(
                 elif device == "mps":
                     torch.mps.empty_cache()
 
-            # Additional aggressive cleanup for macOS Vision framework
-            import objc
-
-            objc.recycleAutoreleasePool()
-
     # Print statistics
     end_time = time.time()
     total_time = end_time - start_time
@@ -1210,11 +744,6 @@ def process_images_with_pytorch_wildlife(
         df_results = pd.DataFrame(results)
         print("\nClass distribution:")
         print(df_results["class"].value_counts())
-
-    # Print OCR failures log location
-    if enable_ocr and ocr_failures_log.exists():
-        print(f"\n✓ OCR failures logged to: {ocr_failures_log}")
-
 
 if __name__ == "__main__":
     process_images_with_pytorch_wildlife()

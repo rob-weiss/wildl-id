@@ -1032,7 +1032,13 @@ class LabelReviewTests(unittest.TestCase):
         with self.csv_path.open("w", newline="", encoding="utf-8") as target:
             writer = csv.DictWriter(
                 target,
-                fieldnames=["location_id", "image_file", "timestamp_exif", "class"],
+                fieldnames=[
+                    "location_id",
+                    "image_file",
+                    "timestamp_exif",
+                    "timestamp",
+                    "class",
+                ],
             )
             writer.writeheader()
             for name, taken in (
@@ -1046,6 +1052,9 @@ class LabelReviewTests(unittest.TestCase):
                         "location_id": "camera1",
                         "image_file": name,
                         "timestamp_exif": taken,
+                        "timestamp": "2023-01-01T00:00:00"
+                        if name == "undated.jpg"
+                        else "",
                         "class": "fox",
                     }
                 )

@@ -20,7 +20,6 @@ REVIEWED_HUMAN_COLUMNS = (*HUMAN_COLUMNS, REVIEWED_MODEL_COLUMN)
 METADATA_COLUMNS = (
     "location_id",
     "image_file",
-    "timestamp",
     "timestamp_exif",
     "lighting",
     "temperature_celsius",
@@ -34,7 +33,6 @@ PREDICTION_COLUMNS = (
     "confidence",
     "classification_confidence",
     "classifier_model",
-    "timestamp",
     "timestamp_exif",
     "lighting",
     "temperature_celsius",

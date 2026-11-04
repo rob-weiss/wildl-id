@@ -67,13 +67,17 @@ class PredictionTests(unittest.TestCase):
                 "location_id": "camera",
                 "image_file": "start.jpg",
                 "class": "fox",
-                "timestamp": "2026-10-22T00:00Z",
+                "timestamp_exif": "2026-10-22T00:00Z",
+                "timestamp": "",
             },
             {
                 "location_id": "camera",
                 "image_file": "last.jpg",
                 "class": "human",
-                "timestamp": "2026-10-29T06:10Z" if stale else "2026-10-31T06:10Z",
+                "timestamp_exif": "2026-10-29T06:10Z"
+                if stale
+                else "2026-10-31T06:10Z",
+                "timestamp": "",
             },
         ]
         pd.DataFrame(self.rows).to_csv(self.csv_path, index=False)
@@ -117,12 +121,13 @@ class PredictionTests(unittest.TestCase):
             "image_file": "deer.jpg",
             "class": "human",
             "manual_label": "roe deer",
-            "timestamp": "2026-10-31T05:30Z",
+            "timestamp_exif": "2026-10-31T05:30Z",
+            "timestamp": "",
         }
         self.rows += [
             row,
             row.copy(),
-            dict(row, image_file="future.jpg", timestamp="2026-11-02T00:00Z"),
+            dict(row, image_file="future.jpg", timestamp_exif="2026-11-02T00:00Z"),
         ]
         pd.DataFrame(self.rows).to_csv(self.csv_path, index=False)
         result = predictions.forecast_next24(
@@ -148,8 +153,8 @@ class PredictionTests(unittest.TestCase):
 
     def test_dst_still_has_24_distinct_elapsed_hours(self):
         self.now = pd.Timestamp("2026-10-25T00:20Z")
-        self.rows[-1]["timestamp"] = "2026-10-25T00:10Z"
-        self.rows[0]["timestamp"] = "2026-10-10T00:00Z"
+        self.rows[-1]["timestamp_exif"] = "2026-10-25T00:10Z"
+        self.rows[0]["timestamp_exif"] = "2026-10-10T00:00Z"
         pd.DataFrame(self.rows).to_csv(self.csv_path, index=False)
         result = predictions.forecast_next24(
             self.csv_path, self.model_path, "camera", now=self.now
@@ -166,9 +171,19 @@ class PredictionTests(unittest.TestCase):
         self.assertIsNone(options["yAxis"]["max"])
 
     def test_record_in_last_complete_hour_is_fresh_enough(self):
-        self.rows[-1]["timestamp"] = "2026-10-31T05:55Z"
+        self.rows[-1]["timestamp_exif"] = "2026-10-31T05:55Z"
         pd.DataFrame(self.rows).to_csv(self.csv_path, index=False)
         result = predictions.forecast_next24(
             self.csv_path, self.model_path, "camera", now=self.now
         )
         self.assertFalse(result.assumed_gap)
+
+    def test_legacy_timestamp_does_not_replace_missing_exif_time(self):
+        self.rows[-1]["timestamp_exif"] = ""
+        self.rows[-1]["timestamp"] = "2026-10-31T06:10Z"
+        pd.DataFrame(self.rows).to_csv(self.csv_path, index=False)
+
+        with self.assertRaises(predictions.ForecastUnavailable):
+            predictions.forecast_next24(
+                self.csv_path, self.model_path, "camera", now=self.now
+            )

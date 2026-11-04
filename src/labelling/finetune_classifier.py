@@ -181,7 +181,7 @@ def load_labelled_rows():
 def assign_sequence_groups(df):
     """Group bursts of images so near-duplicates never straddle train and val."""
     time = pd.to_datetime(
-        df["timestamp_exif"].where(df["timestamp_exif"] != "", df["timestamp"]),
+        df["timestamp_exif"],
         errors="coerce",
     )
     order = np.lexsort(

@@ -8,7 +8,7 @@ Use this attribution when reusing the CSV:
 
 Replace “Changes made” with a short description if you adapt the data. This licence applies to the CSV and its annotations and metadata only. It does not cover third-party software or model weights. Original camera photographs are not included.
 
-The CSV records camera-trap detections and related metadata, including location IDs, timestamps, species labels, bounding boxes, model confidence, lighting, temperature, and human review labels. Detections were produced with MegaDetector V6 (`MDV6-yolov10-e`) and DeepFaune; OCR and human review provide additional metadata and corrections.
+The CSV records camera-trap detections and related metadata, including location IDs, EXIF capture times, species labels, bounding boxes, model confidence, lighting, hourly historical Open-Meteo temperature estimates, and human review labels. Detections were produced with MegaDetector V6 (`MDV6-yolov10-e`) and DeepFaune; human review provides corrections.
 
 Without the source photographs, users cannot independently inspect the images behind individual detections. The repository does not provide further collection protocols or site-level provenance.
 

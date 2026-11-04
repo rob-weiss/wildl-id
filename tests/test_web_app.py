@@ -135,9 +135,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(run_store_patch.stop)
 
     def write_csv(self, fieldnames, rows):
-        if "timestamp" in fieldnames and "timestamp_exif" not in fieldnames:
-            fieldnames = [*fieldnames, "timestamp_exif"]
-            rows = [{"timestamp_exif": row.get("timestamp", ""), **row} for row in rows]
         with self.csv_path.open("w", newline="", encoding="utf-8") as target:
             writer = csv.DictWriter(target, fieldnames=fieldnames)
             writer.writeheader()
@@ -1016,12 +1013,11 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_visit_frames_on_home_and_gallery_keep_exif_order(self):
         now = datetime.now().astimezone() - timedelta(minutes=1)
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "timestamp_exif", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": name,
-                    "timestamp": (now + timedelta(minutes=minutes)).isoformat(),
                     "timestamp_exif": (now - timedelta(minutes=minutes)).isoformat(),
                     "class": species,
                 }
@@ -1168,12 +1164,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_species_buttons_count_photos_and_survive_refresh(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
-        fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]
+        fields = ["location_id", "image_file", "timestamp_exif", "class", "manual_label"]
         rows = [
             {
                 "location_id": "camera1",
                 "image_file": name,
-                "timestamp": now,
+                "timestamp_exif": now,
                 "class": automatic,
                 "manual_label": manual,
             }
@@ -1233,7 +1229,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     {
                         "location_id": "camera1",
                         "image_file": "fox3.jpg",
-                        "timestamp": now,
+                        "timestamp_exif": now,
                         "class": "fox",
                     }
                 )
@@ -1245,14 +1241,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_shows_only_relevant_species(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
-        fields = ["location_id", "image_file", "timestamp", "class", "manual_label"]
+        fields = ["location_id", "image_file", "timestamp_exif", "class", "manual_label"]
         self.write_csv(
             fields,
             [
                 {
                     "location_id": "camera1",
                     "image_file": name,
-                    "timestamp": now,
+                    "timestamp_exif": now,
                     "class": automatic,
                     "manual_label": manual,
                 }
@@ -1348,7 +1344,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         fields = [
             "location_id",
             "image_file",
-            "timestamp",
+            "timestamp_exif",
             "class",
             "manual_label",
             "box",
@@ -1357,7 +1353,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {
                 "location_id": "camera1",
                 "image_file": "fox.jpg",
-                "timestamp": (now - timedelta(hours=1)).isoformat(),
+                "timestamp_exif": (now - timedelta(hours=1)).isoformat(),
                 "class": "human",
                 "manual_label": "fox",
                 "box": "[0.5, 0.5, 0.4, 0.2]",
@@ -1365,13 +1361,13 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {
                 "location_id": "camera1",
                 "image_file": "human.jpg",
-                "timestamp": now.isoformat(),
+                "timestamp_exif": now.isoformat(),
                 "class": "human",
             },
             {
                 "location_id": "camera1",
                 "image_file": "old.jpg",
-                "timestamp": (now - timedelta(hours=25)).isoformat(),
+                "timestamp_exif": (now - timedelta(hours=25)).isoformat(),
                 "class": "fox",
             },
         ]
@@ -1410,12 +1406,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     [60, 5, 60, 900, 60],
                 )
                 refresh = timer.call_args_list[0].args[1]
-                rows[0]["timestamp"] = (now - timedelta(hours=25)).isoformat()
+                rows[0]["timestamp_exif"] = (now - timedelta(hours=25)).isoformat()
                 rows.append(
                     {
                         "location_id": "camera1",
                         "image_file": "boar.jpg",
-                        "timestamp": now.isoformat(),
+                        "timestamp_exif": now.isoformat(),
                         "class": "wild boar",
                     }
                 )
@@ -1435,7 +1431,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
         fields = [
             "location_id",
             "image_file",
-            "timestamp",
+            "timestamp_exif",
             "class",
             "manual_label",
             "box",
@@ -1520,12 +1516,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_shows_new_photos_without_label_rows(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "labelled.jpg",
-                    "timestamp": "2026-10-01T12:00:00",
+                    "timestamp_exif": "2026-10-01T12:00:00",
                     "class": "fox",
                 }
             ],
@@ -1538,12 +1534,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_relevant_species_is_first_example_and_boxes_default_on(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": name,
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": label,
                 }
                 for name, label in (
@@ -1737,12 +1733,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_shows_both_labels_even_without_box(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            ["location_id", "image_file", "timestamp_exif", "class", "manual_label"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "recent.jpg",
-                    "timestamp": (datetime.now() - timedelta(minutes=1)).isoformat(),
+                    "timestamp_exif": (datetime.now() - timedelta(minutes=1)).isoformat(),
                     "class": "fox",
                     "manual_label": "badger",
                 }
@@ -1759,12 +1755,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_home_thumbnail_box_has_no_label_text(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "box"],
+            ["location_id", "image_file", "timestamp_exif", "class", "box"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "recent.jpg",
-                    "timestamp": (datetime.now() - timedelta(minutes=1)).isoformat(),
+                    "timestamp_exif": (datetime.now() - timedelta(minutes=1)).isoformat(),
                     "class": "fox",
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                 }
@@ -1788,7 +1784,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             [
                 "location_id",
                 "image_file",
-                "timestamp",
+                "timestamp_exif",
                 "class",
                 "box",
                 "additional_boxes",
@@ -1797,7 +1793,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "deer.jpg",
-                    "timestamp": now,
+                    "timestamp_exif": now,
                     "class": "roe deer",
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                     "additional_boxes": "[[0.2, 0.2, 0.1, 0.1], [0.8, 0.8, 0.1, 0.1]]",
@@ -1805,7 +1801,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "person.jpg",
-                    "timestamp": now,
+                    "timestamp_exif": now,
                     "class": "human",
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                     "additional_boxes": "",
@@ -1837,12 +1833,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
     async def test_home_recent_gallery_paginates_and_opens_images(self):
         now = (datetime.now() - timedelta(minutes=1)).isoformat()
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": f"fox-{index}.jpg",
-                    "timestamp": now,
+                    "timestamp_exif": now,
                     "class": "fox",
                 }
                 for index in range(gallery.PAGE_SIZE + 1)
@@ -1909,7 +1905,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                     content=f"https://cdn.example.test/images/{datetime.fromisoformat(now).year}/camera1/fox-48.jpg",
                 ).click()
                 await user.should_see("49 / 49")
-                self.write_csv(["location_id", "image_file", "timestamp", "class"], [])
+                self.write_csv(["location_id", "image_file", "timestamp_exif", "class"], [])
                 timer.call_args_list[0].args[1]()
                 user.find(marker="recent-image-previous").click()
                 await user.should_see("48 / 49")
@@ -1924,18 +1920,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_page_applies_smart_filter(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "boar.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": "wild boar",
                 },
             ],
@@ -1972,7 +1968,6 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
                     "timestamp_exif": "2025-01-01T00:00:00",
                 }
             ],
@@ -2015,12 +2010,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_viewer_states_single_label_when_labels_agree(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            ["location_id", "image_file", "timestamp_exif", "class", "manual_label"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "fox",
                     "manual_label": "fox",
                 }
@@ -2036,18 +2031,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_example_applies_filter(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "boar.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": "wild boar",
                 },
             ],
@@ -2063,18 +2058,18 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_filter_guide_and_dropdown_examples(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "boar.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": "wild boar",
                 },
             ],
@@ -2100,7 +2095,7 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             [
                 "location_id",
                 "image_file",
-                "timestamp",
+                "timestamp_exif",
                 "class",
                 "manual_label",
             ],
@@ -2108,26 +2103,26 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": f"{today}T10:00:00",
+                    "timestamp_exif": f"{today}T10:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera2",
                     "image_file": "boar.jpg",
-                    "timestamp": f"{today}T11:00:00",
+                    "timestamp_exif": f"{today}T11:00:00",
                     "class": "wild boar",
                 },
                 {
                     "location_id": "camera2",
                     "image_file": "reviewed-fox.jpg",
-                    "timestamp": f"{today}T12:00:00",
+                    "timestamp_exif": f"{today}T12:00:00",
                     "class": "fox",
                     "manual_label": "badger",
                 },
                 {
                     "location_id": "camera2",
                     "image_file": "squirrel.jpg",
-                    "timestamp": f"{today}T13:00:00",
+                    "timestamp_exif": f"{today}T13:00:00",
                     "class": "squirrel",
                 },
             ],
@@ -2181,19 +2176,19 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_automatic_label_filter_selects_predictions_only(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "manual_label"],
+            ["location_id", "image_file", "timestamp_exif", "class", "manual_label"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "automatic.jpg",
-                    "timestamp": "2026-11-03T12:00:00",
+                    "timestamp_exif": "2026-11-03T12:00:00",
                     "class": "none",
                     "manual_label": "",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "manual.jpg",
-                    "timestamp": "2026-11-02T12:00:00",
+                    "timestamp_exif": "2026-11-02T12:00:00",
                     "class": "",
                     "manual_label": "fox",
                 },
@@ -2222,24 +2217,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_viewer_navigates_filtered_images_and_preserves_aspect(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "boar.jpg",
-                    "timestamp": "2025-01-03T00:00:00",
+                    "timestamp_exif": "2025-01-03T00:00:00",
                     "class": "wild boar",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "badger.jpg",
-                    "timestamp": "2025-01-01T00:00:00",
+                    "timestamp_exif": "2025-01-01T00:00:00",
                     "class": "badger",
                 },
             ],
@@ -2308,12 +2303,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_and_viewer_toggle_bounding_boxes(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "box"],
+            ["location_id", "image_file", "timestamp_exif", "class", "box"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": "fox",
                     "box": "[0.5, 0.5, 0.4, 0.2]",
                 }
@@ -2366,12 +2361,12 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_gallery_box_colors_match_review_status(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class", "manual_label", "box"],
+            ["location_id", "image_file", "timestamp_exif", "class", "manual_label", "box"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": f"{status}.jpg",
-                    "timestamp": "2025-01-02T00:00:00",
+                    "timestamp_exif": "2025-01-02T00:00:00",
                     "class": predicted_label,
                     "manual_label": manual_label,
                     "box": "[0.5, 0.5, 0.4, 0.2]",
@@ -2415,14 +2410,14 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
             {
                 "location_id": "camera1",
                 "image_file": f"fox-{index}.jpg",
-                "timestamp": "2025-01-02T00:00:00",
+                "timestamp_exif": "2025-01-02T00:00:00",
                 "class": "fox",
             }
             for index in range(gallery.PAGE_SIZE * 8)
         ]
-        rows[-1]["timestamp"] = ""
+        rows[-1]["timestamp_exif"] = ""
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             rows,
         )
         with patch.dict(
@@ -2600,24 +2595,24 @@ class WebAppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_dynamic_plot_uses_filter_and_keeps_static_plot_action(self):
         self.write_csv(
-            ["location_id", "image_file", "timestamp", "class"],
+            ["location_id", "image_file", "timestamp_exif", "class"],
             [
                 {
                     "location_id": "camera1",
                     "image_file": "fox-2024.jpg",
-                    "timestamp": "2024-01-15T08:00:00",
+                    "timestamp_exif": "2024-01-15T08:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera1",
                     "image_file": "fox-2025.jpg",
-                    "timestamp": "2025-01-15T08:00:00",
+                    "timestamp_exif": "2025-01-15T08:00:00",
                     "class": "fox",
                 },
                 {
                     "location_id": "camera2",
                     "image_file": "boar-2024.jpg",
-                    "timestamp": "2024-01-15T08:00:00",
+                    "timestamp_exif": "2024-01-15T08:00:00",
                     "class": "wild boar",
                 },
             ],

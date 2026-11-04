@@ -374,6 +374,10 @@ class DailySummaryTests(unittest.TestCase):
                 self.row("two.jpg", "2026-10-31 06:59:59", location="Douglasien"),
                 self.row("old.jpg", "2026-10-30 06:59:59"),
                 self.row("future.jpg", "2026-10-31 07:00:00"),
+                dict(
+                    self.row("legacy-only.jpg", ""),
+                    timestamp="2026-10-31 06:00:00",
+                ),
                 self.row("empty.jpg", "2026-10-31 06:00:00", manual="none"),
                 self.row("human.jpg", "2026-10-31 06:00:00", species="human"),
                 self.row("invalid.jpg", "not a timestamp"),

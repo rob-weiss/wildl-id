@@ -180,7 +180,7 @@ def capture_order(rows):
 
     def key(item):
         index, row = item
-        stamp = str(row.get("timestamp_exif") or row.get("timestamp") or "").strip()
+        stamp = str(row.get("timestamp_exif") or "").strip()
         try:
             taken = datetime.fromisoformat(stamp).replace(tzinfo=None)
         except ValueError:

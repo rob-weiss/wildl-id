@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.14, <3.15"
 dependencies = [
     "astral>=3.2",
-    "easyocr>=1.7.2",
     "ephem>=4.2.1",
     "librosa>=0.11.0",
     "lightning>=2.6.6",
@@ -15,14 +14,10 @@ dependencies = [
     "opencv-python>=4.11.0.86",
     "pandas>=2.3.3",
     "pillow>=12.3.0",
-    "pyobjc-framework-quartz>=12.2.2 ; sys_platform == 'darwin'",
-    "pyobjc-framework-vision>=12.2.2 ; sys_platform == 'darwin'",
     "python-dateutil>=2.9.0.post0",
     "pytorchwildlife>=1.3.0",
     "scikit-learn>=1.7.2",
     "scipy>=1.16",
-    # EasyOCR needs a wheel-backed release on Python 3.14 instead of a Pythran source build.
-    "scikit-image>=0.26.0",
     "seaborn>=0.13.2",
     # PyTorch requires setuptools>=77; PyTorchWildlife's yolov5 requires pkg_resources.
     "setuptools>=77.0.3,<81",

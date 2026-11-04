@@ -86,47 +86,43 @@ class AutomaticLabelTests(unittest.TestCase):
         self.assertEqual([detection[0] for detection in tie], ["fox"])
         self.assertEqual(label_images.majority_detections([]), [])
 
-    def test_labelling_uses_only_actual_output_directory_with_optional_ocr(self):
-        for enable_ocr in (False, True):
-            for custom_output in (False, True):
-                with self.subTest(enable_ocr=enable_ocr, custom_output=custom_output):
-                    with tempfile.TemporaryDirectory() as directory:
-                        root = Path(directory)
-                        classifier = SimpleNamespace(
-                            weights_path=root
-                            / "models/deepfaune_finetuned_test/weights.pt"
+    def test_labelling_uses_only_actual_output_directory_without_ocr_artifacts(self):
+        self.assertFalse(hasattr(label_images, "enable_ocr"))
+        for custom_output in (False, True):
+            with self.subTest(custom_output=custom_output):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    classifier = SimpleNamespace(
+                        weights_path=root
+                        / "models/deepfaune_finetuned_test/weights.pt"
+                    )
+                    output = (
+                        root / "custom/predictions.csv" if custom_output else None
+                    )
+                    expected = output or label_data.predictions_path(
+                        root, "deepfaune_finetuned_test"
+                    )
+                    with (
+                        patch.object(label_images, "repo_dir", root),
+                        patch.object(label_images, "image_paths", return_value={}),
+                        patch.object(label_images.pw_detection, "MegaDetectorV6"),
+                        patch.object(
+                            label_images,
+                            "load_species_classifier",
+                            return_value=classifier,
+                        ),
+                    ):
+                        label_images.process_images_with_pytorch_wildlife(
+                            output_csv_path=output
                         )
-                        output = (
-                            root / "custom/predictions.csv" if custom_output else None
-                        )
-                        expected = output or label_data.predictions_path(
-                            root, "deepfaune_finetuned_test"
-                        )
-                        with (
-                            patch.object(label_images, "repo_dir", root),
-                            patch.object(label_images, "image_paths", return_value={}),
-                            patch.object(label_images, "enable_ocr", enable_ocr),
-                            patch.object(label_images, "MACOS_VISION_AVAILABLE", True),
-                            patch.object(label_images.pw_detection, "MegaDetectorV6"),
-                            patch.object(
-                                label_images,
-                                "load_species_classifier",
-                                return_value=classifier,
-                            ),
-                        ):
-                            label_images.process_images_with_pytorch_wildlife(
-                                output_csv_path=output
-                            )
-                        self.assertTrue(expected.parent.is_dir())
-                        self.assertFalse(
-                            (
-                                root
-                                / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
-                            ).exists()
-                        )
-                        self.assertEqual(
-                            (expected.parent / "ocr_failures.txt").is_file(), enable_ocr
-                        )
+                    self.assertTrue(expected.parent.is_dir())
+                    self.assertFalse(
+                        (
+                            root
+                            / "labels/labels_MegaDetectorV6_MDV6-yolov10-e_classified"
+                        ).exists()
+                    )
+                    self.assertFalse((expected.parent / "ocr_failures.txt").exists())
 
     def test_image_metadata_keeps_quoted_csv_format(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -147,14 +143,15 @@ class AutomaticLabelTests(unittest.TestCase):
 
             self.assertEqual(
                 (repo_root / "labels/image_metadata.csv").read_text(encoding="utf-8"),
-                '"location_id","image_file","timestamp","timestamp_exif",'
+                '"location_id","image_file","timestamp_exif",'
                 '"lighting","temperature_celsius"\n'
                 '"camera","photo.jpg","2026-11-02T12:00:00",'
-                '"2026-11-02T12:00:00","bright","12.0"\n',
+                '"bright","12.0"\n',
             )
 
-    def test_ocr_disabled_by_default_preserves_exif_timestamp(self):
-        self.assertFalse(label_images.enable_ocr)
+    def test_ocr_helpers_are_removed_and_exif_timestamp_is_retained(self):
+        self.assertFalse(hasattr(label_images, "resolve_exif_timestamp"))
+        self.assertFalse(hasattr(label_images, "extract_metadata_ocr"))
         with tempfile.TemporaryDirectory() as directory:
             image_path = Path(directory) / "image.jpg"
             exif = Image.Exif()
@@ -163,10 +160,7 @@ class AutomaticLabelTests(unittest.TestCase):
 
             timestamp = label_images.extract_exif_timestamp(image_path)
 
-            self.assertEqual(
-                label_images.resolve_exif_timestamp(timestamp, "", image_path),
-                "2026-10-25T02:30:00",
-            )
+            self.assertEqual(timestamp, "2026-10-25T02:30:00")
 
     def test_saved_generic_predictions_are_not_repeated(self):
         names = ["unknown.jpg", "animal.jpg", "pending.jpg"]
@@ -240,14 +234,15 @@ class AutomaticLabelTests(unittest.TestCase):
                     "image_file": name,
                     "class": "fox",
                     "manual_label": manual,
+                    "timestamp_exif": exif_timestamp,
                     "timestamp": timestamp,
                     "temperature_celsius": temperature,
                 }
-                for name, timestamp, temperature, manual in (
-                    ("complete.jpg", "2026-10-29 12:00:00", "0", ""),
-                    ("timestamp.jpg", "", "10", ""),
-                    ("temperature.jpg", "2026-10-29 12:00:00", "", ""),
-                    ("manual.jpg", "", "", "fox"),
+                for name, exif_timestamp, timestamp, temperature, manual in (
+                    ("complete.jpg", "2026-10-29 12:00:00", "", "0", ""),
+                    ("timestamp.jpg", "", "2026-10-29 12:00:00", "10", ""),
+                    ("temperature.jpg", "2026-10-29 12:00:00", "", "", ""),
+                    ("manual.jpg", "", "2026-10-29 12:00:00", "", "fox"),
                 )
             ]
         )
@@ -468,7 +463,6 @@ class AutomaticLabelTests(unittest.TestCase):
             with (
                 patch.object(label_images, "repo_dir", root),
                 patch.object(label_images, "image_paths", return_value=paths),
-                patch.object(label_images, "enable_ocr", False),
                 patch.object(
                     label_images.pw_detection, "MegaDetectorV6", return_value=detector
                 ),
@@ -483,16 +477,7 @@ class AutomaticLabelTests(unittest.TestCase):
                     return_value=classifier,
                     create=True,
                 ),
-                patch.object(
-                    label_images,
-                    "resolve_exif_timestamp",
-                    return_value="2026-10-29 12:00:00",
-                ),
-                patch.object(label_images, "extract_exif_timestamp", return_value=None),
-                patch.dict(
-                    sys.modules,
-                    {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
-                ),
+                patch.object(label_images, "extract_exif_timestamp", return_value=""),
             ):
                 label_images.process_images_with_pytorch_wildlife(
                     force=True, output_csv_path=csv_path
@@ -580,7 +565,6 @@ class AutomaticLabelTests(unittest.TestCase):
                 ),
                 patch.object(label_images, "repo_dir", root),
                 patch.object(label_images, "image_paths", return_value=paths),
-                patch.object(label_images, "enable_ocr", False),
                 patch.object(
                     label_images.pw_detection, "MegaDetectorV6", return_value=detector
                 ),
@@ -589,12 +573,7 @@ class AutomaticLabelTests(unittest.TestCase):
                     "load_species_classifier",
                     return_value=classifier,
                 ),
-                patch.object(label_images, "resolve_exif_timestamp", return_value=""),
-                patch.object(label_images, "extract_exif_timestamp", return_value=None),
-                patch.dict(
-                    sys.modules,
-                    {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
-                ),
+                patch.object(label_images, "extract_exif_timestamp", return_value=""),
             ):
                 self.assertEqual(wildl_id.main(), 0)
                 self.assertEqual(detector.single_image_detection.call_count, 1)
@@ -689,19 +668,13 @@ class AutomaticLabelTests(unittest.TestCase):
             with (
                 patch.object(label_images, "repo_dir", root),
                 patch.object(label_images, "image_paths", return_value=paths),
-                patch.object(label_images, "enable_ocr", False),
                 patch.object(
                     label_images.pw_detection, "MegaDetectorV6", return_value=detector
                 ),
                 patch.object(
                     label_images, "load_species_classifier", return_value=classifier
                 ),
-                patch.object(label_images, "resolve_exif_timestamp", return_value=""),
-                patch.object(label_images, "extract_exif_timestamp", return_value=None),
-                patch.dict(
-                    sys.modules,
-                    {"objc": SimpleNamespace(recycleAutoreleasePool=lambda: None)},
-                ),
+                patch.object(label_images, "extract_exif_timestamp", return_value=""),
             ):
                 label_images.process_images_with_pytorch_wildlife(
                     output_csv_path=csv_path, image_keys={("camera", "new.jpg")}

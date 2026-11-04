@@ -166,10 +166,7 @@ def forecast_next24(
         )
         records = []
         for row in data.to_dict("records"):
-            raw = (
-                row.get("timestamp_exif", "").strip()
-                or row.get("timestamp", "").strip()
-            )
+            raw = row.get("timestamp_exif", "").strip()
             stamp = pd.Timestamp(raw)
             if pd.isna(stamp) or not row["image_file"].strip():
                 raise ValueError("Missing capture time or image identity")

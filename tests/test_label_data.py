@@ -27,6 +27,21 @@ class LabelDataTests(unittest.TestCase):
             writer.writeheader()
             writer.writerows(rows)
 
+    def test_metadata_and_prediction_schemas_omit_legacy_timestamp(self):
+        self.assertNotIn("timestamp", label_data.METADATA_COLUMNS)
+        self.assertNotIn("timestamp", label_data.PREDICTION_COLUMNS)
+
+        metadata_path = label_data.REPO_DIR / "labels/image_metadata.csv"
+        with metadata_path.open(newline="", encoding="utf-8") as source:
+            self.assertEqual(next(csv.reader(source)), list(label_data.METADATA_COLUMNS))
+        prediction_paths = sorted(
+            (label_data.REPO_DIR / "labels").glob("labels_*/predictions.csv")
+        )
+        self.assertTrue(prediction_paths)
+        for prediction_path in prediction_paths:
+            with prediction_path.open(newline="", encoding="utf-8") as source:
+                self.assertNotIn("timestamp", next(csv.reader(source)))
+
     def test_pending_model_errors_merge_inference_and_validation_and_skip_reviewed(
         self,
     ):
@@ -512,8 +527,8 @@ class LabelDataTests(unittest.TestCase):
                 "box": "[0.5, 0.5, 0.2, 0.2]",
                 "manual_label": "fox",
                 "class": "fox",
-                "timestamp_exif": f"2026-10-29 12:00:0{index}",
-                "timestamp": "",
+                "timestamp_exif": "" if index == 4 else f"2026-10-29 12:00:0{index}",
+                "timestamp": f"2026-10-29 12:00:0{index}",
             }
             for index in range(5)
         ]
@@ -530,7 +545,7 @@ class LabelDataTests(unittest.TestCase):
             groups = finetune_classifier.assign_sequence_groups(training)
 
         self.assertEqual(len(training), 5)
-        self.assertEqual(len(set(groups)), 1)
+        self.assertEqual(len(set(groups)), 2)
         self.assertNotIn("timestamp_exif", label_data.read_records(self.human)[0])
 
     def test_reviewer_saves_only_human_columns_and_keeps_model_predictions(self):
@@ -597,18 +612,16 @@ class LabelDataTests(unittest.TestCase):
         with (
             patch.object(label_images, "repo_dir", self.root),
             patch.object(label_images, "image_paths", return_value=paths),
-            patch.object(label_images, "enable_ocr", False),
             patch.object(
                 label_images, "load_species_classifier", return_value=classifier
             ),
             patch.object(
                 label_images.pw_detection, "MegaDetectorV6", return_value=detector
             ),
-            patch.object(label_images, "extract_exif_timestamp", return_value=None),
             patch.object(
                 label_images,
-                "resolve_exif_timestamp",
-                return_value="2026-10-29 12:00:00",
+                "extract_exif_timestamp",
+                return_value="2026-10-29T12:00:00",
             ),
             patch.dict(
                 sys.modules,
@@ -623,6 +636,8 @@ class LabelDataTests(unittest.TestCase):
             self.assertTrue(saved_path.is_relative_to(self.root / "labels"))
             self.assertEqual(len(saved), 2)
             self.assertNotIn("manual_label", saved[0])
+            self.assertNotIn("timestamp", saved[0])
+            self.assertEqual(saved[0]["timestamp_exif"], "2026-10-29T12:00:00")
             self.assertEqual(saved[0]["classifier_model"], self.model.name)
             label_data.save_prediction_reviews(
                 saved_path, {("camera", "reviewed.jpg"): True}
