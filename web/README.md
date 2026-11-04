@@ -24,9 +24,10 @@ Photos that are unlabelled, empty, unknown, or of other species stay off the
 home page; browse them in the Gallery. Capture times come only from
 `timestamp_exif`, or from the original image's EXIF metadata when that column
 has no valid time. Camera filenames and file modification times are not used.
-`temperature_celsius` is an hourly historical Open-Meteo estimate, not a camera
-sensor reading. Thumbnails show the manual
-label, or the automatic label when there is none. Boxes appear when present.
+`temperature_celsius` is a historical Open-Meteo estimate interpolated from
+hourly values to the capture time, not a camera sensor reading. Thumbnails show
+the manual label, or the automatic label when there is none. Boxes appear when
+present.
 Click an image to
 enlarge it. The viewer has previous/next controls and an image counter;
 left/right arrow keys navigate and Escape closes it. Navigation covers all

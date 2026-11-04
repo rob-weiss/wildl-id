@@ -108,6 +108,9 @@ class EnrichTemperaturesTests(unittest.TestCase):
             self.metadata_row("camera1", "utc.jpg", "2025-01-01T00:45:00+00:00"),
             self.metadata_row("camera1", "local.jpg", "2025-01-01T01:15:00"),
             self.metadata_row(
+                "camera1", "late-hour.jpg", "2025-01-01T23:30:00+00:00"
+            ),
+            self.metadata_row(
                 "camera1", "missing-hour.jpg", "2025-01-01T02:15:00+00:00"
             ),
             self.metadata_row(
@@ -170,9 +173,14 @@ class EnrichTemperaturesTests(unittest.TestCase):
     def fake_fetch(self, latitude, longitude, start_date, end_date):
         self.assertEqual((latitude, longitude), (48.65, 8.98))
         self.assertEqual(
-            (start_date, end_date), (date(2025, 1, 1), date(2025, 1, 1))
+            (start_date, end_date), (date(2025, 1, 1), date(2025, 1, 2))
         )
-        return {datetime(2025, 1, 1, tzinfo=UTC): 8.5}
+        return {
+            datetime(2025, 1, 1, tzinfo=UTC): 8.5,
+            datetime(2025, 1, 1, 1, tzinfo=UTC): 10.5,
+            datetime(2025, 1, 1, 23, tzinfo=UTC): 8.0,
+            datetime(2025, 1, 2, tzinfo=UTC): 10.0,
+        }
 
     @staticmethod
     def non_temperature_fields(rows):
@@ -192,12 +200,12 @@ class EnrichTemperaturesTests(unittest.TestCase):
         ) as fetch:
             updated_count, unresolved_count = enrich_temperatures(self.repo_dir)
 
-        self.assertEqual((updated_count, unresolved_count), (2, 5))
+        self.assertEqual((updated_count, unresolved_count), (3, 5))
         fetch.assert_called_once()
         metadata = label_data.read_records(self.metadata_path)
         self.assertEqual(
             [row["temperature_celsius"] for row in metadata],
-            ["8.5", "8.5", "", "", "", "", ""],
+            ["10.0", "9.0", "9.0", "", "", "", "", ""],
         )
         self.assertEqual(
             self.non_temperature_fields(metadata),
@@ -207,7 +215,7 @@ class EnrichTemperaturesTests(unittest.TestCase):
         predictions = label_data.read_records(self.predictions_path)
         self.assertEqual(
             [row["temperature_celsius"] for row in predictions],
-            ["8.5", "", "", "5"],
+            ["10.0", "9.0", "", "5"],
         )
         self.assertEqual(
             self.non_temperature_fields(predictions),
@@ -229,7 +237,7 @@ class EnrichTemperaturesTests(unittest.TestCase):
         ):
             counts = enrich_temperatures(self.repo_dir, dry_run=True)
 
-        self.assertEqual(counts, (2, 5))
+        self.assertEqual(counts, (3, 5))
         self.assertEqual(
             {path: path.read_bytes() for path in originals},
             originals,

@@ -37,7 +37,8 @@ The menu provides these actions:
 
 - **Animal Detection**: Uses PyTorch Wildlife MegaDetector V6 for detecting animals, humans, and vehicles
 - **Species Classification**: DeepFaune classifier identifies European wildlife species
-- **Metadata Extraction**: Capture times come only from EXIF; temperatures are hourly historical Open-Meteo estimates, not camera-sensor readings
+- **Metadata Extraction**: Capture times come only from EXIF; hourly historical
+  Open-Meteo estimates are interpolated to capture times, not camera-sensor readings
 - **Lighting Analysis**: Classifies images as day/night using LAB colour space
 - Supports incremental processing (only processes new images)
 - Configurable to skip incomplete entries
@@ -81,8 +82,8 @@ uv run src/labelling/label_images.py
 ### Enrich Weather Temperatures
 
 Replace stored temperature values with hourly Open-Meteo historical
-`temperature_2m` estimates matched to camera coordinates and the EXIF capture
-hour. Preview the changes first:
+`temperature_2m` estimates interpolated to each EXIF capture time and camera
+coordinates. Preview the changes first:
 
 ```bash
 uv run --locked python -m src.enrich_weather --dry-run

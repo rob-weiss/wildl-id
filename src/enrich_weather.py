@@ -1,11 +1,11 @@
-"""Batch-enrich canonical image metadata with hourly Open-Meteo estimates."""
+"""Batch-enrich canonical image metadata with interpolated Open-Meteo estimates."""
 
 import argparse
 import csv
 import json
 import math
 from collections import defaultdict
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unicodedata import normalize
 from urllib.parse import urlencode
@@ -112,6 +112,20 @@ def _location_key(value):
     return normalize("NFC", str(value or ""))
 
 
+def _temperature_at(
+    taken: datetime, temperatures: dict[datetime, float]
+) -> float | None:
+    hour = taken.replace(minute=0, second=0, microsecond=0)
+    current = temperatures.get(hour)
+    if current is None or taken == hour:
+        return current
+    following = temperatures.get(hour + timedelta(hours=1))
+    if following is None:
+        return None
+    fraction = (taken - hour).total_seconds() / 3600
+    return round(current + (following - current) * fraction, 1)
+
+
 def _load_cameras(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     cameras = payload.get("cameras") if isinstance(payload, dict) else None
@@ -165,18 +179,21 @@ def enrich_temperatures(repo_dir: Path, dry_run: bool = False) -> tuple[int, int
     if len(set(keys)) != len(keys):
         raise ValueError("Image metadata contains duplicate image identities")
 
-    row_hours = []
+    row_times = []
     hours_by_camera = defaultdict(list)
     for row in metadata_rows:
         location = _location_key(row["location_id"])
         camera = cameras.get(location)
         taken = exif_datetime(row)
         if camera is None or taken is None:
-            row_hours.append(None)
+            row_times.append(None)
             continue
-        hour = taken.astimezone(UTC).replace(minute=0, second=0, microsecond=0)
-        row_hours.append((location, hour))
+        taken = taken.astimezone(UTC)
+        hour = taken.replace(minute=0, second=0, microsecond=0)
+        row_times.append((location, taken))
         hours_by_camera[location].append(hour)
+        if taken != hour:
+            hours_by_camera[location].append(hour + timedelta(hours=1))
 
     weather_by_camera = {}
     for location, hours in hours_by_camera.items():
@@ -191,10 +208,10 @@ def enrich_temperatures(repo_dir: Path, dry_run: bool = False) -> tuple[int, int
     metadata_temperatures = {}
     updated_count = 0
     unresolved_count = 0
-    for row, row_hour in zip(metadata_rows, row_hours):
+    for row, row_time in zip(metadata_rows, row_times):
         temperature = (
-            weather_by_camera.get(row_hour[0], {}).get(row_hour[1])
-            if row_hour is not None
+            _temperature_at(row_time[1], weather_by_camera[row_time[0]])
+            if row_time is not None
             else None
         )
         if temperature is None:
