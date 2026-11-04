@@ -313,6 +313,21 @@ incomplete runs without weights are ignored. If no fine-tuned model exists, it u
 pretrained DeepFaune. A checkpoint loading error stops the run instead of silently
 falling back to a different model.
 
+### Enrich Weather Temperatures
+
+Replace the stored temperature values with hourly Open-Meteo historical
+`temperature_2m` estimates matched to camera coordinates and the EXIF capture
+hour. Preview the changes first:
+
+```bash
+uv run --locked python -m src.enrich_weather --dry-run
+uv run --locked python -m src.enrich_weather
+```
+
+The command reports updated and unresolved metadata rows. Unavailable weather
+hours remain blank, and rerunning the command is safe. These are gridded
+weather estimates, not camera-sensor readings.
+
 Fine-tuning keeps all 34 native DeepFaune classes and adds `crow` and `pigeon`.
 The native `bird` output covers birds that are neither crows nor pigeons.
 Every native head row starts from its pretrained weights, and the crow and pigeon

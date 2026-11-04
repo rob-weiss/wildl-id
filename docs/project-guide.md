@@ -78,6 +78,21 @@ paths is written to `logs/`.
 uv run src/labelling/label_images.py
 ```
 
+### Enrich Weather Temperatures
+
+Replace stored temperature values with hourly Open-Meteo historical
+`temperature_2m` estimates matched to camera coordinates and the EXIF capture
+hour. Preview the changes first:
+
+```bash
+uv run --locked python -m src.enrich_weather --dry-run
+uv run --locked python -m src.enrich_weather
+```
+
+The command reports updated and unresolved metadata rows. Unavailable weather
+hours remain blank, and rerunning the command is safe. These are gridded
+weather estimates, not camera-sensor readings.
+
 ### Review Machine Labels
 
 Run the browser-based reviewer locally:
