@@ -34,9 +34,12 @@ def build_sync_command(
         "sync",
         src,
         dst,
-        "--checksum-algorithm",
-        "SHA256",
     ]
+    
+    # AWS only supports --checksum-algorithm when the destination is an S3 URI
+    if direction == "upload":
+        command.extend(["--checksum-algorithm", "SHA256"])
+
     if delete_extraneous:
         command.append("--delete")
     if dry_run:
