@@ -12,7 +12,7 @@ IMAGES_DIRECTORY = Path(__file__).resolve().parents[2] / "images"
 
 
 def build_sync_command(
-    source: Path, bucket: str, dry_run: bool, progress: bool = False
+    source: Path, bucket: str, dry_run: bool, prune: bool, progress: bool = False
 ) -> list[str]:
     command = [
         "aws",
@@ -20,10 +20,11 @@ def build_sync_command(
         "sync",
         f"{source}/",
         f"s3://{bucket}/images/",
-        "--delete",
         "--checksum-algorithm",
         "SHA256",
     ]
+    if prune:
+        command.append("--delete")
     if dry_run:
         command.append("--dryrun")
     if progress:
@@ -150,6 +151,7 @@ def publish_images(
     source: Path,
     dry_run: bool,
     force_upload: str | None,
+    prune: bool,
     progress: bool = False,
 ) -> None:
     if dry_run and force_upload is not None:
@@ -167,7 +169,7 @@ def publish_images(
     if force_upload is not None:
         transfer_command = build_force_upload_command(source, bucket, force_upload)
     else:
-        transfer_command = build_sync_command(source, bucket, dry_run, progress)
+        transfer_command = build_sync_command(source, bucket, dry_run, prune, progress)
     run_aws(transfer_command, profile, region, stream_output=progress)
 
     if not dry_run:
@@ -201,6 +203,11 @@ def main() -> int:
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--force-upload", metavar="RELATIVE_PATH")
     parser.add_argument(
+        "--prune",
+        action="store_true",
+        help="delete files in the destination bucket that do not exist in the source directory",
+    )
+    parser.add_argument(
         "--progress",
         action="store_true",
         help="show transfer progress and wait for CloudFront invalidation",
@@ -217,6 +224,7 @@ def main() -> int:
             IMAGES_DIRECTORY,
             arguments.dry_run,
             arguments.force_upload,
+            arguments.prune,
             arguments.progress,
         )
     except (
