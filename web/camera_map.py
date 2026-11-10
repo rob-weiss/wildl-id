@@ -97,7 +97,7 @@ class WindHour:
 def recent_species_by_location(rows, days, now=None):
     if not 0 <= days <= MAX_SIGHTING_DAYS:
         raise ValueError(f"Sighting days must be between 0 and {MAX_SIGHTING_DAYS}")
-    if days == 0:
+    if days == 0 or rows is None:
         return {}
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
@@ -601,9 +601,7 @@ async def _build_camera_map(csv_path: Path, *, compact: bool = False, on_update=
             forecast = hours[:window]
             if forecast and hour_label is not None:
                 local_time = forecast[index].time.tz_convert(LOCAL_TIMEZONE)
-                hour_label.set_text(
-                    f"{format_datetime(local_time)} {local_time:%Z}"
-                )
+                hour_label.set_text(f"{format_datetime(local_time)} {local_time:%Z}")
             if not forecast:
                 continue
             center, width = downwind_sector(forecast)
