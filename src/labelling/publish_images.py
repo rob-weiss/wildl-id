@@ -12,18 +12,32 @@ IMAGES_DIRECTORY = Path(__file__).resolve().parents[2] / "images"
 
 
 def build_sync_command(
-    source: Path, bucket: str, dry_run: bool, prune: bool, progress: bool = False
+    source: Path,
+    bucket: str,
+    direction: str,
+    delete_extraneous: bool,
+    dry_run: bool,
+    progress: bool = False,
 ) -> list[str]:
+    # Determine source and destination based on direction
+    local_path = f"{source}/"
+    s3_path = f"s3://{bucket}/images/"
+
+    if direction == "download":
+        src, dst = s3_path, local_path
+    else:
+        src, dst = local_path, s3_path
+
     command = [
         "aws",
         "s3",
         "sync",
-        f"{source}/",
-        f"s3://{bucket}/images/",
+        src,
+        dst,
         "--checksum-algorithm",
         "SHA256",
     ]
-    if prune:
+    if delete_extraneous:
         command.append("--delete")
     if dry_run:
         command.append("--dryrun")
@@ -149,11 +163,14 @@ def publish_images(
     profile: str,
     region: str,
     source: Path,
+    direction: str,
+    delete_extraneous: bool,
     dry_run: bool,
     force_upload: str | None,
-    prune: bool,
     progress: bool = False,
 ) -> None:
+    if direction == "download" and force_upload is not None:
+        raise ValueError("--direction download and --force-upload cannot be used together")
     if dry_run and force_upload is not None:
         raise ValueError("--dry-run and --force-upload cannot be used together")
 
@@ -169,10 +186,14 @@ def publish_images(
     if force_upload is not None:
         transfer_command = build_force_upload_command(source, bucket, force_upload)
     else:
-        transfer_command = build_sync_command(source, bucket, dry_run, prune, progress)
+        transfer_command = build_sync_command(
+            source, bucket, direction, delete_extraneous, dry_run, progress
+        )
+    
     run_aws(transfer_command, profile, region, stream_output=progress)
 
-    if not dry_run:
+    # CloudFront invalidation is only needed when altering remote S3 assets
+    if not dry_run and direction == "upload":
         result = run_aws(
             [
                 "aws",
@@ -198,14 +219,21 @@ def publish_images(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Publish local images to S3.")
+    parser = argparse.ArgumentParser(description="Sync images between local storage and S3.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true")
     mode.add_argument("--force-upload", metavar="RELATIVE_PATH")
+    
     parser.add_argument(
-        "--prune",
+        "--direction",
+        choices=["upload", "download"],
+        default="upload",
+        help="Direction of the sync operation (default: upload)",
+    )
+    parser.add_argument(
+        "--delete-extraneous",
         action="store_true",
-        help="delete files in the destination bucket that do not exist in the source directory",
+        help="Delete target files that don't exist in the source location",
     )
     parser.add_argument(
         "--progress",
@@ -222,9 +250,10 @@ def main() -> int:
             arguments.profile,
             arguments.region,
             IMAGES_DIRECTORY,
+            arguments.direction,
+            arguments.delete_extraneous,
             arguments.dry_run,
             arguments.force_upload,
-            arguments.prune,
             arguments.progress,
         )
     except (
@@ -233,7 +262,7 @@ def main() -> int:
         ValueError,
         subprocess.CalledProcessError,
     ) as error:
-        parser.exit(1, f"publish-images: {error}\n")
+        parser.exit(1, f"sync-images: {error}\n")
     return 0
 
 
