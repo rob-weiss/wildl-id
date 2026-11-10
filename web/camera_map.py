@@ -125,7 +125,7 @@ def recent_species_by_location(rows, days, now=None):
 def recent_sighting_counts_by_location(rows, days, now=None):
     if not 0 <= days <= MAX_SIGHTING_DAYS:
         raise ValueError(f"Sighting days must be between 0 and {MAX_SIGHTING_DAYS}")
-    if days == 0:
+    if days == 0 or rows is None:
         return {}
     now = now or datetime.now(UTC)
     if now.tzinfo is None:
